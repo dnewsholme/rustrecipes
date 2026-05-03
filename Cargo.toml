@@ -12,6 +12,7 @@ gray_matter = "0.3.2"
 html-escape = "0.2.13"
 html2text = "0.14.0"
 pulldown-cmark = "0.13.3"
+regex = "1.12.3"
 reqwest = { version = "0.13.3", features = ["json", "cookies"] }
 scraper = "0.26.0"
 serde = { version = "1.0.228", features = ["derive"] }

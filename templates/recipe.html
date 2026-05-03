@@ -61,7 +61,10 @@
                 <button class="tab-btn" onclick="switchTab('graph', this)">Graph</button>
             {% when None %}
         {% endmatch %}
-        <button id="fermentation-tab-btn" class="tab-btn" onclick="switchTab('fermentation', this)" style="display: none;">Fermentation</button>
+        {% let leaven = recipe.leaven_info() %}
+        {% if leaven.0 %}
+        <button id="fermentation-tab-btn" class="tab-btn" onclick="switchTab('fermentation', this)">Fermentation</button>
+        {% endif %}
     </div>
 
     <div id="ingredients-tab" class="tab-content active">
@@ -145,6 +148,7 @@
         {% when None %}
     {% endmatch %}
 
+    {% if leaven.0 %}
     <div id="fermentation-tab" class="tab-content">
         <div style="margin-top: 1rem; background: var(--bg-color); padding: 1.5rem; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
             <h2 style="margin-top: 0;">Fermentation Calculator</h2>
@@ -155,8 +159,8 @@
                     <div style="margin-bottom: 1.5rem;">
                         <label style="display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.5rem;">Leavening Type</label>
                         <select id="leaven-type" class="form-control" onchange="updateFermentation()">
-                            <option value="yeast">Instant/Dry Yeast</option>
-                            <option value="starter">Sourdough Starter</option>
+                            <option value="yeast" {% if leaven.1 == "yeast" %}selected{% endif %}>Instant/Dry Yeast</option>
+                            <option value="starter" {% if leaven.1 == "starter" %}selected{% endif %}>Sourdough Starter</option>
                         </select>
                     </div>
                     
@@ -191,6 +195,7 @@
             </div>
         </div>
     </div>
+    {% endif %}
 </div>
 {% endblock %}
 
@@ -737,14 +742,10 @@ if (csvUrlInput && window.Papa && window.Chart) {
 
     // Detect Yeast/Starter and enable tab
     document.addEventListener('DOMContentLoaded', () => {
-        const yeastRegex = /\byeast\b/i;
-        const starterRegex = /\b(sourdough starter|starter culture|levain)\b/i;
-        
-        let hasLeaven = false;
-        let detectedType = 'yeast';
-        let detectedAmount = 0;
+        const tabBtn = document.getElementById('fermentation-tab-btn');
+        if (!tabBtn) return; // Tab not enabled by server
 
-        // Try to detect leavening in ingredients
+        // Try to detect leavening in ingredients for auto-fill
         const flourKeywords = ['flour', 'spelt', 'rye', 'wholemeal', 'whole wheat'];
         let totalFlour = 0;
         const regex = new RegExp(`^(${numberRegexStr})(?:\\s*(${unitsRegexStr}))?\\b`, 'i');
@@ -763,34 +764,26 @@ if (csvUrlInput && window.Papa && window.Chart) {
             let isFlour = flourKeywords.some(k => text.toLowerCase().includes(k));
             if (isFlour) totalFlour += grams;
 
-            let isYeast = yeastRegex.test(text) && !text.toLowerCase().includes('nutritional');
-            let isStarter = starterRegex.test(text);
+            let isYeast = /\byeast\b/i.test(text) && !text.toLowerCase().includes('nutritional');
+            let isStarter = /\b(sourdough starter|levain|starter culture)\b/i.test(text);
             
             return { grams, isFlour, isYeast, isStarter };
         });
 
+        let detectedAmount = 0;
         ingData.forEach(d => {
             if (d.isYeast || d.isStarter) {
-                hasLeaven = true;
-                if (d.isStarter) detectedType = 'starter';
                 if (totalFlour > 0) {
                     detectedAmount = (d.grams / totalFlour) * 100;
                 }
             }
         });
 
-        if (hasLeaven) {
-            const btn = document.getElementById('fermentation-tab-btn');
-            if (btn) btn.style.display = 'block';
-            
-            // Auto-fill calculator
-            document.getElementById('leaven-type').value = detectedType;
-            if (detectedAmount > 0) {
-                document.getElementById('leaven-amount').value = detectedAmount.toFixed(1);
-                document.getElementById('amount-auto-detected').style.display = 'inline';
-            }
-            updateFermentation();
+        if (detectedAmount > 0) {
+            document.getElementById('leaven-amount').value = detectedAmount.toFixed(1);
+            document.getElementById('amount-auto-detected').style.display = 'inline';
         }
+        updateFermentation();
     });
 </script>
 {% endblock %}

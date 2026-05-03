@@ -27,6 +27,25 @@ impl Recipe {
     pub fn has_tag(&self, tag: &str) -> bool {
         self.tags.iter().any(|t| t == tag)
     }
+
+    pub fn leaven_info(&self) -> (bool, &'static str) {
+        let yeast_regex = regex::Regex::new(r"(?i)\byeast\b").unwrap();
+        let starter_regex = regex::Regex::new(r"(?i)\b(sourdough starter|levain|starter culture)\b").unwrap();
+        
+        let mut found_starter = false;
+        let mut found_yeast = false;
+
+        for ing in &self.ingredients {
+            let lower = ing.to_lowercase();
+            if lower.contains("nutritional") { continue; }
+            if starter_regex.is_match(ing) { found_starter = true; }
+            if yeast_regex.is_match(ing) { found_yeast = true; }
+        }
+
+        if found_starter { (true, "starter") }
+        else if found_yeast { (true, "yeast") }
+        else { (false, "none") }
+    }
 }
 
 // Minimal representations for extracting LD+JSON Recipe data
