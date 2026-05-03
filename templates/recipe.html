@@ -547,7 +547,7 @@ if (csvUrlInput && window.Papa && window.Chart) {
         document.getElementById(tabId + '-tab').classList.add('active');
         
         // Scroll to top of content
-        if (window.innerWidth <= 640) {
+        if (window.innerWidth <= 768) {
             window.scrollTo({ top: document.querySelector('.recipe-content').offsetTop - 100, behavior: 'smooth' });
         }
     }

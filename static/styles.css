@@ -353,7 +353,7 @@ main {
   box-shadow: 0 4px 12px rgba(249, 115, 22, 0.2);
 }
 
-@media (max-width: 640px) {
+@media (max-width: 768px) {
   .recipe-hero-img {
     display: none;
   }
