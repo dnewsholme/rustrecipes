@@ -108,6 +108,7 @@ mod tests {
             markdown: "## Directions\n1. Do something".to_string(),
             html: None,
             combustion_csv: None,
+            video_url: None,
         };
 
         // We'll temporarily point to a test file in the real dir or just use a unique ID

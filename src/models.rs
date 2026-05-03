@@ -21,6 +21,7 @@ pub struct Recipe {
     #[serde(skip)]
     pub html: Option<String>,
     pub combustion_csv: Option<String>,
+    pub video_url: Option<String>,
 }
 
 impl Recipe {
@@ -56,6 +57,14 @@ impl Recipe {
         } else {
             (false, "none")
         }
+    }
+
+    pub fn youtube_id(&self) -> Option<String> {
+        let url = self.video_url.as_ref()?;
+        let re = regex::Regex::new(r"(?:v=|\/|embed\/|youtu\.be\/)([0-9A-Za-z_-]{11})").ok()?;
+        re.captures(url)
+            .and_then(|caps| caps.get(1))
+            .map(|m| m.as_str().to_string())
     }
 }
 

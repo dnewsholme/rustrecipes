@@ -172,6 +172,7 @@ pub async fn import_recipe_from_text(text: &str) -> Option<Recipe> {
                     markdown: gemini.markdown,
                     html: None,
                     combustion_csv: None,
+                    video_url: None,
                 });
             }
             Err(e) => {
@@ -297,6 +298,7 @@ fn convert_ld_to_recipe(ld: LdRecipe, url: &str) -> Recipe {
         markdown,
         html: None,
         combustion_csv: None,
+        video_url: None,
     }
 }
 
@@ -469,6 +471,7 @@ pub async fn import_paprika_archive(bytes: &[u8]) -> Vec<Recipe> {
                             markdown: decode_html(&paprika.directions.unwrap_or_default()),
                             html: None,
                             combustion_csv: None,
+                            video_url: None,
                         };
                         imported.push(recipe);
                     }
@@ -606,6 +609,7 @@ pub async fn import_recipe_from_photo(mime_type: &str, image_data: &[u8]) -> Opt
                     markdown: decode_html(&gemini.markdown),
                     html: None,
                     combustion_csv: None,
+                    video_url: None,
                 });
             }
             Err(e) => {
@@ -682,6 +686,7 @@ pub async fn import_recipe_from_youtube(url: &str) -> Option<Recipe> {
     let mut recipe = import_recipe_from_text(&page_text).await?;
 
     recipe.source_url = Some(url.to_string());
+    recipe.video_url = Some(url.to_string());
     // Use the high-res thumbnail
     recipe.image = Some(format!(
         "https://i.ytimg.com/vi/{}/maxresdefault.jpg",
