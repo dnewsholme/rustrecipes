@@ -737,8 +737,8 @@ if (csvUrlInput && window.Papa && window.Chart) {
 
     // Detect Yeast/Starter and enable tab
     document.addEventListener('DOMContentLoaded', () => {
-        const yeastRegex = /\b(?!nutritional\s)yeast\b/i;
-        const starterRegex = /\b(starter|sourdough|levain)\b/i;
+        const yeastRegex = /\byeast\b/i;
+        const starterRegex = /\b(sourdough starter|starter culture|levain)\b/i;
         
         let hasLeaven = false;
         let detectedType = 'yeast';
@@ -763,7 +763,7 @@ if (csvUrlInput && window.Papa && window.Chart) {
             let isFlour = flourKeywords.some(k => text.toLowerCase().includes(k));
             if (isFlour) totalFlour += grams;
 
-            let isYeast = yeastRegex.test(text);
+            let isYeast = yeastRegex.test(text) && !text.toLowerCase().includes('nutritional');
             let isStarter = starterRegex.test(text);
             
             return { grams, isFlour, isYeast, isStarter };
