@@ -7,14 +7,20 @@ A lightning-fast, highly-customizable recipe manager built in Rust. It's designe
 
 ## ✨ Features
 
-- **Blazing Fast**: Powered by Rust, Axum, and Askama templates.
+- **Blazing Fast**: Powered by Rust, Axum, and Askama templates for a near-instant user experience.
+- **Mobile Optimized UX**:
+  - **Tabbed Interface**: Switch seamlessly between Ingredients, Directions, and Cook Graphs on mobile devices.
+  - **No-Lock Cooking**: Integrated **Wake Lock API** prevents your screen from locking while you cook.
+  - **Space Saving**: Collapsible recipe photos and a streamlined header specifically for small screens.
 - **Dynamic Ingredient Scaling**: Easily multiply recipe yields (e.g., 0.5x, 2x, 3x) with real-time updates directly in the text.
 - **Smart Unit Conversion**: Seamlessly toggle entire recipes between Original, Metric, and Imperial systems (instantly converts measurements embedded within markdown text!).
 - **Combustion Inc. Integration**: Upload Combustion Inc. predictive thermometer CSV exports directly to a recipe to visualize your cook's core, surface, and ambient temperatures over time with interactive Chart.js graphs.
-- **Import from Anywhere**:
-  - Automatically scrape recipes by pasting a URL from popular cooking sites.
-  - Import bulk archives (`.paprikarecipes`) from Paprika Recipe Manager.
+- **Smart Import from Anywhere**:
+  - **URL Import**: Automatically scrape recipes by pasting a URL from popular cooking sites.
+  - **Paprika Import**: Bulk import archives (`.paprikarecipes`) from Paprika Recipe Manager.
   - **AI Photo Import**: Take a photo of a cookbook page, and the built-in Gemini AI Vision integration will automatically extract the title, ingredients, and instructions!
+- **Interactive Tagging**: Add tags to your recipes and click them on the dashboard to instantly filter your collection.
+- **Prep & Cook Times**: Automated extraction of durations from imports, or manual entry with visual indicators.
 - **Beautiful Dark/Light Mode**: Premium aesthetic featuring a custom Kamado BBQ logo and vibrant orange accents.
 
 ---
@@ -64,13 +70,3 @@ The `/app/data` volume contains two critical subdirectories:
 - `uploads/`: Contains any images or Combustion CSV files you have uploaded.
 
 ---
-
-## 🔄 Automated Builds (GitHub Actions)
-
-This repository is configured with a GitHub Actions workflow (`.github/workflows/docker.yml`). 
-Every time code is pushed to the `main` branch, it automatically builds a new multi-stage Docker image and publishes it to Docker Hub as `dnewsholme/recipemanager:latest`.
-
-**Required Repository Secrets:**
-To enable this automation, ensure the following secrets are configured in your GitHub repository:
-- `DOCKERHUB_USERNAME`: Your Docker Hub username.
-- `DOCKERHUB_TOKEN`: A Docker Hub Personal Access Token (PAT).
