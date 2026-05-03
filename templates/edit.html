@@ -50,7 +50,7 @@
 
         <div class="form-group" style="border: 1px solid var(--border-color); padding: 1rem; border-radius: var(--radius-md);">
             <label class="form-label" for="combustion_csv_upload" style="color: #d35400;">Combustion Inc. Data (CSV)</label>
-            <input type="file" id="combustion_csv_upload" name="combustion_csv_upload" class="form-control" accept=".csv">
+            <input type="file" id="combustion_csv_upload" name="combustion_csv_upload" class="form-control" accept=".csv, text/csv">
             <small class="text-secondary">Attach a cook export to display a temperature graph.</small>
             <input type="hidden" id="existing_combustion_csv" name="existing_combustion_csv" value="{% match recipe.combustion_csv %}{% when Some with (csv) %}{{ csv }}{% when None %}{% endmatch %}">
             {% match recipe.combustion_csv %}
