@@ -55,8 +55,11 @@
             <input type="hidden" id="existing_combustion_csv" name="existing_combustion_csv" value="{% match recipe.combustion_csv %}{% when Some with (csv) %}{{ csv }}{% when None %}{% endmatch %}">
             {% match recipe.combustion_csv %}
                 {% when Some with (csv) %}
-                    <div style="margin-top: 0.5rem; font-size: 0.9rem; color: var(--text-secondary);">
-                        Current file: <strong>{{ csv }}</strong> (uploading a new one will replace it)
+                    <div style="margin-top: 0.5rem; font-size: 0.9rem; color: var(--text-secondary); display: flex; flex-direction: column; gap: 0.5rem;">
+                        <span>Current file: <strong>{{ csv }}</strong></span>
+                        <label style="display: flex; align-items: center; gap: 0.5rem; color: #e74c3c; cursor: pointer; font-size: 0.85rem;">
+                            <input type="checkbox" name="remove_combustion_csv" value="true"> Remove data
+                        </label>
                     </div>
                 {% when None %}
             {% endmatch %}

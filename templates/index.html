@@ -83,6 +83,13 @@
                     {% when None %}
                 {% endmatch %}
             </div>
+            {% if !recipe.tags.is_empty() %}
+            <div style="display: flex; gap: 0.4rem; margin-bottom: 1rem; flex-wrap: wrap;">
+                {% for tag in recipe.tags %}
+                    <span class="tag-badge" onclick="filterByTag('{{ tag }}', event)" style="cursor: pointer; background: var(--bg-color); border: 1px solid var(--border-color); padding: 0.1rem 0.5rem; border-radius: 10px; font-size: 0.75rem; color: var(--text-secondary); transition: var(--transition);">#{{ tag }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
             <a href="recipe/{{ recipe.id }}" class="btn btn-secondary" style="width: 100%; margin-top: auto;">View Recipe</a>
         </div>
     </div>
@@ -118,6 +125,13 @@ const filterRecipes = () => {
         }
     });
 };
+
+function filterByTag(tag, event) {
+    if (event) event.preventDefault();
+    searchInput.value = tag;
+    filterRecipes();
+    window.scrollTo({ top: searchInput.offsetTop - 100, behavior: 'smooth' });
+}
 
 searchInput?.addEventListener('input', filterRecipes);
 document.getElementById('search-form')?.addEventListener('submit', (e) => {

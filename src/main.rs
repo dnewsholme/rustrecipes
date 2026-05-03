@@ -60,6 +60,7 @@ struct RecipeFormData {
     servings: Option<u32>,
     prep_time: Option<String>,
     cook_time: Option<String>,
+    remove_combustion_csv: bool,
 }
 
 async fn parse_recipe_multipart(mut multipart: Multipart) -> Option<RecipeFormData> {
@@ -73,6 +74,7 @@ async fn parse_recipe_multipart(mut multipart: Multipart) -> Option<RecipeFormDa
     let mut servings = None;
     let mut prep_time = None;
     let mut cook_time = None;
+    let mut remove_combustion_csv = false;
 
     while let Some(field) = multipart.next_field().await.unwrap_or(None) {
         let name = field.name().unwrap_or("").to_string();
@@ -135,6 +137,7 @@ async fn parse_recipe_multipart(mut multipart: Multipart) -> Option<RecipeFormDa
                 "servings" => servings = text.parse::<u32>().ok(),
                 "prep_time" => prep_time = if text.trim().is_empty() { None } else { Some(text) },
                 "cook_time" => cook_time = if text.trim().is_empty() { None } else { Some(text) },
+                "remove_combustion_csv" => remove_combustion_csv = text == "true",
                 _ => {}
             }
         }
@@ -145,7 +148,7 @@ async fn parse_recipe_multipart(mut multipart: Multipart) -> Option<RecipeFormDa
     }
     
     Some(RecipeFormData {
-        title, description, image, combustion_csv, markdown, tags, ingredients, servings, prep_time, cook_time
+        title, description, image, combustion_csv, markdown, tags, ingredients, servings, prep_time, cook_time, remove_combustion_csv
     })
 }
 
@@ -274,9 +277,13 @@ async fn update_recipe(Path(id): Path<String>, multipart: Multipart) -> impl Int
         }
         if form.combustion_csv.is_some() {
             recipe.combustion_csv = form.combustion_csv;
+        } else if form.remove_combustion_csv {
+            recipe.combustion_csv = None;
         }
         recipe.tags = form.tags;
         recipe.servings = form.servings;
+        recipe.prep_time = form.prep_time;
+        recipe.cook_time = form.cook_time;
         recipe.ingredients = form.ingredients;
         recipe.markdown = form.markdown;
         let _ = storage::save_recipe(&recipe).await;

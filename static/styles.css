@@ -417,6 +417,12 @@ main {
 .CodeMirror-cursor {
   border-left: 1px solid var(--text-primary) !important;
 }
+.tag-badge:hover {
+  background-color: var(--accent-color) !important;
+  color: white !important;
+  border-color: var(--accent-color) !important;
+}
+
 @media (max-width: 768px) {
   header .container {
     flex-wrap: wrap;
