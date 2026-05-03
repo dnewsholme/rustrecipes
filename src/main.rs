@@ -202,6 +202,8 @@ async fn new_recipe() -> impl IntoResponse {
             source_url: None,
             tags: vec![],
             servings: None,
+            prep_time: None,
+            cook_time: None,
             ingredients: vec![],
             markdown: String::new(),
             html: None,
