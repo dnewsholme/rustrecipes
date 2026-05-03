@@ -49,6 +49,11 @@
     <div class="recipe-tabs">
         <button class="tab-btn active" onclick="switchTab('ingredients', this)">Ingredients</button>
         <button class="tab-btn" onclick="switchTab('directions', this)">Directions</button>
+        {% match recipe.combustion_csv %}
+            {% when Some with (csv) %}
+                <button class="tab-btn" onclick="switchTab('graph', this)">Graph</button>
+            {% when None %}
+        {% endmatch %}
     </div>
 
     <div id="ingredients-tab" class="tab-content active">
@@ -117,12 +122,14 @@
 
     {% match recipe.combustion_csv %}
         {% when Some with (csv) %}
-            <div style="margin-top: 3rem; background: var(--bg-color); padding: 1.5rem; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
-                <h2 style="margin-top: 0;">Combustion Inc. Cook Data</h2>
-                <div style="height: 400px; width: 100%;">
-                    <canvas id="combustionChart"></canvas>
+            <div id="graph-tab" class="tab-content">
+                <div style="margin-top: 1rem; background: var(--bg-color); padding: 1.5rem; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                    <h2 style="margin-top: 0;">Combustion Inc. Cook Data</h2>
+                    <div style="height: 400px; width: 100%;">
+                        <canvas id="combustionChart"></canvas>
+                    </div>
+                    <input type="hidden" id="combustion_csv_url" value="{{ csv }}">
                 </div>
-                <input type="hidden" id="combustion_csv_url" value="{{ csv }}">
             </div>
         {% when None %}
     {% endmatch %}
