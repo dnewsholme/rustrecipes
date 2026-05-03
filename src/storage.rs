@@ -1,4 +1,5 @@
 use crate::models::Recipe;
+use tracing::error;
 
 use pulldown_cmark::{html, Parser};
 use std::fs;

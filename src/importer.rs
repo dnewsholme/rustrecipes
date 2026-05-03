@@ -1,36 +1,50 @@
 use crate::models::{LdRecipe, Recipe};
 use scraper::{Html, Selector};
 use serde_json::Value;
+use tracing::{info, warn, error};
 
 pub async fn import_recipe_from_url(url: &str) -> Option<Recipe> {
     let client = reqwest::Client::builder()
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
         .build()
         .ok()?;
-        
+
     let res = client.get(url).send().await.ok()?;
     let body = res.text().await.ok()?;
-    
-    let document = Html::parse_document(&body);
-    let selector = Selector::parse("script[type=\"application/ld+json\"]").unwrap();
-    
-    for element in document.select(&selector) {
-        let text = element.inner_html();
-        if let Some(recipe_data) = extract_recipe_from_json(&text) {
-            let recipe = convert_ld_to_recipe(recipe_data, url);
-            // If we got valid ingredients and instructions, return it
-            if !recipe.ingredients.is_empty() && !recipe.markdown.is_empty() {
-                return Some(recipe);
+
+    let ld_recipe = {
+        let document = Html::parse_document(&body);
+        let selector = Selector::parse("script[type=\"application/ld+json\"]").unwrap();
+        let mut result = None;
+
+        for element in document.select(&selector) {
+            let text = element.inner_html();
+            if let Some(recipe_data) = extract_recipe_from_json(&text) {
+                let recipe = convert_ld_to_recipe(recipe_data, url);
+                // If we got valid ingredients and instructions, return it
+                if !recipe.ingredients.is_empty() && !recipe.markdown.is_empty() {
+                    result = Some(recipe);
+                    break;
+                }
             }
         }
+        result
+    };
+
+    if let Some(recipe) = ld_recipe {
+        return Some(recipe);
     }
-    
+
     // Fallback: Try Gemini on the text content
-    println!("LD+JSON failed or incomplete for {}, falling back to Gemini", url);
-    let text_content = html2text::from_read(body.as_bytes(), 80);
-    if let Some(mut ai_recipe) = import_recipe_from_text(&text_content).await {
-        ai_recipe.source_url = Some(url.to_string());
-        return Some(ai_recipe);
+    info!(
+        "LD+JSON failed or incomplete for {}, falling back to Gemini",
+        url
+    );
+    if let Ok(text) = html2text::from_read(body.as_bytes(), 80) {
+        if let Some(mut ai_recipe) = import_recipe_from_text(&text).await {
+            ai_recipe.source_url = Some(url.to_string());
+            return Some(ai_recipe);
+        }
     }
 
     None
@@ -41,17 +55,23 @@ pub async fn import_recipe_from_text(text: &str) -> Option<Recipe> {
         Ok(key) => key,
         Err(_) => return None,
     };
-    
+
     let client = reqwest::Client::new();
-    let url = format!("https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key={}", api_key);
-    
-    let prompt = format!("You are a professional recipe extractor. Extract the recipe from this text: \n\n{}\n\n \
+    let url = format!(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key={}",
+        api_key
+    );
+
+    let prompt = format!(
+        "You are a professional recipe extractor. Extract the recipe from this text: \n\n{}\n\n \
                   Format the response EXACTLY as a JSON object with no markdown formatting around it. \
                   The JSON should match this schema: \
                   {{ \"title\": \"string\", \"description\": \"string or null\", \"servings\": number or null, \
                   \"prep_time\": \"string or null\", \"cook_time\": \"string or null\", \
-                  \"ingredients\": [\"string\"], \"markdown\": \"string (use markdown for instructions)\", \"tags\": [\"string\"] }}", text);
-    
+                  \"ingredients\": [\"string\"], \"markdown\": \"string (use markdown for instructions)\", \"tags\": [\"string\"] }}",
+        text
+    );
+
     let body = serde_json::json!({
         "contents": [{
             "parts": [{ "text": prompt }]
@@ -63,21 +83,24 @@ pub async fn import_recipe_from_text(text: &str) -> Option<Recipe> {
 
     let res = client.post(&url).json(&body).send().await.ok()?;
     let res_json: serde_json::Value = res.json().await.ok()?;
-    
+
     if let Some(text) = res_json["candidates"][0]["content"]["parts"][0]["text"].as_str() {
         let clean_text = text.trim();
         let clean_text = if clean_text.starts_with("```json") {
-            clean_text.trim_start_matches("```json").trim_end_matches("```").trim()
+            clean_text
+                .trim_start_matches("```json")
+                .trim_end_matches("```")
+                .trim()
         } else {
             clean_text
         };
-        
+
         if let Ok(gemini) = serde_json::from_str::<GeminiRecipe>(clean_text) {
             let mut id = slug::slugify(&gemini.title);
             if id.is_empty() {
                 id = uuid::Uuid::new_v4().to_string();
             }
-            
+
             return Some(Recipe {
                 id,
                 title: gemini.title,
@@ -100,7 +123,7 @@ pub async fn import_recipe_from_text(text: &str) -> Option<Recipe> {
 
 fn extract_recipe_from_json(json_str: &str) -> Option<LdRecipe> {
     let parsed: Value = serde_json::from_str(json_str).ok()?;
-    
+
     if let Value::Array(arr) = &parsed {
         for item in arr {
             if is_recipe(item) {
@@ -137,13 +160,13 @@ fn is_recipe(val: &Value) -> bool {
 
 fn convert_ld_to_recipe(ld: LdRecipe, url: &str) -> Recipe {
     let mut markdown = String::new();
-    
+
     if let Some(desc) = &ld.description {
         markdown.push_str(&format!("{}\n\n", desc));
     }
-    
+
     let ingredients = ld.recipe_ingredient.clone();
-    
+
     markdown.push_str("## Instructions\n\n");
     if let Some(instructions) = ld.recipe_instructions {
         if let Value::Array(arr) = instructions {
@@ -158,7 +181,7 @@ fn convert_ld_to_recipe(ld: LdRecipe, url: &str) -> Recipe {
             markdown.push_str(&format!("{}\n", text));
         }
     }
-    
+
     let mut image_url = None;
     if let Some(img) = ld.image {
         if let Value::String(s) = img {
@@ -177,13 +200,13 @@ fn convert_ld_to_recipe(ld: LdRecipe, url: &str) -> Recipe {
             }
         }
     }
-    
+
     let title = ld.name.clone();
     let mut id = slug::slugify(&title);
     if id.is_empty() {
         id = uuid::Uuid::new_v4().to_string();
     }
-    
+
     let mut servings = None;
     if let Some(y) = ld.recipe_yield {
         if let Value::String(s) = y {
@@ -201,7 +224,7 @@ fn convert_ld_to_recipe(ld: LdRecipe, url: &str) -> Recipe {
             }
         }
     }
-    
+
     Recipe {
         id,
         title,
@@ -222,7 +245,7 @@ fn convert_ld_to_recipe(ld: LdRecipe, url: &str) -> Recipe {
 fn parse_iso8601_duration(duration: &str) -> String {
     let mut result = String::new();
     let mut current_num = String::new();
-    
+
     for c in duration.chars() {
         if c.is_digit(10) {
             current_num.push(c);
@@ -250,7 +273,7 @@ fn parse_iso8601_duration(duration: &str) -> String {
             }
         }
     }
-    
+
     let trimmed = result.trim().to_string();
     if trimmed.is_empty() && !duration.is_empty() {
         duration.to_string()
@@ -262,9 +285,9 @@ fn parse_iso8601_duration(duration: &str) -> String {
 pub async fn import_paprika_archive(bytes: &[u8]) -> Vec<Recipe> {
     use crate::models::PaprikaRecipe;
     use flate2::read::GzDecoder;
+    use std::io::Cursor;
     use std::io::Read;
     use zip::ZipArchive;
-    use std::io::Cursor;
 
     let mut imported = Vec::new();
 
@@ -285,12 +308,15 @@ pub async fn import_paprika_archive(bytes: &[u8]) -> Vec<Recipe> {
                                 }
 
                                 let servings = if let Some(s) = &paprika.servings {
-                                    s.split_whitespace().next().and_then(|num| num.parse::<u32>().ok())
+                                    s.split_whitespace()
+                                        .next()
+                                        .and_then(|num| num.parse::<u32>().ok())
                                 } else {
                                     None
                                 };
 
-                                let ingredients = paprika.ingredients
+                                let ingredients = paprika
+                                    .ingredients
                                     .unwrap_or_default()
                                     .lines()
                                     .map(|s| s.trim().to_string())
@@ -299,8 +325,12 @@ pub async fn import_paprika_archive(bytes: &[u8]) -> Vec<Recipe> {
 
                                 let mut final_image = paprika.photo_url.clone();
                                 let mut base64_strings = Vec::new();
-                                if let Some(d) = paprika.photo_large { base64_strings.push(d); }
-                                if let Some(d) = paprika.photo_data { base64_strings.push(d); }
+                                if let Some(d) = paprika.photo_large {
+                                    base64_strings.push(d);
+                                }
+                                if let Some(d) = paprika.photo_data {
+                                    base64_strings.push(d);
+                                }
 
                                 for mut b64 in base64_strings {
                                     if b64.starts_with("data:image") {
@@ -309,7 +339,7 @@ pub async fn import_paprika_archive(bytes: &[u8]) -> Vec<Recipe> {
                                         }
                                     }
                                     b64 = b64.replace("\n", "").replace("\r", "").replace(" ", "");
-                                    
+
                                     use base64::{Engine as _, engine::general_purpose};
                                     if let Ok(bytes) = general_purpose::STANDARD.decode(&b64) {
                                         let new_filename = format!("{}.jpg", uuid::Uuid::new_v4());
@@ -367,20 +397,23 @@ pub async fn import_recipe_from_photo(mime_type: &str, image_data: &[u8]) -> Opt
             return None;
         }
     };
-    
+
     use base64::{Engine as _, engine::general_purpose};
     let b64 = general_purpose::STANDARD.encode(image_data);
-    
+
     let client = reqwest::Client::new();
-    let url = format!("https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key={}", api_key);
-    
+    let url = format!(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key={}",
+        api_key
+    );
+
     let prompt = "You are a professional recipe extractor. Extract the recipe from this image. \
                   Format the response EXACTLY as a JSON object with no markdown formatting around it. \
                   The JSON should match this schema: \
                   { \"title\": \"string\", \"description\": \"string or null\", \"servings\": number or null, \
                   \"prep_time\": \"string or null\", \"cook_time\": \"string or null\", \
                   \"ingredients\": [\"string\"], \"markdown\": \"string (use markdown for instructions)\", \"tags\": [\"string\"] }";
-    
+
     let body = serde_json::json!({
         "contents": [{
             "parts": [
@@ -405,7 +438,7 @@ pub async fn import_recipe_from_photo(mime_type: &str, image_data: &[u8]) -> Opt
             return None;
         }
     };
-    
+
     let status = res.status();
     let res_json: serde_json::Value = match res.json().await {
         Ok(v) => v,
@@ -414,28 +447,34 @@ pub async fn import_recipe_from_photo(mime_type: &str, image_data: &[u8]) -> Opt
             return None;
         }
     };
-    
+
     if !status.is_success() {
-        println!("Gemini API returned error status {}: {:?}", status, res_json);
+        error!(
+            "Gemini API returned error status {}: {:?}",
+            status, res_json
+        );
         return None;
     }
-    
+
     if let Some(text) = res_json["candidates"][0]["content"]["parts"][0]["text"].as_str() {
         let clean_text = text.trim();
         // Sometimes LLMs still wrap in ```json ... ``` despite instructions
         let clean_text = if clean_text.starts_with("```json") {
-            clean_text.trim_start_matches("```json").trim_end_matches("```").trim()
+            clean_text
+                .trim_start_matches("```json")
+                .trim_end_matches("```")
+                .trim()
         } else {
             clean_text
         };
-        
+
         match serde_json::from_str::<GeminiRecipe>(clean_text) {
             Ok(gemini) => {
                 let mut id = slug::slugify(&gemini.title);
                 if id.is_empty() {
                     id = uuid::Uuid::new_v4().to_string();
                 }
-                
+
                 return Some(Recipe {
                     id,
                     title: gemini.title,
@@ -451,15 +490,18 @@ pub async fn import_recipe_from_photo(mime_type: &str, image_data: &[u8]) -> Opt
                     html: None,
                     combustion_csv: None,
                 });
-            },
+            }
             Err(e) => {
-                println!("Failed to deserialize Gemini response into GeminiRecipe: {:?}", e);
-                println!("Raw JSON was: {}", clean_text);
+                error!(
+                    "Failed to deserialize Gemini response into GeminiRecipe: {:?}",
+                    e
+                );
+                info!("Raw JSON was: {}", clean_text);
             }
         }
     } else {
-        println!("Unexpected response structure from Gemini: {:?}", res_json);
+        warn!("Unexpected response structure from Gemini: {:?}", res_json);
     }
-    
+
     None
 }
