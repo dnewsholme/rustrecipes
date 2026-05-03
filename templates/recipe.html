@@ -98,6 +98,9 @@
                     <button class="btn btn-primary unit-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="setUnitSystem('original', this)">Original</button>
                     <button class="btn btn-secondary unit-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="setUnitSystem('metric', this)">Metric</button>
                     <button class="btn btn-secondary unit-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="setUnitSystem('imperial', this)">Imperial</button>
+                    {% if recipe.tags.contains("bread") || recipe.tags.contains("dough") %}
+                    <button class="btn btn-secondary unit-btn" id="bakers-percent-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="toggleBakersPercentage(this)">Baker's %</button>
+                    {% endif %}
                 </div>
                 <div style="display: flex; gap: 0.25rem; align-items: center;">
                     <span style="font-size: 0.8rem; color: var(--text-secondary); margin-right: 0.5rem;">Scale:</span>
@@ -185,6 +188,19 @@ function parseNumStr(numStr) {
 
 let currentUnitSystem = 'original'; // 'original', 'metric', 'imperial'
 let currentMultiplier = 1;
+let showBakersPercentage = false;
+
+function toggleBakersPercentage(btn) {
+    showBakersPercentage = !showBakersPercentage;
+    if (showBakersPercentage) {
+        btn.classList.add('btn-primary');
+        btn.classList.remove('btn-secondary');
+    } else {
+        btn.classList.remove('btn-primary');
+        btn.classList.add('btn-secondary');
+    }
+    applyScalingAndUnits();
+}
 
 function setUnitSystem(system, btn) {
     document.querySelectorAll('.unit-btn').forEach(b => {
@@ -338,35 +354,80 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function applyScalingAndUnits() {
     const multiplier = currentMultiplier;
-    
     const items = document.querySelectorAll('.ingredient-item');
-    items.forEach((item, index) => {
-        let text = originalIngredients[index];
-        const regex = new RegExp(`^(${numberRegexStr})(?:\\s*(${unitsRegexStr}))?\\b`, 'i');
+    const regex = new RegExp(`^(${numberRegexStr})(?:\\s*(${unitsRegexStr}))?\\b`, 'i');
+
+    if (showBakersPercentage) {
+        let totalFlour = 0;
+        const flourKeywords = ['flour', 'spelt', 'rye', 'wholemeal', 'whole wheat', 'semolina', 'bread flour', 'all-purpose', 'all purpose'];
         
-        let match = text.match(regex);
-        
-        if (match) {
+        const ingredientsData = originalIngredients.map((text, index) => {
+            let match = text.match(regex);
+            if (!match) return { grams: 0, isFlour: false, text, originalMatch: null };
+            
             let numStr = match[1];
-            let originalUnit = match[2] || '';
+            let unit = (match[2] || '').toLowerCase();
+            let val = parseNumStr(numStr) * multiplier;
             
-            let value = parseNumStr(numStr);
-            let newValue = value * multiplier;
+            let grams = val;
+            if (unit === 'kg') grams = val * 1000;
+            else if (unit === 'oz' || unit === 'ounce' || unit === 'ounces') grams = val * 28.35;
+            else if (unit === 'lb' || unit === 'pound' || unit === 'pounds') grams = val * 453.6;
+            else if (unit === 'ml' || unit === 'milliliter' || unit === 'milliliters') grams = val; // Assume water density for now
             
-            let { val: finalVal, unit: finalUnit } = convertValueAndUnit(newValue, originalUnit, currentUnitSystem);
-            
-            let formattedValue = formatNumber(finalVal);
-            
-            let replacement = formattedValue;
-            if (finalUnit) {
-                replacement += (finalUnit === originalUnit && !match[0].includes(' ')) ? finalUnit : " " + finalUnit;
-            } else if (originalUnit) {
-                 replacement += (match[0].includes(' ')) ? " " + originalUnit : originalUnit;
+            let isFlour = flourKeywords.some(k => text.toLowerCase().includes(k)) && !text.toLowerCase().includes('flourish');
+            if (isFlour && (unit === 'g' || unit === 'kg' || unit === 'oz' || unit === 'lb')) {
+                totalFlour += grams;
+            }
+            return { grams, isFlour, text, originalMatch: match[0], val, unit };
+        });
+
+        items.forEach((item, index) => {
+            const data = ingredientsData[index];
+            if (!data || totalFlour === 0 || data.grams === 0) {
+                // If it's zero or not parsable, just show original scaled
+                item.innerText = originalIngredients[index];
+                return;
             }
             
-            item.innerText = text.replace(match[0], replacement);
-        }
-    });
+            let percentage = (data.grams / totalFlour) * 100;
+            let formattedPercent = percentage.toFixed(1) + "%";
+            
+            let style = data.isFlour ? 'font-weight:bold; color:var(--primary-color);' : '';
+            let label = data.isFlour ? ' <small style="opacity:0.6">(Flour)</small>' : '';
+            
+            item.innerHTML = `<span style="display:inline-block; min-width:60px; ${style}">${formattedPercent}</span> ${data.text.replace(data.originalMatch, '').trim()} <small style="color:var(--text-secondary); margin-left: auto;">(${formatNumber(data.val)} ${data.unit})</small>`;
+            item.style.display = 'flex';
+            item.style.alignItems = 'center';
+        });
+    } else {
+        items.forEach((item, index) => {
+            item.style.display = 'block'; // Reset display style
+            let text = originalIngredients[index];
+            let match = text.match(regex);
+            
+            if (match) {
+                let numStr = match[1];
+                let originalUnit = match[2] || '';
+                
+                let value = parseNumStr(numStr);
+                let newValue = value * multiplier;
+                
+                let { val: finalVal, unit: finalUnit } = convertValueAndUnit(newValue, originalUnit, currentUnitSystem);
+                
+                let formattedValue = formatNumber(finalVal);
+                
+                let replacement = formattedValue;
+                if (finalUnit) {
+                    replacement += (finalUnit === originalUnit && !match[0].includes(' ')) ? finalUnit : " " + finalUnit;
+                } else if (originalUnit) {
+                     replacement += (match[0].includes(' ')) ? " " + originalUnit : originalUnit;
+                }
+                
+                item.innerText = text.replace(match[0], replacement);
+            }
+        });
+    }
 
     const servingsEl = document.getElementById('servings-count');
     if (servingsEl) {

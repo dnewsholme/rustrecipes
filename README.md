@@ -14,6 +14,7 @@ A lightning-fast, highly-customizable recipe manager built in Rust. It's designe
   - **Space Saving**: Collapsible recipe photos and a streamlined header specifically for small screens.
 - **Dynamic Ingredient Scaling**: Easily multiply recipe yields (e.g., 0.5x, 2x, 3x) with real-time updates directly in the text.
 - **Smart Unit Conversion**: Seamlessly toggle entire recipes between Original, Metric, and Imperial systems (instantly converts measurements embedded within markdown text!).
+- **Baker's Percentage Mode**: Automatically activated for recipes tagged with `bread` or `dough`. It calculates the total flour weight as 100% and displays all other ingredients as a relative percentage—essential for analyzing hydration levels and salt ratios.
 - **Combustion Inc. Integration**: Upload Combustion Inc. predictive thermometer CSV exports directly to a recipe to visualize your cook's core, surface, and ambient temperatures over time with interactive Chart.js graphs.
 - **Smart Import from Anywhere**:
   - **URL Import**: Automatically scrape recipes by pasting a URL from popular cooking sites.

@@ -243,8 +243,8 @@ fn convert_ld_to_recipe(ld: LdRecipe, url: &str) -> Recipe {
         source_url: Some(url.to_string()),
         tags: vec![],
         servings,
-        prep_time: ld.prep_time.map(|t| parse_iso8601_duration(&t)),
-        cook_time: ld.cook_time.map(|t| parse_iso8601_duration(&t)),
+        prep_time: ld.prep_time.and_then(|t| parse_iso8601_duration(&t)),
+        cook_time: ld.cook_time.and_then(|t| parse_iso8601_duration(&t)),
         ingredients,
         markdown,
         html: None,
@@ -252,7 +252,7 @@ fn convert_ld_to_recipe(ld: LdRecipe, url: &str) -> Recipe {
     }
 }
 
-fn parse_iso8601_duration(duration: &str) -> String {
+fn parse_iso8601_duration(duration: &str) -> Option<String> {
     let mut result = String::new();
     let mut current_num = String::new();
 
@@ -286,11 +286,11 @@ fn parse_iso8601_duration(duration: &str) -> String {
         }
     }
 
-    let trimmed = result.trim().to_string();
-    if trimmed.is_empty() && !duration.is_empty() {
-        duration.to_string()
+    let trimmed = result.trim();
+    if trimmed.is_empty() {
+        None
     } else {
-        trimmed
+        Some(trimmed.to_string())
     }
 }
 
@@ -524,11 +524,12 @@ mod tests {
 
     #[test]
     fn test_parse_iso8601_duration() {
-        assert_eq!(parse_iso8601_duration("PT1H30M"), "1h 30m");
-        assert_eq!(parse_iso8601_duration("PT45M"), "45m");
-        assert_eq!(parse_iso8601_duration("PT2H"), "2h");
-        assert_eq!(parse_iso8601_duration("PT10S"), "10s");
-        assert_eq!(parse_iso8601_duration("P1DT1H"), "1h");
+        assert_eq!(parse_iso8601_duration("PT1H30M"), Some("1h 30m".to_string()));
+        assert_eq!(parse_iso8601_duration("PT45M"), Some("45m".to_string()));
+        assert_eq!(parse_iso8601_duration("PT2H"), Some("2h".to_string()));
+        assert_eq!(parse_iso8601_duration("PT10S"), Some("10s".to_string()));
+        assert_eq!(parse_iso8601_duration("P1DT1H"), Some("1h".to_string()));
+        assert_eq!(parse_iso8601_duration("P0D"), None);
     }
 
     #[test]
