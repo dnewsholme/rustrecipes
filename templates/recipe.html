@@ -61,6 +61,7 @@
                 <button class="tab-btn" onclick="switchTab('graph', this)">Graph</button>
             {% when None %}
         {% endmatch %}
+        <button id="fermentation-tab-btn" class="tab-btn" onclick="switchTab('fermentation', this)" style="display: none;">Fermentation</button>
     </div>
 
     <div id="ingredients-tab" class="tab-content active">
@@ -143,6 +144,53 @@
             </div>
         {% when None %}
     {% endmatch %}
+
+    <div id="fermentation-tab" class="tab-content">
+        <div style="margin-top: 1rem; background: var(--bg-color); padding: 1.5rem; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+            <h2 style="margin-top: 0;">Fermentation Calculator</h2>
+            <p style="color: var(--text-secondary); margin-bottom: 2rem;">Estimate proofing times based on temperature and yeast/starter amounts.</p>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 2rem;">
+                <div class="calculator-inputs">
+                    <div style="margin-bottom: 1.5rem;">
+                        <label style="display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.5rem;">Leavening Type</label>
+                        <select id="leaven-type" class="form-control" onchange="updateFermentation()">
+                            <option value="yeast">Instant/Dry Yeast</option>
+                            <option value="starter">Sourdough Starter</option>
+                        </select>
+                    </div>
+                    
+                    <div style="margin-bottom: 1.5rem;">
+                        <label style="display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.5rem;">Temperature (<span id="temp-display">24</span>°C)</label>
+                        <input type="range" id="ferment-temp" min="10" max="40" value="24" class="form-control" style="padding: 0;" oninput="updateFermentation()">
+                        <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem;">
+                            <span>Cool (10°C)</span>
+                            <span>Warm (40°C)</span>
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom: 1.5rem;">
+                        <label style="display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.5rem;">Amount (%) <small id="amount-auto-detected" style="color:var(--primary-color); display:none;">(Auto-detected)</small></label>
+                        <input type="number" id="leaven-amount" step="0.1" value="1.0" class="form-control" oninput="updateFermentation()">
+                        <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem;">Percentage relative to total flour weight.</p>
+                    </div>
+                </div>
+
+                <div class="calculator-result" style="background: var(--bg-color); padding: 2rem; border-radius: var(--radius-md); border: 2px solid var(--primary-color); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;">
+                    <span style="font-size: 0.9rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.5rem;">Estimated Bulk Ferment</span>
+                    <div id="ferment-time-result" style="font-size: 3rem; font-weight: 800; color: var(--primary-color); line-height: 1;">--</div>
+                    <span style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.5rem;">Hours</span>
+                    
+                    <div style="margin-top: 2rem; width: 100%; border-top: 1px solid var(--border-color); padding-top: 1.5rem;">
+                        <p style="font-size: 0.8rem; line-height: 1.4; color: var(--text-secondary);">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                            This is an estimate based on average activity. Always watch the dough, not the clock!
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}
 
@@ -651,5 +699,98 @@ if (csvUrlInput && window.Papa && window.Chart) {
             span.textContent = 'Hide Photo';
         }
     }
+
+    // Fermentation Calculator Logic
+    function updateFermentation() {
+        const type = document.getElementById('leaven-type').value;
+        const temp = parseFloat(document.getElementById('ferment-temp').value);
+        const amount = parseFloat(document.getElementById('leaven-amount').value);
+        document.getElementById('temp-display').innerText = temp;
+
+        if (isNaN(temp) || isNaN(amount) || amount <= 0) {
+            document.getElementById('ferment-time-result').innerText = '--';
+            return;
+        }
+
+        let time = 0;
+        if (type === 'yeast') {
+            // Very basic yeast model: Time doubles every ~10 degrees drop
+            // Base: 1% yeast at 24C takes ~2 hours bulk
+            const baseTime = 2.0;
+            const tempFactor = Math.pow(2, (24 - temp) / 7);
+            const amountFactor = 1.0 / amount;
+            time = baseTime * tempFactor * amountFactor;
+        } else {
+            // Sourdough model: 20% starter at 24C takes ~5 hours bulk
+            const baseTime = 5.0;
+            const tempFactor = Math.pow(2, (24 - temp) / 6); // Sourdough is more temp sensitive
+            const amountFactor = 20.0 / amount;
+            time = baseTime * tempFactor * amountFactor;
+        }
+
+        if (time > 48) {
+            document.getElementById('ferment-time-result').innerText = "48+";
+        } else {
+            document.getElementById('ferment-time-result').innerText = time.toFixed(1);
+        }
+    }
+
+    // Detect Yeast/Starter and enable tab
+    document.addEventListener('DOMContentLoaded', () => {
+        const yeastKeywords = ['yeast', 'yeast packet', 'instant yeast'];
+        const starterKeywords = ['starter', 'sourdough', 'levain'];
+        
+        let hasLeaven = false;
+        let detectedType = 'yeast';
+        let detectedAmount = 0;
+
+        // Try to detect leavening in ingredients
+        const flourKeywords = ['flour', 'spelt', 'rye', 'wholemeal', 'whole wheat'];
+        let totalFlour = 0;
+        const regex = new RegExp(`^(${numberRegexStr})(?:\\s*(${unitsRegexStr}))?\\b`, 'i');
+
+        const ingData = originalIngredients.map(text => {
+            let match = text.match(regex);
+            if (!match) return { grams: 0, isFlour: false, isLeaven: false };
+            
+            let val = parseNumStr(match[1]);
+            let unit = (match[2] || '').toLowerCase();
+            let grams = val;
+            if (unit === 'kg') grams = val * 1000;
+            else if (unit === 'oz' || unit === 'ounce' || unit === 'ounces') grams = val * 28.35;
+            else if (unit === 'lb' || unit === 'pound' || unit === 'pounds') grams = val * 453.6;
+
+            let isFlour = flourKeywords.some(k => text.toLowerCase().includes(k));
+            if (isFlour) totalFlour += grams;
+
+            let isYeast = yeastKeywords.some(k => text.toLowerCase().includes(k));
+            let isStarter = starterKeywords.some(k => text.toLowerCase().includes(k));
+            
+            return { grams, isFlour, isYeast, isStarter };
+        });
+
+        ingData.forEach(d => {
+            if (d.isYeast || d.isStarter) {
+                hasLeaven = true;
+                if (d.isStarter) detectedType = 'starter';
+                if (totalFlour > 0) {
+                    detectedAmount = (d.grams / totalFlour) * 100;
+                }
+            }
+        });
+
+        if (hasLeaven) {
+            const btn = document.getElementById('fermentation-tab-btn');
+            if (btn) btn.style.display = 'block';
+            
+            // Auto-fill calculator
+            document.getElementById('leaven-type').value = detectedType;
+            if (detectedAmount > 0) {
+                document.getElementById('leaven-amount').value = detectedAmount.toFixed(1);
+                document.getElementById('amount-auto-detected').style.display = 'inline';
+            }
+            updateFermentation();
+        }
+    });
 </script>
 {% endblock %}
