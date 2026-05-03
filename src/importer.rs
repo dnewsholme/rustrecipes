@@ -4,8 +4,22 @@ use serde_json::Value;
 use tracing::{info, warn, error};
 
 pub async fn import_recipe_from_url(url: &str) -> Option<Recipe> {
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert("accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8".parse().unwrap());
+    headers.insert("accept-language", "en-US,en;q=0.9".parse().unwrap());
+    headers.insert("sec-ch-ua", "\"Chromium\";v=\"124\", \"Google Chrome\";v=\"124\", \"Not-A.Brand\";v=\"99\"".parse().unwrap());
+    headers.insert("sec-ch-ua-mobile", "?0".parse().unwrap());
+    headers.insert("sec-ch-ua-platform", "\"Windows\"".parse().unwrap());
+    headers.insert("sec-fetch-dest", "document".parse().unwrap());
+    headers.insert("sec-fetch-mode", "navigate".parse().unwrap());
+    headers.insert("sec-fetch-site", "none".parse().unwrap());
+    headers.insert("sec-fetch-user", "?1".parse().unwrap());
+    headers.insert("upgrade-insecure-requests", "1".parse().unwrap());
+
     let client = reqwest::Client::builder()
-        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+        .default_headers(headers)
+        .cookie_store(true)
         .build()
         .ok()?;
 
@@ -172,23 +186,23 @@ fn convert_ld_to_recipe(ld: LdRecipe, url: &str) -> Recipe {
     let mut markdown = String::new();
 
     if let Some(desc) = &ld.description {
-        markdown.push_str(&format!("{}\n\n", desc));
+        markdown.push_str(&format!("{}\n\n", decode_html(desc)));
     }
-
-    let ingredients = ld.recipe_ingredient.clone();
+    
+    let ingredients: Vec<String> = ld.recipe_ingredient.iter().map(|i| decode_html(i)).collect();
 
     markdown.push_str("## Instructions\n\n");
     if let Some(instructions) = ld.recipe_instructions {
         if let Value::Array(arr) = instructions {
             for (i, step) in arr.iter().enumerate() {
                 if let Some(text) = step.get("text").and_then(|v| v.as_str()) {
-                    markdown.push_str(&format!("{}. {}\n", i + 1, text));
+                    markdown.push_str(&format!("{}. {}\n", i + 1, decode_html(text)));
                 } else if let Some(text) = step.as_str() {
-                    markdown.push_str(&format!("{}. {}\n", i + 1, text));
+                    markdown.push_str(&format!("{}. {}\n", i + 1, decode_html(text)));
                 }
             }
         } else if let Value::String(text) = instructions {
-            markdown.push_str(&format!("{}\n", text));
+            markdown.push_str(&format!("{}\n", decode_html(&text)));
         }
     }
 
@@ -211,7 +225,7 @@ fn convert_ld_to_recipe(ld: LdRecipe, url: &str) -> Recipe {
         }
     }
 
-    let title = ld.name.clone();
+    let title = decode_html(&ld.name);
     let mut id = slug::slugify(&title);
     if id.is_empty() {
         id = uuid::Uuid::new_v4().to_string();
@@ -238,7 +252,7 @@ fn convert_ld_to_recipe(ld: LdRecipe, url: &str) -> Recipe {
     Recipe {
         id,
         title,
-        description: ld.description,
+        description: ld.description.map(|d| decode_html(&d)),
         image: image_url,
         source_url: Some(url.to_string()),
         tags: vec![],
@@ -250,6 +264,10 @@ fn convert_ld_to_recipe(ld: LdRecipe, url: &str) -> Recipe {
         html: None,
         combustion_csv: None,
     }
+}
+
+fn decode_html(s: &str) -> String {
+    html_escape::decode_html_entities(s).into_owned()
 }
 
 fn parse_iso8601_duration(duration: &str) -> Option<String> {
