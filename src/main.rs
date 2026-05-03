@@ -19,12 +19,14 @@ use tracing_subscriber;
 #[template(path = "index.html")]
 struct IndexTemplate {
     recipes: Vec<models::Recipe>,
+    base_url: String,
 }
 
 #[derive(Template)]
 #[template(path = "recipe.html")]
 struct RecipeTemplate {
     recipe: models::Recipe,
+    base_url: String,
 }
 
 #[derive(Template)]
@@ -32,6 +34,11 @@ struct RecipeTemplate {
 struct EditTemplate {
     recipe: models::Recipe,
     is_new: bool,
+    base_url: String,
+}
+
+fn get_base_url() -> String {
+    std::env::var("APP_BASE").unwrap_or_default()
 }
 
 struct RecipeFormData {
@@ -71,7 +78,7 @@ async fn parse_recipe_multipart(mut multipart: Multipart) -> Option<RecipeFormDa
                 
                 if let Ok(data) = field.bytes().await {
                     if std::fs::write(&filepath, data).is_ok() {
-                        image = Some(format!("/uploads/{}", new_filename));
+                        image = Some(format!("uploads/{}", new_filename));
                     }
                 }
             }
@@ -91,7 +98,7 @@ async fn parse_recipe_multipart(mut multipart: Multipart) -> Option<RecipeFormDa
                 
                 if let Ok(data) = field.bytes().await {
                     if std::fs::write(&filepath, data).is_ok() {
-                        combustion_csv = Some(format!("/uploads/{}", new_filename));
+                        combustion_csv = Some(format!("uploads/{}", new_filename));
                     }
                 }
             }
@@ -147,13 +154,13 @@ struct UploadData {
 
 async fn index() -> impl IntoResponse {
     let recipes = storage::list_recipes().await;
-    let template = IndexTemplate { recipes };
+    let template = IndexTemplate { recipes, base_url: get_base_url() };
     Html(template.render().unwrap())
 }
 
 async fn view_recipe(Path(id): Path<String>) -> impl IntoResponse {
     if let Some(recipe) = storage::read_recipe(&id).await {
-        let template = RecipeTemplate { recipe };
+        let template = RecipeTemplate { recipe, base_url: get_base_url() };
         Ok(Html(template.render().unwrap()))
     } else {
         Err((StatusCode::NOT_FOUND, "Recipe not found"))
@@ -176,6 +183,7 @@ async fn new_recipe() -> impl IntoResponse {
             html: None,
         },
         is_new: true,
+        base_url: get_base_url(),
     };
     Html(template.render().unwrap())
 }
@@ -205,7 +213,7 @@ async fn create_recipe(multipart: Multipart) -> impl IntoResponse {
     };
     
     let _ = storage::save_recipe(&recipe).await;
-    Ok(Redirect::to(&format!("/recipe/{}", id)))
+    Ok(Redirect::to(&format!("{}/recipe/{}", get_base_url(), id)))
 }
 
 async fn edit_recipe(Path(id): Path<String>) -> impl IntoResponse {
@@ -213,6 +221,7 @@ async fn edit_recipe(Path(id): Path<String>) -> impl IntoResponse {
         let template = EditTemplate {
             recipe,
             is_new: false,
+            base_url: get_base_url(),
         };
         Ok(Html(template.render().unwrap()))
     } else {
@@ -241,7 +250,7 @@ async fn update_recipe(Path(id): Path<String>, multipart: Multipart) -> impl Int
         recipe.ingredients = form.ingredients;
         recipe.markdown = form.markdown;
         let _ = storage::save_recipe(&recipe).await;
-        Ok(Redirect::to(&format!("/recipe/{}", id)))
+        Ok(Redirect::to(&format!("{}/recipe/{}", get_base_url(), id)))
     } else {
         Err((StatusCode::NOT_FOUND, "Recipe not found"))
     }
@@ -249,13 +258,13 @@ async fn update_recipe(Path(id): Path<String>, multipart: Multipart) -> impl Int
 
 async fn delete_recipe(Path(id): Path<String>) -> impl IntoResponse {
     let _ = storage::delete_recipe(&id).await;
-    Redirect::to("/")
+    Redirect::to(&format!("{}/", get_base_url()))
 }
 
 async fn import_recipe(Form(form): Form<ImportForm>) -> impl IntoResponse {
     if let Some(recipe) = importer::import_recipe_from_url(&form.url).await {
         let _ = storage::save_recipe(&recipe).await;
-        Ok(Redirect::to(&format!("/edit/{}", recipe.id)))
+        Ok(Redirect::to(&format!("{}/edit/{}", get_base_url(), recipe.id)))
     } else {
         Err((StatusCode::BAD_REQUEST, "Failed to import recipe"))
     }
@@ -275,7 +284,7 @@ async fn import_paprika(mut multipart: Multipart) -> impl IntoResponse {
     }
     
     // Redirect to index after import
-    Redirect::to("/")
+    Redirect::to(&format!("{}/", get_base_url()))
 }
 
 async fn import_photo(mut multipart: Multipart) -> impl IntoResponse {
@@ -299,10 +308,10 @@ async fn import_photo(mut multipart: Multipart) -> impl IntoResponse {
                 // Then, call Gemini
                 if let Some(mut recipe) = importer::import_recipe_from_photo(&content_type, &data).await {
                     // Set the image
-                    recipe.image = Some(format!("/uploads/{}", new_filename));
+                    recipe.image = Some(format!("uploads/{}", new_filename));
                     
                     let _ = storage::save_recipe(&recipe).await;
-                    return Ok(Redirect::to(&format!("/edit/{}", recipe.id)));
+                    return Ok(Redirect::to(&format!("{}/edit/{}", get_base_url(), recipe.id)));
                 } else {
                     return Err((StatusCode::BAD_REQUEST, "Failed to parse recipe from photo using AI. Is GEMINI_API_KEY set?"));
                 }
@@ -326,7 +335,7 @@ async fn upload_image(mut multipart: Multipart) -> impl IntoResponse {
             
             let data = field.bytes().await.unwrap();
             if std::fs::write(&filepath, data).is_ok() {
-                let url = format!("/uploads/{}", new_filename);
+                let url = format!("uploads/{}", new_filename);
                 return Json(UploadResponse {
                     data: Some(UploadData { file_path: url }),
                     error: None,

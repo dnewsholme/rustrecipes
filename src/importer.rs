@@ -198,7 +198,7 @@ pub async fn import_paprika_archive(bytes: &[u8]) -> Vec<Recipe> {
                                         let new_filename = format!("{}.jpg", uuid::Uuid::new_v4());
                                         let filepath = format!("data/uploads/{}", new_filename);
                                         if std::fs::write(&filepath, bytes).is_ok() {
-                                            final_image = Some(format!("/uploads/{}", new_filename));
+                                            final_image = Some(format!("uploads/{}", new_filename));
                                             break;
                                         }
                                     }

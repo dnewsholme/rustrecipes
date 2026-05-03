@@ -15,8 +15,8 @@
     {% endif %}
 
     <div style="display: flex; gap: 1rem; justify-content: center; margin-bottom: 2rem;">
-        <a href="/edit/{{ recipe.id }}" class="btn btn-secondary">Edit Recipe</a>
-        <form action="/delete/{{ recipe.id }}" method="POST" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this recipe?');">
+        <a href="edit/{{ recipe.id }}" class="btn btn-secondary">Edit Recipe</a>
+        <form action="delete/{{ recipe.id }}" method="POST" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this recipe?');">
             <button type="submit" class="btn btn-danger">Delete</button>
         </form>
     </div>

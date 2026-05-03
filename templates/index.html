@@ -13,21 +13,21 @@
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 2rem;">
         <div>
             <h3 style="font-size: 1.1rem; margin-bottom: 0.5rem;">From URL</h3>
-            <form action="/import" method="POST" class="importer-form">
+            <form action="import" method="POST" class="importer-form">
                 <input type="url" name="url" class="form-control" placeholder="https://example.com/recipe" required>
                 <button type="submit" class="btn btn-primary">Import Recipe</button>
             </form>
         </div>
         <div>
             <h3 style="font-size: 1.1rem; margin-bottom: 0.5rem;">From Paprika Export</h3>
-            <form action="/import/paprika" method="POST" enctype="multipart/form-data" class="importer-form">
+            <form action="import/paprika" method="POST" enctype="multipart/form-data" class="importer-form">
                 <input type="file" name="paprika_file" class="form-control" accept=".paprikarecipes" required>
                 <button type="submit" class="btn btn-primary">Upload File</button>
             </form>
         </div>
         <div>
             <h3 style="font-size: 1.1rem; margin-bottom: 0.5rem;">From Photo (AI)</h3>
-            <form action="/import/photo" method="POST" enctype="multipart/form-data" class="importer-form" id="photo-import-form">
+            <form action="import/photo" method="POST" enctype="multipart/form-data" class="importer-form" id="photo-import-form">
                 <input type="file" name="photo" class="form-control" accept="image/*" capture="environment" required>
                 <button type="submit" class="btn btn-primary" id="photo-import-btn">Scan Photo</button>
             </form>
@@ -49,7 +49,7 @@
                 <div class="recipe-card-img" style="display:flex; align-items:center; justify-content:center; color:#64748b;">No Image</div>
         {% endmatch %}
         <div class="recipe-card-content">
-            <h3 class="recipe-title"><a href="/recipe/{{ recipe.id }}">{{ recipe.title }}</a></h3>
+            <h3 class="recipe-title"><a href="recipe/{{ recipe.id }}">{{ recipe.title }}</a></h3>
             <div class="recipe-desc">
                 {% match recipe.description %}
                     {% when Some with (desc) %}
@@ -57,7 +57,7 @@
                     {% when None %}
                 {% endmatch %}
             </div>
-            <a href="/recipe/{{ recipe.id }}" class="btn btn-secondary" style="width: 100%; margin-top: auto;">View Recipe</a>
+            <a href="recipe/{{ recipe.id }}" class="btn btn-secondary" style="width: 100%; margin-top: auto;">View Recipe</a>
         </div>
     </div>
     {% endfor %}

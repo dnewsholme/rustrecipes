@@ -43,6 +43,18 @@ pub async fn read_recipe(id: &str) -> Option<Recipe> {
             recipe.id = id.to_string();
             recipe.markdown = markdown;
             
+            // Fix legacy absolute paths for images and csvs
+            if let Some(img) = &mut recipe.image {
+                if img.starts_with("/uploads/") {
+                    *img = img[1..].to_string();
+                }
+            }
+            if let Some(csv) = &mut recipe.combustion_csv {
+                if csv.starts_with("/uploads/") {
+                    *csv = csv[1..].to_string();
+                }
+            }
+            
             let parser = Parser::new(&recipe.markdown);
             let mut html_output = String::new();
             html::push_html(&mut html_output, parser);

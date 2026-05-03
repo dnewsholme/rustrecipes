@@ -21,12 +21,13 @@ A lightning-fast, highly-customizable recipe manager built in Rust. It's designe
 
 ## 🚀 Running Locally (Development)
 
-To use the AI Photo Import feature, you'll need a free Gemini API key:
-1. Go to Google AI Studio (https://aistudio.google.com/app/apikey).
-2. Create an API Key.
-3. Export it as an environment variable before running the app.
+**Environment Variables**:
+- `GEMINI_API_KEY`: Required if you want to use the AI Photo Import feature. You can get a free key from [Google AI Studio](https://aistudio.google.com/app/apikey).
+- `APP_BASE`: (Optional) Set this if you are hosting the app behind a reverse proxy on a subpath (e.g. `APP_BASE="/recipes"`).
 
-Ensure you have Rust and Cargo installed, then:
+To run locally:
+1. Ensure you have Rust and Cargo installed.
+2. Run the following:
 
 ```bash
 # Clone the repository

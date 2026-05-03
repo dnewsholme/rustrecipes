@@ -11,7 +11,7 @@
 {% block content %}
 <div class="recipe-content">
     <h2>{% if is_new %}Create New Recipe{% else %}Edit Recipe{% endif %}</h2>
-    <form action="{% if is_new %}/new{% else %}/edit/{{ recipe.id }}{% endif %}" method="POST" enctype="multipart/form-data">
+    <form action="{% if is_new %}new{% else %}edit/{{ recipe.id }}{% endif %}" method="POST" enctype="multipart/form-data">
         <div class="form-group">
             <label class="form-label" for="title">Title</label>
             <input type="text" id="title" name="title" class="form-control" value="{{ recipe.title }}" required>
@@ -65,7 +65,7 @@
         </div>
         
         <button type="submit" class="btn btn-primary">Save Recipe</button>
-        <a href="{% if is_new %}/{% else %}/recipe/{{ recipe.id }}{% endif %}" class="btn btn-secondary">Cancel</a>
+        <a href="{% if is_new %}./{% else %}recipe/{{ recipe.id }}{% endif %}" class="btn btn-secondary">Cancel</a>
     </form>
 </div>
 {% endblock %}
@@ -76,7 +76,7 @@
     const easymde = new EasyMDE({
         element: document.getElementById('markdown'),
         uploadImage: true,
-        imageUploadEndpoint: '/upload',
+        imageUploadEndpoint: 'upload',
         imageCSRFToken: '', // Optional, since we don't have CSRF
         imageTexts: {
             sbInit: 'Drop image here or click to choose...',
