@@ -77,8 +77,9 @@ async fn parse_recipe_multipart(mut multipart: Multipart) -> Option<RecipeFormDa
                 let filepath = format!("data/uploads/{}", new_filename);
                 
                 if let Ok(data) = field.bytes().await {
-                    if std::fs::write(&filepath, data).is_ok() {
-                        image = Some(format!("uploads/{}", new_filename));
+                    match std::fs::write(&filepath, data) {
+                        Ok(_) => image = Some(format!("uploads/{}", new_filename)),
+                        Err(e) => println!("Failed to write image to {}: {:?}", filepath, e),
                     }
                 }
             }
@@ -97,8 +98,9 @@ async fn parse_recipe_multipart(mut multipart: Multipart) -> Option<RecipeFormDa
                 let filepath = format!("data/uploads/{}", new_filename);
                 
                 if let Ok(data) = field.bytes().await {
-                    if std::fs::write(&filepath, data).is_ok() {
-                        combustion_csv = Some(format!("uploads/{}", new_filename));
+                    match std::fs::write(&filepath, data) {
+                        Ok(_) => combustion_csv = Some(format!("uploads/{}", new_filename)),
+                        Err(e) => println!("Failed to write CSV to {}: {:?}", filepath, e),
                     }
                 }
             }
@@ -271,17 +273,26 @@ async fn import_recipe(Form(form): Form<ImportForm>) -> impl IntoResponse {
 }
 
 async fn import_paprika(mut multipart: Multipart) -> impl IntoResponse {
+    let mut count = 0;
     while let Some(field) = multipart.next_field().await.unwrap_or(None) {
         let name = field.name().unwrap_or("").to_string();
         if name == "paprika_file" {
             if let Ok(data) = field.bytes().await {
+                println!("Received Paprika file: {} bytes", data.len());
                 let recipes = importer::import_paprika_archive(&data).await;
+                println!("Parsed {} recipes from archive", recipes.len());
                 for recipe in recipes {
-                    let _ = storage::save_recipe(&recipe).await;
+                    if let Err(e) = storage::save_recipe(&recipe).await {
+                        println!("Failed to save recipe {}: {:?}", recipe.title, e);
+                    } else {
+                        count += 1;
+                    }
                 }
             }
         }
     }
+    
+    println!("Successfully imported {} Paprika recipes", count);
     
     // Redirect to index after import
     Redirect::to(&format!("{}/", get_base_url()))
@@ -353,6 +364,10 @@ async fn upload_image(mut multipart: Multipart) -> impl IntoResponse {
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
+    
+    // Ensure data directories exist (important for volume mounts)
+    let _ = std::fs::create_dir_all("data/recipes");
+    let _ = std::fs::create_dir_all("data/uploads");
     
     let app = Router::new()
         .route("/", get(index))
