@@ -99,7 +99,7 @@
                     <button class="btn btn-primary unit-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="setUnitSystem('original', this)">Original</button>
                     <button class="btn btn-secondary unit-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="setUnitSystem('metric', this)">Metric</button>
                     <button class="btn btn-secondary unit-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="setUnitSystem('imperial', this)">Imperial</button>
-                    {% if recipe.tags.contains("bread") || recipe.tags.contains("dough") %}
+                    {% if recipe.has_tag("bread") || recipe.has_tag("dough") %}
                     <button class="btn btn-secondary unit-btn" id="bakers-percent-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="toggleBakersPercentage(this)">Baker's %</button>
                     {% endif %}
                 </div>

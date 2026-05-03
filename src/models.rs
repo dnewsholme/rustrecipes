@@ -23,6 +23,12 @@ pub struct Recipe {
     pub combustion_csv: Option<String>,
 }
 
+impl Recipe {
+    pub fn has_tag(&self, tag: &str) -> bool {
+        self.tags.iter().any(|t| t == tag)
+    }
+}
+
 // Minimal representations for extracting LD+JSON Recipe data
 #[derive(Debug, Deserialize, Default)]
 #[serde(default)]
