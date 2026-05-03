@@ -35,9 +35,9 @@
     </div>
 </section>
 
-<div style="margin-bottom: 2rem;">
+<form id="search-form" onsubmit="event.preventDefault(); return false;" style="margin-bottom: 2rem;">
     <input type="search" id="recipe-search" class="form-control" placeholder="Search recipes by title, ingredients, or tags..." style="padding: 1rem; font-size: 1.1rem; border-radius: var(--radius-lg);">
-</div>
+</form>
 
 <div class="recipe-grid">
     {% for recipe in recipes %}
@@ -104,8 +104,9 @@ document.getElementById('toggle-import-btn')?.addEventListener('click', function
     }
 });
 
-document.getElementById('recipe-search')?.addEventListener('input', function(e) {
-    const term = e.target.value.toLowerCase();
+const searchInput = document.getElementById('recipe-search');
+const filterRecipes = () => {
+    const term = searchInput.value.toLowerCase();
     const cards = document.querySelectorAll('.recipe-card');
     cards.forEach(card => {
         const text = card.innerText.toLowerCase();
@@ -116,6 +117,13 @@ document.getElementById('recipe-search')?.addEventListener('input', function(e) 
             card.style.display = 'none';
         }
     });
+};
+
+searchInput?.addEventListener('input', filterRecipes);
+document.getElementById('search-form')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    filterRecipes();
+    searchInput.blur(); // Hide mobile keyboard
 });
 
 document.getElementById('photo-import-form')?.addEventListener('submit', function(e) {
