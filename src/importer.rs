@@ -33,6 +33,10 @@ pub async fn import_recipe_from_url(url: &str) -> Option<Recipe> {
         .ok()?;
 
     let res = client.get(url).send().await.ok()?;
+    if !res.status().is_success() {
+        warn!("Failed to fetch URL {}: Status {}", url, res.status());
+        return None;
+    }
     let body = res.text().await.ok()?;
 
     let (ld_recipe, og_image) = {
@@ -71,9 +75,17 @@ pub async fn import_recipe_from_url(url: &str) -> Option<Recipe> {
         "LD+JSON failed or incomplete for {}, falling back to Gemini",
         url
     );
-    if let Ok(text) = html2text::from_read(body.as_bytes(), 80)
-        && let Some(mut ai_recipe) = import_recipe_from_text(&text).await
-    {
+
+    let text = match html2text::from_read(body.as_bytes(), 80) {
+        Ok(t) => t,
+        Err(e) => {
+            warn!("Failed to convert HTML to text: {:?}", e);
+            return None;
+        }
+    };
+    info!("Extracted {} characters of text for Gemini", text.len());
+
+    if let Some(mut ai_recipe) = import_recipe_from_text(&text).await {
         ai_recipe.source_url = Some(url.to_string());
         if ai_recipe.image.is_none() {
             ai_recipe.image = og_image;
@@ -81,13 +93,17 @@ pub async fn import_recipe_from_url(url: &str) -> Option<Recipe> {
         return Some(ai_recipe);
     }
 
+    warn!("Gemini fallback failed to return a recipe for {}", url);
     None
 }
 
 pub async fn import_recipe_from_text(text: &str) -> Option<Recipe> {
     let api_key = match std::env::var("GEMINI_API_KEY") {
         Ok(key) => key,
-        Err(_) => return None,
+        Err(_) => {
+            warn!("GEMINI_API_KEY not set, cannot use Gemini fallback");
+            return None;
+        }
     };
 
     let client = reqwest::Client::new();
