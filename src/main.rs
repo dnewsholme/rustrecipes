@@ -304,8 +304,13 @@ async fn delete_recipe(Path(id): Path<String>) -> impl IntoResponse {
 
 async fn import_recipe(Form(form): Form<ImportForm>) -> impl IntoResponse {
     if let Some(recipe) = importer::import_recipe_from_url(&form.url).await {
-        let _ = storage::save_recipe(&recipe).await;
-        Ok(Redirect::to(&format!("{}/edit/{}", get_base_url(), recipe.id)))
+        let template = EditTemplate {
+            recipe,
+            is_new: true,
+            base_url: get_base_url(),
+            app_version: APP_VERSION.to_string(),
+        };
+        Ok(Html(template.render().unwrap()))
     } else {
         Err((StatusCode::BAD_REQUEST, "Failed to import recipe"))
     }
@@ -360,8 +365,13 @@ async fn import_photo(mut multipart: Multipart) -> impl IntoResponse {
                     // Set the image
                     recipe.image = Some(format!("uploads/{}", new_filename));
                     
-                    let _ = storage::save_recipe(&recipe).await;
-                    return Ok(Redirect::to(&format!("{}/edit/{}", get_base_url(), recipe.id)));
+                    let template = EditTemplate {
+                        recipe,
+                        is_new: true,
+                        base_url: get_base_url(),
+                        app_version: APP_VERSION.to_string(),
+                    };
+                    return Ok(Html(template.render().unwrap()));
                 } else {
                     return Err((StatusCode::BAD_REQUEST, "Failed to parse recipe from photo using AI. Is GEMINI_API_KEY set?"));
                 }

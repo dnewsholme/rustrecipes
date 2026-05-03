@@ -9,6 +9,7 @@ axum = { version = "0.8.9", features = ["multipart"] }
 base64 = "0.22.1"
 flate2 = "1.1.9"
 gray_matter = "0.3.2"
+html2text = "0.14.0"
 pulldown-cmark = "0.13.3"
 reqwest = { version = "0.13.3", features = ["json"] }
 scraper = "0.26.0"

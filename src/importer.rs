@@ -17,7 +17,82 @@ pub async fn import_recipe_from_url(url: &str) -> Option<Recipe> {
     for element in document.select(&selector) {
         let text = element.inner_html();
         if let Some(recipe_data) = extract_recipe_from_json(&text) {
-            return Some(convert_ld_to_recipe(recipe_data, url));
+            let recipe = convert_ld_to_recipe(recipe_data, url);
+            // If we got valid ingredients and instructions, return it
+            if !recipe.ingredients.is_empty() && !recipe.markdown.is_empty() {
+                return Some(recipe);
+            }
+        }
+    }
+    
+    // Fallback: Try Gemini on the text content
+    println!("LD+JSON failed or incomplete for {}, falling back to Gemini", url);
+    let text_content = html2text::from_read(body.as_bytes(), 80);
+    if let Some(mut ai_recipe) = import_recipe_from_text(&text_content).await {
+        ai_recipe.source_url = Some(url.to_string());
+        return Some(ai_recipe);
+    }
+
+    None
+}
+
+pub async fn import_recipe_from_text(text: &str) -> Option<Recipe> {
+    let api_key = match std::env::var("GEMINI_API_KEY") {
+        Ok(key) => key,
+        Err(_) => return None,
+    };
+    
+    let client = reqwest::Client::new();
+    let url = format!("https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key={}", api_key);
+    
+    let prompt = format!("You are a professional recipe extractor. Extract the recipe from this text: \n\n{}\n\n \
+                  Format the response EXACTLY as a JSON object with no markdown formatting around it. \
+                  The JSON should match this schema: \
+                  {{ \"title\": \"string\", \"description\": \"string or null\", \"servings\": number or null, \
+                  \"prep_time\": \"string or null\", \"cook_time\": \"string or null\", \
+                  \"ingredients\": [\"string\"], \"markdown\": \"string (use markdown for instructions)\", \"tags\": [\"string\"] }}", text);
+    
+    let body = serde_json::json!({
+        "contents": [{
+            "parts": [{ "text": prompt }]
+        }],
+        "generationConfig": {
+            "responseMimeType": "application/json"
+        }
+    });
+
+    let res = client.post(&url).json(&body).send().await.ok()?;
+    let res_json: serde_json::Value = res.json().await.ok()?;
+    
+    if let Some(text) = res_json["candidates"][0]["content"]["parts"][0]["text"].as_str() {
+        let clean_text = text.trim();
+        let clean_text = if clean_text.starts_with("```json") {
+            clean_text.trim_start_matches("```json").trim_end_matches("```").trim()
+        } else {
+            clean_text
+        };
+        
+        if let Ok(gemini) = serde_json::from_str::<GeminiRecipe>(clean_text) {
+            let mut id = slug::slugify(&gemini.title);
+            if id.is_empty() {
+                id = uuid::Uuid::new_v4().to_string();
+            }
+            
+            return Some(Recipe {
+                id,
+                title: gemini.title,
+                description: gemini.description,
+                image: None,
+                source_url: None,
+                tags: gemini.tags.unwrap_or_default(),
+                servings: gemini.servings,
+                prep_time: gemini.prep_time,
+                cook_time: gemini.cook_time,
+                ingredients: gemini.ingredients,
+                markdown: gemini.markdown,
+                html: None,
+                combustion_csv: None,
+            });
         }
     }
     None
