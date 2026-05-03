@@ -91,11 +91,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_save_and_read_recipe() {
-        let temp_dir = "data/test_recipes";
-        fs::create_dir_all(temp_dir).unwrap();
+        // Ensure the real recipes directory exists for the test in CI
+        fs::create_dir_all(get_recipes_dir()).unwrap();
         
-        // Mock get_recipes_dir for testing if possible, 
-        // but since it's hardcoded to "data/recipes", we'll just use a test ID
         let test_id = "test-recipe-123";
         let recipe = Recipe {
             id: test_id.to_string(),
