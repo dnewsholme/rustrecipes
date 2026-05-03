@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block title %}
+    {% if is_new %}New Recipe{% else %}Edit {{ recipe.title }}{% endif %}
+{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/easymde/dist/easymde.min.css">
+{% endblock %}
+
+{% block content %}
+<div class="recipe-content">
+    <h2>{% if is_new %}Create New Recipe{% else %}Edit Recipe{% endif %}</h2>
+    <form action="{% if is_new %}/new{% else %}/edit/{{ recipe.id }}{% endif %}" method="POST" enctype="multipart/form-data">
+        <div class="form-group">
+            <label class="form-label" for="title">Title</label>
+            <input type="text" id="title" name="title" class="form-control" value="{{ recipe.title }}" required>
+        </div>
+        
+        <div class="form-group">
+            <label class="form-label" for="description">Description (Optional)</label>
+            <textarea id="description" name="description" class="form-control" rows="2">{% match recipe.description %}{% when Some with (desc) %}{{ desc }}{% when None %}{% endmatch %}</textarea>
+        </div>
+
+        <div style="display: flex; gap: 1rem;">
+            <div class="form-group" style="flex: 1;">
+                <label class="form-label" for="servings">Servings</label>
+                <input type="number" id="servings" name="servings" class="form-control" min="1" value="{% match recipe.servings %}{% when Some with (s) %}{{ s }}{% when None %}{% endmatch %}">
+            </div>
+            <div class="form-group" style="flex: 2;">
+                <label class="form-label" for="tags">Tags (comma separated)</label>
+                <input type="text" id="tags" name="tags" class="form-control" value='{{ recipe.tags.join(", ") }}'>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label" for="cover_image">Cover Image</label>
+            <input type="file" id="cover_image" name="cover_image" class="form-control" accept="image/*">
+            <small class="text-secondary">Or use existing/URL:</small>
+            <input type="text" id="existing_image" name="existing_image" class="form-control" value="{% match recipe.image %}{% when Some with (img) %}{{ img }}{% when None %}{% endmatch %}">
+        </div>
+
+        <div class="form-group" style="border: 1px solid var(--border-color); padding: 1rem; border-radius: var(--radius-md);">
+            <label class="form-label" for="combustion_csv_upload" style="color: #d35400;">Combustion Inc. Data (CSV)</label>
+            <input type="file" id="combustion_csv_upload" name="combustion_csv_upload" class="form-control" accept=".csv">
+            <small class="text-secondary">Attach a cook export to display a temperature graph.</small>
+            <input type="hidden" id="existing_combustion_csv" name="existing_combustion_csv" value="{% match recipe.combustion_csv %}{% when Some with (csv) %}{{ csv }}{% when None %}{% endmatch %}">
+            {% match recipe.combustion_csv %}
+                {% when Some with (csv) %}
+                    <div style="margin-top: 0.5rem; font-size: 0.9rem; color: var(--text-secondary);">
+                        Current file: <strong>{{ csv }}</strong> (uploading a new one will replace it)
+                    </div>
+                {% when None %}
+            {% endmatch %}
+        </div>
+
+        <div class="form-group">
+            <label class="form-label" for="ingredients">Ingredients (one per line)</label>
+            <textarea id="ingredients" name="ingredients" class="form-control" rows="8">{{ recipe.ingredients.join("\n") }}</textarea>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label" for="markdown">Instructions & Notes (Markdown)</label>
+            <textarea id="markdown" name="markdown">{{ recipe.markdown }}</textarea>
+        </div>
+        
+        <button type="submit" class="btn btn-primary">Save Recipe</button>
+        <a href="{% if is_new %}/{% else %}/recipe/{{ recipe.id }}{% endif %}" class="btn btn-secondary">Cancel</a>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/easymde/dist/easymde.min.js"></script>
+<script>
+    const easymde = new EasyMDE({
+        element: document.getElementById('markdown'),
+        uploadImage: true,
+        imageUploadEndpoint: '/upload',
+        imageCSRFToken: '', // Optional, since we don't have CSRF
+        imageTexts: {
+            sbInit: 'Drop image here or click to choose...',
+            sbOnDragEnter: 'Drop image to upload...',
+            sbOnDrop: 'Uploading image...',
+            sbProgress: 'Uploading... file progress: {progress}%',
+            sbOnUploaded: 'Image uploaded successfully!',
+            sizeUnits: 'B, KB, MB'
+        },
+        imageAccept: 'image/png, image/jpeg, image/gif, image/webp',
+        imageMaxSize: 10485760 // 10MB
+    });
+</script>
+{% endblock %}

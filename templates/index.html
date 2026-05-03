@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}Home{% endblock %}
+
+{% block header_actions %}
+<button id="toggle-import-btn" class="btn btn-secondary">Import Recipe</button>
+{% endblock %}
+
+{% block content %}
+<section id="importer-section" class="importer-section" style="display: none;">
+    <h2>Import Recipe</h2>
+    <p style="color: var(--text-secondary); margin-bottom: 1rem;">Import from a URL, upload a Paprika export, or snap a photo of a cookbook using AI!</p>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 2rem;">
+        <div>
+            <h3 style="font-size: 1.1rem; margin-bottom: 0.5rem;">From URL</h3>
+            <form action="/import" method="POST" class="importer-form">
+                <input type="url" name="url" class="form-control" placeholder="https://example.com/recipe" required>
+                <button type="submit" class="btn btn-primary">Import Recipe</button>
+            </form>
+        </div>
+        <div>
+            <h3 style="font-size: 1.1rem; margin-bottom: 0.5rem;">From Paprika Export</h3>
+            <form action="/import/paprika" method="POST" enctype="multipart/form-data" class="importer-form">
+                <input type="file" name="paprika_file" class="form-control" accept=".paprikarecipes" required>
+                <button type="submit" class="btn btn-primary">Upload File</button>
+            </form>
+        </div>
+        <div>
+            <h3 style="font-size: 1.1rem; margin-bottom: 0.5rem;">From Photo (AI)</h3>
+            <form action="/import/photo" method="POST" enctype="multipart/form-data" class="importer-form" id="photo-import-form">
+                <input type="file" name="photo" class="form-control" accept="image/*" capture="environment" required>
+                <button type="submit" class="btn btn-primary" id="photo-import-btn">Scan Photo</button>
+            </form>
+        </div>
+    </div>
+</section>
+
+<div style="margin-bottom: 2rem;">
+    <input type="search" id="recipe-search" class="form-control" placeholder="Search recipes by title, ingredients, or tags..." style="padding: 1rem; font-size: 1.1rem; border-radius: var(--radius-lg);">
+</div>
+
+<div class="recipe-grid">
+    {% for recipe in recipes %}
+    <div class="recipe-card" data-search='{{ recipe.tags.join(" ") }} {{ recipe.ingredients.join(" ") }}'>
+        {% match recipe.image %}
+            {% when Some with (img) %}
+                <img src="{{ img }}" alt="{{ recipe.title }}" class="recipe-card-img">
+            {% when None %}
+                <div class="recipe-card-img" style="display:flex; align-items:center; justify-content:center; color:#64748b;">No Image</div>
+        {% endmatch %}
+        <div class="recipe-card-content">
+            <h3 class="recipe-title"><a href="/recipe/{{ recipe.id }}">{{ recipe.title }}</a></h3>
+            <div class="recipe-desc">
+                {% match recipe.description %}
+                    {% when Some with (desc) %}
+                        {{ desc }}
+                    {% when None %}
+                {% endmatch %}
+            </div>
+            <a href="/recipe/{{ recipe.id }}" class="btn btn-secondary" style="width: 100%; margin-top: auto;">View Recipe</a>
+        </div>
+    </div>
+    {% endfor %}
+    {% if recipes.is_empty() %}
+        <p style="grid-column: 1 / -1; text-align: center; color: var(--text-secondary); padding: 3rem;">No recipes found. Add a new one or import from a URL!</p>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('toggle-import-btn')?.addEventListener('click', function() {
+    const section = document.getElementById('importer-section');
+    if (section.style.display === 'none') {
+        section.style.display = 'block';
+    } else {
+        section.style.display = 'none';
+    }
+});
+
+document.getElementById('recipe-search')?.addEventListener('input', function(e) {
+    const term = e.target.value.toLowerCase();
+    const cards = document.querySelectorAll('.recipe-card');
+    cards.forEach(card => {
+        const text = card.innerText.toLowerCase();
+        const searchData = (card.dataset.search || '').toLowerCase();
+        if (text.includes(term) || searchData.includes(term)) {
+            card.style.display = 'flex';
+        } else {
+            card.style.display = 'none';
+        }
+    });
+});
+
+document.getElementById('photo-import-form')?.addEventListener('submit', function(e) {
+    const btn = document.getElementById('photo-import-btn');
+    btn.innerHTML = 'Scanning <span class="spinner">↻</span>';
+    btn.disabled = true;
+    btn.style.opacity = '0.7';
+});
+</script>
+<style>
+@keyframes spin { 100% { transform: rotate(360deg); } }
+.spinner { display: inline-block; animation: spin 1s linear infinite; margin-left: 0.5rem; }
+</style>
+{% endblock %}

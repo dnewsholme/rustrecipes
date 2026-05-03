@@ -1,0 +1,6 @@
+target/
+.git/
+.github/
+data/
+**/*.rs.bk
+.DS_Store

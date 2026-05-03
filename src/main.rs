@@ -1,0 +1,366 @@
+mod importer;
+mod models;
+mod storage;
+
+use askama::Template;
+use axum::{
+    extract::{DefaultBodyLimit, Multipart, Path},
+    http::StatusCode,
+    response::{Html, IntoResponse, Redirect, Json},
+    routing::{get, post},
+    Form, Router,
+};
+use serde::{Deserialize, Serialize};
+use std::net::SocketAddr;
+use tower_http::services::ServeDir;
+use tracing_subscriber;
+
+#[derive(Template)]
+#[template(path = "index.html")]
+struct IndexTemplate {
+    recipes: Vec<models::Recipe>,
+}
+
+#[derive(Template)]
+#[template(path = "recipe.html")]
+struct RecipeTemplate {
+    recipe: models::Recipe,
+}
+
+#[derive(Template)]
+#[template(path = "edit.html")]
+struct EditTemplate {
+    recipe: models::Recipe,
+    is_new: bool,
+}
+
+struct RecipeFormData {
+    title: String,
+    description: Option<String>,
+    image: Option<String>,
+    combustion_csv: Option<String>,
+    markdown: String,
+    tags: Vec<String>,
+    ingredients: Vec<String>,
+    servings: Option<u32>,
+}
+
+async fn parse_recipe_multipart(mut multipart: Multipart) -> Option<RecipeFormData> {
+    let mut title = String::new();
+    let mut description = None;
+    let mut image = None;
+    let mut combustion_csv = None;
+    let mut markdown = String::new();
+    let mut tags = Vec::new();
+    let mut ingredients = Vec::new();
+    let mut servings = None;
+
+    while let Some(field) = multipart.next_field().await.unwrap_or(None) {
+        let name = field.name().unwrap_or("").to_string();
+        
+        if name == "cover_image" {
+            let filename = field.file_name().unwrap_or("").to_string();
+            if !filename.is_empty() {
+                let extension = std::path::Path::new(&filename)
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .unwrap_or("png");
+                
+                let new_filename = format!("{}.{}", uuid::Uuid::new_v4(), extension);
+                let filepath = format!("data/uploads/{}", new_filename);
+                
+                if let Ok(data) = field.bytes().await {
+                    if std::fs::write(&filepath, data).is_ok() {
+                        image = Some(format!("/uploads/{}", new_filename));
+                    }
+                }
+            }
+            continue;
+        }
+
+        if name == "combustion_csv_upload" {
+            let filename = field.file_name().unwrap_or("").to_string();
+            if !filename.is_empty() {
+                let extension = std::path::Path::new(&filename)
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .unwrap_or("csv");
+                
+                let new_filename = format!("{}.{}", uuid::Uuid::new_v4(), extension);
+                let filepath = format!("data/uploads/{}", new_filename);
+                
+                if let Ok(data) = field.bytes().await {
+                    if std::fs::write(&filepath, data).is_ok() {
+                        combustion_csv = Some(format!("/uploads/{}", new_filename));
+                    }
+                }
+            }
+            continue;
+        }
+
+        if let Ok(text) = field.text().await {
+            match name.as_str() {
+                "title" => title = text,
+                "description" => description = if text.trim().is_empty() { None } else { Some(text) },
+                "existing_image" => if image.is_none() && !text.trim().is_empty() { image = Some(text) },
+                "existing_combustion_csv" => if combustion_csv.is_none() && !text.trim().is_empty() { combustion_csv = Some(text) },
+                "markdown" => markdown = text,
+                "tags" => {
+                    tags = text.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+                },
+                "ingredients" => {
+                    ingredients = text.lines().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+                },
+                "servings" => servings = text.parse::<u32>().ok(),
+                _ => {}
+            }
+        }
+    }
+    
+    if title.is_empty() {
+        return None;
+    }
+    
+    Some(RecipeFormData {
+        title, description, image, combustion_csv, markdown, tags, ingredients, servings
+    })
+}
+
+#[derive(Deserialize)]
+struct ImportForm {
+    url: String,
+}
+
+#[derive(Serialize)]
+struct UploadResponse {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    data: Option<UploadData>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+}
+
+#[derive(Serialize)]
+struct UploadData {
+    #[serde(rename = "filePath")]
+    file_path: String,
+}
+
+async fn index() -> impl IntoResponse {
+    let recipes = storage::list_recipes().await;
+    let template = IndexTemplate { recipes };
+    Html(template.render().unwrap())
+}
+
+async fn view_recipe(Path(id): Path<String>) -> impl IntoResponse {
+    if let Some(recipe) = storage::read_recipe(&id).await {
+        let template = RecipeTemplate { recipe };
+        Ok(Html(template.render().unwrap()))
+    } else {
+        Err((StatusCode::NOT_FOUND, "Recipe not found"))
+    }
+}
+
+async fn new_recipe() -> impl IntoResponse {
+    let template = EditTemplate {
+        recipe: models::Recipe {
+            id: String::new(),
+            title: String::new(),
+            description: None,
+            image: None,
+            combustion_csv: None,
+            source_url: None,
+            tags: vec![],
+            servings: None,
+            ingredients: vec![],
+            markdown: String::new(),
+            html: None,
+        },
+        is_new: true,
+    };
+    Html(template.render().unwrap())
+}
+
+async fn create_recipe(multipart: Multipart) -> impl IntoResponse {
+    let form = match parse_recipe_multipart(multipart).await {
+        Some(f) => f,
+        None => return Err((StatusCode::BAD_REQUEST, "Invalid form data")),
+    };
+
+    let mut id = slug::slugify(&form.title);
+    if id.is_empty() {
+        id = uuid::Uuid::new_v4().to_string();
+    }
+    let recipe = models::Recipe {
+        id: id.clone(),
+        title: form.title,
+        description: form.description,
+        image: form.image,
+        combustion_csv: form.combustion_csv,
+        source_url: None,
+        tags: form.tags,
+        servings: form.servings,
+        ingredients: form.ingredients,
+        markdown: form.markdown,
+        html: None,
+    };
+    
+    let _ = storage::save_recipe(&recipe).await;
+    Ok(Redirect::to(&format!("/recipe/{}", id)))
+}
+
+async fn edit_recipe(Path(id): Path<String>) -> impl IntoResponse {
+    if let Some(recipe) = storage::read_recipe(&id).await {
+        let template = EditTemplate {
+            recipe,
+            is_new: false,
+        };
+        Ok(Html(template.render().unwrap()))
+    } else {
+        Err((StatusCode::NOT_FOUND, "Recipe not found"))
+    }
+}
+
+async fn update_recipe(Path(id): Path<String>, multipart: Multipart) -> impl IntoResponse {
+    let form = match parse_recipe_multipart(multipart).await {
+        Some(f) => f,
+        None => return Err((StatusCode::BAD_REQUEST, "Invalid form data")),
+    };
+
+    if let Some(mut recipe) = storage::read_recipe(&id).await {
+        recipe.title = form.title;
+        recipe.description = form.description;
+        // Only update image if a new one was uploaded or text was provided
+        if form.image.is_some() {
+            recipe.image = form.image;
+        }
+        if form.combustion_csv.is_some() {
+            recipe.combustion_csv = form.combustion_csv;
+        }
+        recipe.tags = form.tags;
+        recipe.servings = form.servings;
+        recipe.ingredients = form.ingredients;
+        recipe.markdown = form.markdown;
+        let _ = storage::save_recipe(&recipe).await;
+        Ok(Redirect::to(&format!("/recipe/{}", id)))
+    } else {
+        Err((StatusCode::NOT_FOUND, "Recipe not found"))
+    }
+}
+
+async fn delete_recipe(Path(id): Path<String>) -> impl IntoResponse {
+    let _ = storage::delete_recipe(&id).await;
+    Redirect::to("/")
+}
+
+async fn import_recipe(Form(form): Form<ImportForm>) -> impl IntoResponse {
+    if let Some(recipe) = importer::import_recipe_from_url(&form.url).await {
+        let _ = storage::save_recipe(&recipe).await;
+        Ok(Redirect::to(&format!("/edit/{}", recipe.id)))
+    } else {
+        Err((StatusCode::BAD_REQUEST, "Failed to import recipe"))
+    }
+}
+
+async fn import_paprika(mut multipart: Multipart) -> impl IntoResponse {
+    while let Some(field) = multipart.next_field().await.unwrap_or(None) {
+        let name = field.name().unwrap_or("").to_string();
+        if name == "paprika_file" {
+            if let Ok(data) = field.bytes().await {
+                let recipes = importer::import_paprika_archive(&data).await;
+                for recipe in recipes {
+                    let _ = storage::save_recipe(&recipe).await;
+                }
+            }
+        }
+    }
+    
+    // Redirect to index after import
+    Redirect::to("/")
+}
+
+async fn import_photo(mut multipart: Multipart) -> impl IntoResponse {
+    while let Some(field) = multipart.next_field().await.unwrap_or(None) {
+        let name = field.name().unwrap_or("").to_string();
+        if name == "photo" {
+            let content_type = field.content_type().unwrap_or("image/jpeg").to_string();
+            
+            let filename = field.file_name().unwrap_or("photo.jpg").to_string();
+            let extension = std::path::Path::new(&filename)
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("jpg");
+                
+            if let Ok(data) = field.bytes().await {
+                // First, save the photo
+                let new_filename = format!("{}.{}", uuid::Uuid::new_v4(), extension);
+                let filepath = format!("data/uploads/{}", new_filename);
+                let _ = std::fs::write(&filepath, &data);
+                
+                // Then, call Gemini
+                if let Some(mut recipe) = importer::import_recipe_from_photo(&content_type, &data).await {
+                    // Set the image
+                    recipe.image = Some(format!("/uploads/{}", new_filename));
+                    
+                    let _ = storage::save_recipe(&recipe).await;
+                    return Ok(Redirect::to(&format!("/edit/{}", recipe.id)));
+                } else {
+                    return Err((StatusCode::BAD_REQUEST, "Failed to parse recipe from photo using AI. Is GEMINI_API_KEY set?"));
+                }
+            }
+        }
+    }
+    
+    Err((StatusCode::BAD_REQUEST, "No photo uploaded"))
+}
+
+async fn upload_image(mut multipart: Multipart) -> impl IntoResponse {
+    while let Some(field) = multipart.next_field().await.unwrap_or(None) {
+        if let Some(filename) = field.file_name() {
+            let extension = std::path::Path::new(filename)
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("png");
+            
+            let new_filename = format!("{}.{}", uuid::Uuid::new_v4(), extension);
+            let filepath = format!("data/uploads/{}", new_filename);
+            
+            let data = field.bytes().await.unwrap();
+            if std::fs::write(&filepath, data).is_ok() {
+                let url = format!("/uploads/{}", new_filename);
+                return Json(UploadResponse {
+                    data: Some(UploadData { file_path: url }),
+                    error: None,
+                });
+            }
+        }
+    }
+    
+    Json(UploadResponse {
+        data: None,
+        error: Some("Upload failed".to_string()),
+    })
+}
+
+#[tokio::main]
+async fn main() {
+    tracing_subscriber::fmt::init();
+    
+    let app = Router::new()
+        .route("/", get(index))
+        .route("/recipe/{id}", get(view_recipe))
+        .route("/new", get(new_recipe).post(create_recipe))
+        .route("/edit/{id}", get(edit_recipe).post(update_recipe))
+        .route("/delete/{id}", post(delete_recipe))
+        .route("/import", post(import_recipe))
+        .route("/import/paprika", post(import_paprika))
+        .route("/import/photo", post(import_photo))
+        .route("/upload", post(upload_image))
+        .nest_service("/static", ServeDir::new("static"))
+        .nest_service("/uploads", ServeDir::new("data/uploads"))
+        .layer(DefaultBodyLimit::max(1024 * 1024 * 250)); // 250 MB limit
+
+    let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
+    println!("Server running at http://{}", addr);
+    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+    axum::serve(listener, app).await.unwrap();
+}

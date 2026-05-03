@@ -1,0 +1,461 @@
+{% extends "base.html" %}
+
+{% block title %}{{ recipe.title }}{% endblock %}
+
+{% block content %}
+<div class="recipe-header">
+    <h1>{{ recipe.title }}</h1>
+    
+    {% if !recipe.tags.is_empty() %}
+    <div style="margin-bottom: 1rem; display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap;">
+        {% for tag in recipe.tags %}
+            <span style="background: var(--surface-hover); padding: 0.2rem 0.6rem; border-radius: 12px; font-size: 0.85rem; color: var(--text-secondary);">#{{ tag }}</span>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div style="display: flex; gap: 1rem; justify-content: center; margin-bottom: 2rem;">
+        <a href="/edit/{{ recipe.id }}" class="btn btn-secondary">Edit Recipe</a>
+        <form action="/delete/{{ recipe.id }}" method="POST" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this recipe?');">
+            <button type="submit" class="btn btn-danger">Delete</button>
+        </form>
+    </div>
+    
+    {% match recipe.source_url %}
+        {% when Some with (url) %}
+            <p style="margin-bottom: 1.5rem;"><a href="{{ url }}" target="_blank" rel="noopener noreferrer">Original Source</a></p>
+        {% when None %}
+    {% endmatch %}
+
+    {% match recipe.image %}
+        {% when Some with (img) %}
+            <img src="{{ img }}" alt="{{ recipe.title }}" class="recipe-hero-img">
+        {% when None %}
+    {% endmatch %}
+</div>
+
+<div class="recipe-content">
+    {% if !recipe.ingredients.is_empty() %}
+    <div style="margin-bottom: 2rem; background: var(--bg-color); padding: 1.5rem; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1rem;">
+            <h2 style="margin: 0; border: none; padding: 0;">Ingredients</h2>
+            <div style="display: flex; align-items: center; gap: 1rem;">
+                {% match recipe.servings %}
+                    {% when Some with (s) %}
+                        <span style="color: var(--text-secondary);">Servings: <strong id="servings-count" data-base="{{ s }}" style="color: var(--text-primary);">{{ s }}</strong></span>
+                    {% when None %}
+                {% endmatch %}
+                <div style="display: flex; gap: 0.25rem; margin-right: 1rem;">
+                    <button class="btn btn-primary unit-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="setUnitSystem('original', this)">Original</button>
+                    <button class="btn btn-secondary unit-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="setUnitSystem('metric', this)">Metric</button>
+                    <button class="btn btn-secondary unit-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="setUnitSystem('imperial', this)">Imperial</button>
+                </div>
+                <div style="display: flex; gap: 0.25rem;">
+                    <button class="btn btn-secondary scale-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="scaleIngredients(0.5, this)">0.5x</button>
+                    <button class="btn btn-primary scale-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="scaleIngredients(1, this)">1x</button>
+                    <button class="btn btn-secondary scale-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="scaleIngredients(2, this)">2x</button>
+                    <button class="btn btn-secondary scale-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="scaleIngredients(3, this)">3x</button>
+                </div>
+            </div>
+        </div>
+        <ul style="list-style-type: none; padding: 0;">
+            {% for ingredient in recipe.ingredients %}
+            <li class="ingredient-item" style="padding: 0.5rem 0; border-bottom: 1px solid var(--border-color);">{{ ingredient }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <div id="recipe-instructions">
+        {% match recipe.html %}
+            {% when Some with (html) %}
+                {{ html|safe }}
+            {% when None %}
+        {% endmatch %}
+    </div>
+
+    {% match recipe.combustion_csv %}
+        {% when Some with (csv) %}
+            <div style="margin-top: 3rem; background: var(--bg-color); padding: 1.5rem; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                <h2 style="margin-top: 0;">Combustion Inc. Cook Data</h2>
+                <div style="height: 400px; width: 100%;">
+                    <canvas id="combustionChart"></canvas>
+                </div>
+                <input type="hidden" id="combustion_csv_url" value="{{ csv }}">
+            </div>
+        {% when None %}
+    {% endmatch %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+const originalIngredients = [];
+document.querySelectorAll('.ingredient-item').forEach(item => {
+    originalIngredients.push(item.innerText.trim());
+});
+
+const fractionStr = "½|⅓|⅔|¼|¾|⅕|⅖|⅗|⅘|⅙|⅚|⅛|⅜|⅝|⅞";
+const numberRegexStr = `(?:\\d+\\s+\\d+\\s*\\/\\s*\\d+|\\d+\\s*\\/\\s*\\d+|\\d*\\.\\d+|\\d+|\\d+\\s+(?:${fractionStr})|(?:${fractionStr}))`;
+const unitsRegexStr = "cup|cups|tsp|teaspoon|teaspoons|tbsp|tablespoon|tablespoons|oz|ounce|ounces|lb|pound|pounds|g|gram|grams|kg|kilogram|kilograms|ml|milliliter|milliliters|l|liter|liters|pt|pint|pints|qt|quart|quarts|gal|gallon|gallons|pinch|pinches|dash|dashes|clove|cloves|slice|slices|can|cans|package|packages|pkg|stick|sticks";
+
+const unicodeFractions = {
+    '½': 0.5, '⅓': 0.333, '⅔': 0.666, '¼': 0.25, '¾': 0.75,
+    '⅕': 0.2, '⅖': 0.4, '⅗': 0.6, '⅘': 0.8, '⅙': 0.166,
+    '⅚': 0.833, '⅛': 0.125, '⅜': 0.375, '⅝': 0.625, '⅞': 0.875
+};
+
+function parseNumStr(numStr) {
+    if (!numStr) return 0;
+    numStr = numStr.trim();
+    if (unicodeFractions[numStr]) return unicodeFractions[numStr];
+    
+    // Replace spaces around slash
+    let cleanNum = numStr.replace(/\s*\/\s*/g, '/');
+    
+    if (cleanNum.includes(' ')) {
+        let parts = cleanNum.split(' ');
+        let whole = parseFloat(parts[0]);
+        let frac = parts[1];
+        if (unicodeFractions[frac]) return whole + unicodeFractions[frac];
+        return whole + parseFraction(frac);
+    } else if (cleanNum.includes('/')) {
+        return parseFraction(cleanNum);
+    } else {
+        return parseFloat(cleanNum);
+    }
+}
+
+let currentUnitSystem = 'original'; // 'original', 'metric', 'imperial'
+let currentMultiplier = 1;
+
+function setUnitSystem(system, btn) {
+    document.querySelectorAll('.unit-btn').forEach(b => {
+        b.classList.remove('btn-primary');
+        b.classList.add('btn-secondary');
+    });
+    btn.classList.add('btn-primary');
+    btn.classList.remove('btn-secondary');
+    
+    currentUnitSystem = system;
+    applyScalingAndUnits();
+}
+
+function scaleIngredients(multiplier, btn) {
+    document.querySelectorAll('.scale-btn').forEach(b => {
+        b.classList.remove('btn-primary');
+        b.classList.add('btn-secondary');
+    });
+    btn.classList.add('btn-primary');
+    btn.classList.remove('btn-secondary');
+    
+    currentMultiplier = multiplier;
+    applyScalingAndUnits();
+}
+
+const conversionMap = {
+    // Imperial to Metric
+    'cup': { to: 'ml', ratio: 240, type: 'vol', sys: 'metric' },
+    'cups': { to: 'ml', ratio: 240, type: 'vol', sys: 'metric' },
+    'c': { to: 'ml', ratio: 240, type: 'vol', sys: 'metric' },
+    'oz': { to: 'g', ratio: 28.35, type: 'weight', sys: 'metric' },
+    'ounce': { to: 'g', ratio: 28.35, type: 'weight', sys: 'metric' },
+    'ounces': { to: 'g', ratio: 28.35, type: 'weight', sys: 'metric' },
+    'lb': { to: 'g', ratio: 453.6, type: 'weight', sys: 'metric' },
+    'pound': { to: 'g', ratio: 453.6, type: 'weight', sys: 'metric' },
+    'pounds': { to: 'g', ratio: 453.6, type: 'weight', sys: 'metric' },
+    'tsp': { to: 'ml', ratio: 5, type: 'vol', sys: 'metric' },
+    'teaspoon': { to: 'ml', ratio: 5, type: 'vol', sys: 'metric' },
+    'teaspoons': { to: 'ml', ratio: 5, type: 'vol', sys: 'metric' },
+    'tbsp': { to: 'ml', ratio: 15, type: 'vol', sys: 'metric' },
+    'tablespoon': { to: 'ml', ratio: 15, type: 'vol', sys: 'metric' },
+    'tablespoons': { to: 'ml', ratio: 15, type: 'vol', sys: 'metric' },
+    'pt': { to: 'ml', ratio: 473, type: 'vol', sys: 'metric' },
+    'pint': { to: 'ml', ratio: 473, type: 'vol', sys: 'metric' },
+    'pints': { to: 'ml', ratio: 473, type: 'vol', sys: 'metric' },
+    'qt': { to: 'ml', ratio: 946, type: 'vol', sys: 'metric' },
+    'quart': { to: 'ml', ratio: 946, type: 'vol', sys: 'metric' },
+    'quarts': { to: 'ml', ratio: 946, type: 'vol', sys: 'metric' },
+    'gal': { to: 'l', ratio: 3.785, type: 'vol', sys: 'metric' },
+    'gallon': { to: 'l', ratio: 3.785, type: 'vol', sys: 'metric' },
+    'gallons': { to: 'l', ratio: 3.785, type: 'vol', sys: 'metric' },
+    
+    // Metric to Imperial
+    'g': { to: 'oz', ratio: 0.035274, type: 'weight', sys: 'imperial' },
+    'gram': { to: 'oz', ratio: 0.035274, type: 'weight', sys: 'imperial' },
+    'grams': { to: 'oz', ratio: 0.035274, type: 'weight', sys: 'imperial' },
+    'kg': { to: 'lb', ratio: 2.20462, type: 'weight', sys: 'imperial' },
+    'kilogram': { to: 'lb', ratio: 2.20462, type: 'weight', sys: 'imperial' },
+    'kilograms': { to: 'lb', ratio: 2.20462, type: 'weight', sys: 'imperial' },
+    'ml': { to: 'cup', ratio: 0.00422675, type: 'vol', sys: 'imperial' },
+    'milliliter': { to: 'cup', ratio: 0.00422675, type: 'vol', sys: 'imperial' },
+    'milliliters': { to: 'cup', ratio: 0.00422675, type: 'vol', sys: 'imperial' },
+    'l': { to: 'cups', ratio: 4.22675, type: 'vol', sys: 'imperial' },
+    'liter': { to: 'cups', ratio: 4.22675, type: 'vol', sys: 'imperial' },
+    'liters': { to: 'cups', ratio: 4.22675, type: 'vol', sys: 'imperial' },
+};
+
+function convertValueAndUnit(val, unit, targetSystem) {
+    if (targetSystem === 'original' || !unit) return { val, unit };
+    const lowerUnit = unit.toLowerCase();
+    
+    const rule = conversionMap[lowerUnit];
+    if (rule && rule.sys === targetSystem) {
+        let newVal = val * rule.ratio;
+        let newUnit = rule.to;
+        
+        // Auto-scale metric units for readability
+        if (newUnit === 'g' && newVal >= 1000) {
+            newVal = newVal / 1000;
+            newUnit = 'kg';
+        } else if (newUnit === 'ml' && newVal >= 1000) {
+            newVal = newVal / 1000;
+            newUnit = 'l';
+        }
+        
+        return { val: newVal, unit: newUnit };
+    }
+    return { val, unit };
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const instructionsDiv = document.getElementById('recipe-instructions');
+    if (!instructionsDiv) return;
+
+    // Use a negative lookbehind (or word boundary fallback) to avoid matching inside words,
+    // but without breaking unicode fractions which don't have \b at the start.
+    const regex = new RegExp(`(?:^|\\s|\\()(${numberRegexStr})\\s*(${unitsRegexStr})\\b`, 'gi');
+
+    const walker = document.createTreeWalker(instructionsDiv, NodeFilter.SHOW_TEXT, null, false);
+    const nodesToReplace = [];
+    let node;
+    while (node = walker.nextNode()) {
+        if (node.parentNode.nodeName === 'SCRIPT' || node.parentNode.nodeName === 'STYLE') continue;
+        if (regex.test(node.nodeValue)) {
+            nodesToReplace.push(node);
+        }
+        regex.lastIndex = 0;
+    }
+
+    nodesToReplace.forEach(textNode => {
+        const fragment = document.createDocumentFragment();
+        let lastIndex = 0;
+        let match;
+        const text = textNode.nodeValue;
+        regex.lastIndex = 0;
+        
+        while ((match = regex.exec(text)) !== null) {
+            if (match.index > lastIndex) {
+                fragment.appendChild(document.createTextNode(text.substring(lastIndex, match.index)));
+            }
+            
+            const fullMatch = match[0];
+            const numStr = match[1];
+            const unitStr = match[2];
+            
+            // Extract leading whitespace/parenthesis that we captured to simulate word boundary
+            const leadingChar = fullMatch.substring(0, fullMatch.indexOf(numStr));
+            fragment.appendChild(document.createTextNode(leadingChar));
+            
+            const span = document.createElement('span');
+            span.className = 'instruction-amount';
+            span.style.fontWeight = 'bold'; 
+            span.style.color = 'var(--primary-color)';
+            
+            span.dataset.base = parseNumStr(numStr);
+            span.dataset.unit = unitStr;
+            span.textContent = fullMatch.substring(leadingChar.length);
+            
+            fragment.appendChild(span);
+            
+            lastIndex = regex.lastIndex;
+        }
+        
+        if (lastIndex < text.length) {
+            fragment.appendChild(document.createTextNode(text.substring(lastIndex)));
+        }
+        
+        textNode.parentNode.replaceChild(fragment, textNode);
+    });
+});
+
+function applyScalingAndUnits() {
+    const multiplier = currentMultiplier;
+    
+    const items = document.querySelectorAll('.ingredient-item');
+    items.forEach((item, index) => {
+        let text = originalIngredients[index];
+        const regex = new RegExp(`^(${numberRegexStr})(?:\\s*(${unitsRegexStr}))?\\b`, 'i');
+        
+        let match = text.match(regex);
+        
+        if (match) {
+            let numStr = match[1];
+            let originalUnit = match[2] || '';
+            
+            let value = parseNumStr(numStr);
+            let newValue = value * multiplier;
+            
+            let { val: finalVal, unit: finalUnit } = convertValueAndUnit(newValue, originalUnit, currentUnitSystem);
+            
+            let formattedValue = formatNumber(finalVal);
+            
+            let replacement = formattedValue;
+            if (finalUnit) {
+                replacement += (finalUnit === originalUnit && !match[0].includes(' ')) ? finalUnit : " " + finalUnit;
+            } else if (originalUnit) {
+                 replacement += (match[0].includes(' ')) ? " " + originalUnit : originalUnit;
+            }
+            
+            item.innerText = text.replace(match[0], replacement);
+        }
+    });
+
+    const servingsEl = document.getElementById('servings-count');
+    if (servingsEl) {
+        let baseServings = parseInt(servingsEl.dataset.base);
+        if (!isNaN(baseServings)) {
+            servingsEl.innerText = Math.round(baseServings * multiplier * 10) / 10;
+        }
+    }
+
+    const instructionAmounts = document.querySelectorAll('.instruction-amount');
+    instructionAmounts.forEach(span => {
+        const base = parseFloat(span.dataset.base);
+        const originalUnit = span.dataset.unit;
+        
+        if (!isNaN(base)) {
+            let newValue = base * multiplier;
+            let { val: finalVal, unit: finalUnit } = convertValueAndUnit(newValue, originalUnit, currentUnitSystem);
+            
+            let formattedValue = formatNumber(finalVal);
+            let displayText = formattedValue;
+            
+            if (finalUnit) {
+                displayText += " " + finalUnit;
+            } else if (originalUnit) {
+                displayText += " " + originalUnit;
+            }
+            
+            span.textContent = displayText;
+        }
+    });
+}
+
+function parseFraction(frac) {
+    if (!frac) return 0;
+    let parts = frac.split('/');
+    if (parts.length === 2) {
+        let n = parseFloat(parts[0].trim());
+        let d = parseFloat(parts[1].trim());
+        if (d !== 0 && !isNaN(n) && !isNaN(d)) return n / d;
+    }
+    return 0;
+}
+
+function formatNumber(num) {
+    if (Number.isInteger(num)) return num.toString();
+    const fractionalPart = num - Math.floor(num);
+    const whole = Math.floor(num) > 0 ? Math.floor(num) + " " : "";
+    if (Math.abs(fractionalPart - 0.5) < 0.01) return whole + "1/2";
+    if (Math.abs(fractionalPart - 0.25) < 0.01) return whole + "1/4";
+    if (Math.abs(fractionalPart - 0.75) < 0.01) return whole + "3/4";
+    if (Math.abs(fractionalPart - 0.33) < 0.02) return whole + "1/3";
+    if (Math.abs(fractionalPart - 0.66) < 0.02) return whole + "2/3";
+    return Math.round(num * 100) / 100;
+}
+
+const csvUrlInput = document.getElementById('combustion_csv_url');
+if (csvUrlInput && window.Papa && window.Chart) {
+    fetch(csvUrlInput.value)
+        .then(res => res.text())
+        .then(csv => {
+            let lines = csv.split('\n');
+            let startIdx = 0;
+            for (let i = 0; i < lines.length; i++) {
+                if (lines[i].startsWith('Timestamp')) {
+                    startIdx = i;
+                    break;
+                }
+            }
+            let cleanCsv = lines.slice(startIdx).join('\n');
+
+            Papa.parse(cleanCsv, {
+                header: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    const data = results.data;
+                    const labels = data.map(row => row.Timestamp || row.Time || '');
+                    
+                    const datasets = [];
+                    const colors = [
+                        '#ff6384', '#36a2eb', '#cc65fe', '#ffce56',
+                        '#4bc0c0', '#9966ff', '#ff9f40', '#c9cbcf',
+                        '#d35400', '#27ae60', '#8e44ad'
+                    ];
+                    
+                    const targetColumns = ['T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8', 'VirtualCoreTemperature', 'VirtualSurfaceTemperature', 'VirtualAmbientTemperature'];
+                    const hiddenByDefault = ['T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8'];
+                    const niceLabels = {
+                        'VirtualCoreTemperature': 'Core',
+                        'VirtualSurfaceTemperature': 'Surface',
+                        'VirtualAmbientTemperature': 'Ambient'
+                    };
+                    
+                    let colorIdx = 0;
+                    targetColumns.forEach(col => {
+                        if (data.length > 0 && data[0][col] !== undefined) {
+                            datasets.push({
+                                label: niceLabels[col] || col,
+                                data: data.map(row => parseFloat(row[col]) || null),
+                                borderColor: colors[colorIdx % colors.length],
+                                fill: false,
+                                tension: 0.1,
+                                hidden: hiddenByDefault.includes(col)
+                            });
+                            colorIdx++;
+                        }
+                    });
+
+                    const ctx = document.getElementById('combustionChart').getContext('2d');
+                    new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: labels,
+                            datasets: datasets
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            interaction: {
+                                mode: 'index',
+                                intersect: false,
+                            },
+                            scales: {
+                                x: {
+                                    ticks: {
+                                        maxTicksLimit: 10
+                                    }
+                                },
+                                y: {
+                                    title: {
+                                        display: true,
+                                        text: 'Temperature'
+                                    }
+                                }
+                            },
+                            elements: {
+                                point: {
+                                    radius: 0
+                                }
+                            }
+                        }
+                    });
+                }
+            });
+        });
+}
+</script>
+{% endblock %}
