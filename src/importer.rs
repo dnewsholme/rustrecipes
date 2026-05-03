@@ -12,23 +12,30 @@ pub async fn import_recipe_from_url(url: &str) -> Option<Recipe> {
     let res = client.get(url).send().await.ok()?;
     let body = res.text().await.ok()?;
 
-    let ld_recipe = {
+    let (ld_recipe, og_image) = {
         let document = Html::parse_document(&body);
-        let selector = Selector::parse("script[type=\"application/ld+json\"]").unwrap();
-        let mut result = None;
+        let ld_selector = Selector::parse("script[type=\"application/ld+json\"]").unwrap();
+        let mut ld_res = None;
 
-        for element in document.select(&selector) {
+        for element in document.select(&ld_selector) {
             let text = element.inner_html();
             if let Some(recipe_data) = extract_recipe_from_json(&text) {
                 let recipe = convert_ld_to_recipe(recipe_data, url);
                 // If we got valid ingredients and instructions, return it
                 if !recipe.ingredients.is_empty() && !recipe.markdown.is_empty() {
-                    result = Some(recipe);
+                    ld_res = Some(recipe);
                     break;
                 }
             }
         }
-        result
+
+        let og_selector = Selector::parse("meta[property=\"og:image\"]").unwrap();
+        let og_image = document.select(&og_selector)
+            .next()
+            .and_then(|el| el.value().attr("content"))
+            .map(|s| s.to_string());
+
+        (ld_res, og_image)
     };
 
     if let Some(recipe) = ld_recipe {
@@ -43,6 +50,9 @@ pub async fn import_recipe_from_url(url: &str) -> Option<Recipe> {
     if let Ok(text) = html2text::from_read(body.as_bytes(), 80) {
         if let Some(mut ai_recipe) = import_recipe_from_text(&text).await {
             ai_recipe.source_url = Some(url.to_string());
+            if ai_recipe.image.is_none() {
+                ai_recipe.image = og_image;
+            }
             return Some(ai_recipe);
         }
     }
