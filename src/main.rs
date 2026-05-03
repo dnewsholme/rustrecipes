@@ -13,8 +13,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use tower_http::{services::ServeDir, trace::TraceLayer};
-use tracing::{info, error, warn};
-use tracing_subscriber;
+use tracing::{error, info, warn};
 
 #[derive(Template)]
 #[template(path = "index.html")]
@@ -98,7 +97,7 @@ async fn parse_recipe_multipart(mut multipart: Multipart) -> Option<RecipeFormDa
                         Ok(_) => {
                             info!("Uploaded image saved to {}", filepath);
                             image = Some(format!("uploads/{}", new_filename));
-                        },
+                        }
                         Err(e) => error!("Failed to write image to {}: {:?}", filepath, e),
                     }
                 }
@@ -122,7 +121,7 @@ async fn parse_recipe_multipart(mut multipart: Multipart) -> Option<RecipeFormDa
                         Ok(_) => {
                             info!("Uploaded CSV saved to {}", filepath);
                             combustion_csv = Some(format!("uploads/{}", new_filename));
-                        },
+                        }
                         Err(e) => error!("Failed to write CSV to {}: {:?}", filepath, e),
                     }
                 }
@@ -379,7 +378,7 @@ async fn import_recipe(Form(form): Form<ImportForm>) -> impl IntoResponse {
         None => {
             warn!("Failed to import recipe from URL: {}", form.url);
             (StatusCode::BAD_REQUEST, "Failed to import recipe").into_response()
-        },
+        }
     }
 }
 
@@ -388,17 +387,17 @@ async fn import_paprika(mut multipart: Multipart) -> impl IntoResponse {
     info!("Starting Paprika archive import");
     while let Some(field) = multipart.next_field().await.unwrap_or(None) {
         let name = field.name().unwrap_or("").to_string();
-        if name == "paprika_file" {
-            if let Ok(data) = field.bytes().await {
-                println!("Received Paprika file: {} bytes", data.len());
-                let recipes = importer::import_paprika_archive(&data).await;
-                info!("Parsed {} recipes from archive", recipes.len());
-                for recipe in recipes {
-                    if let Err(e) = storage::save_recipe(&recipe).await {
-                        error!("Failed to save recipe {}: {:?}", recipe.title, e);
-                    } else {
-                        count += 1;
-                    }
+        if name == "paprika_file"
+            && let Ok(data) = field.bytes().await
+        {
+            println!("Received Paprika file: {} bytes", data.len());
+            let recipes = importer::import_paprika_archive(&data).await;
+            info!("Parsed {} recipes from archive", recipes.len());
+            for recipe in recipes {
+                if let Err(e) = storage::save_recipe(&recipe).await {
+                    error!("Failed to save recipe {}: {:?}", recipe.title, e);
+                } else {
+                    count += 1;
                 }
             }
         }
@@ -435,7 +434,10 @@ async fn import_photo(mut multipart: Multipart) -> Response {
                     // Set the image
                     recipe.image = Some(format!("uploads/{}", new_filename));
 
-                    info!("Successfully parsed recipe from photo using AI: {}", recipe.title);
+                    info!(
+                        "Successfully parsed recipe from photo using AI: {}",
+                        recipe.title
+                    );
                     let template = EditTemplate {
                         recipe,
                         is_new: true,

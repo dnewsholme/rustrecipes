@@ -1,13 +1,22 @@
 use crate::models::{LdRecipe, Recipe};
 use scraper::{Html, Selector};
 use serde_json::Value;
-use tracing::{info, warn, error};
+use tracing::{error, info, warn};
+use yt_transcript_rs::YouTubeTranscriptApi;
 
 pub async fn import_recipe_from_url(url: &str) -> Option<Recipe> {
+    if url.contains("youtube.com") || url.contains("youtu.be") {
+        return import_recipe_from_youtube(url).await;
+    }
     let mut headers = reqwest::header::HeaderMap::new();
     headers.insert("accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8".parse().unwrap());
     headers.insert("accept-language", "en-US,en;q=0.9".parse().unwrap());
-    headers.insert("sec-ch-ua", "\"Chromium\";v=\"124\", \"Google Chrome\";v=\"124\", \"Not-A.Brand\";v=\"99\"".parse().unwrap());
+    headers.insert(
+        "sec-ch-ua",
+        "\"Chromium\";v=\"124\", \"Google Chrome\";v=\"124\", \"Not-A.Brand\";v=\"99\""
+            .parse()
+            .unwrap(),
+    );
     headers.insert("sec-ch-ua-mobile", "?0".parse().unwrap());
     headers.insert("sec-ch-ua-platform", "\"Windows\"".parse().unwrap());
     headers.insert("sec-fetch-dest", "document".parse().unwrap());
@@ -44,7 +53,8 @@ pub async fn import_recipe_from_url(url: &str) -> Option<Recipe> {
         }
 
         let og_selector = Selector::parse("meta[property=\"og:image\"]").unwrap();
-        let og_image = document.select(&og_selector)
+        let og_image = document
+            .select(&og_selector)
             .next()
             .and_then(|el| el.value().attr("content"))
             .map(|s| s.to_string());
@@ -61,14 +71,14 @@ pub async fn import_recipe_from_url(url: &str) -> Option<Recipe> {
         "LD+JSON failed or incomplete for {}, falling back to Gemini",
         url
     );
-    if let Ok(text) = html2text::from_read(body.as_bytes(), 80) {
-        if let Some(mut ai_recipe) = import_recipe_from_text(&text).await {
-            ai_recipe.source_url = Some(url.to_string());
-            if ai_recipe.image.is_none() {
-                ai_recipe.image = og_image;
-            }
-            return Some(ai_recipe);
+    if let Ok(text) = html2text::from_read(body.as_bytes(), 80)
+        && let Some(mut ai_recipe) = import_recipe_from_text(&text).await
+    {
+        ai_recipe.source_url = Some(url.to_string());
+        if ai_recipe.image.is_none() {
+            ai_recipe.image = og_image;
         }
+        return Some(ai_recipe);
     }
 
     None
@@ -119,28 +129,42 @@ pub async fn import_recipe_from_text(text: &str) -> Option<Recipe> {
             clean_text
         };
 
-        if let Ok(gemini) = serde_json::from_str::<GeminiRecipe>(clean_text) {
-            let mut id = slug::slugify(&gemini.title);
-            if id.is_empty() {
-                id = uuid::Uuid::new_v4().to_string();
-            }
+        match serde_json::from_str::<GeminiRecipe>(clean_text) {
+            Ok(mut gemini) => {
+                // Decode all fields
+                gemini.title = decode_html(&gemini.title);
+                gemini.description = gemini.description.map(|d| decode_html(&d));
+                gemini.ingredients = gemini.ingredients.iter().map(|i| decode_html(i)).collect();
+                gemini.markdown = decode_html(&gemini.markdown);
 
-            return Some(Recipe {
-                id,
-                title: decode_html(&gemini.title),
-                description: gemini.description.map(|d| decode_html(&d)),
-                image: None,
-                source_url: None,
-                tags: gemini.tags.unwrap_or_default(),
-                servings: gemini.servings,
-                prep_time: gemini.prep_time,
-                cook_time: gemini.cook_time,
-                ingredients: gemini.ingredients.iter().map(|i| decode_html(i)).collect(),
-                markdown: decode_html(&gemini.markdown),
-                html: None,
-                combustion_csv: None,
-            });
+                let mut id = slug::slugify(&gemini.title);
+                if id.is_empty() {
+                    id = uuid::Uuid::new_v4().to_string();
+                }
+
+                return Some(Recipe {
+                    id,
+                    title: gemini.title,
+                    description: gemini.description,
+                    image: None,
+                    source_url: None,
+                    tags: gemini.tags.unwrap_or_default(),
+                    servings: gemini.servings,
+                    prep_time: gemini.prep_time,
+                    cook_time: gemini.cook_time,
+                    ingredients: gemini.ingredients,
+                    markdown: gemini.markdown,
+                    html: None,
+                    combustion_csv: None,
+                });
+            }
+            Err(e) => {
+                error!("Failed to deserialize Gemini response: {:?}", e);
+                info!("Raw AI response was: {}", clean_text);
+            }
         }
+    } else {
+        warn!("Gemini AI response did not contain expected text field");
     }
     None
 }
@@ -155,12 +179,12 @@ fn extract_recipe_from_json(json_str: &str) -> Option<LdRecipe> {
             }
         }
     } else if let Value::Object(obj) = &parsed {
-        if obj.contains_key("@graph") {
-            if let Some(Value::Array(arr)) = obj.get("@graph") {
-                for item in arr {
-                    if is_recipe(item) {
-                        return serde_json::from_value(item.clone()).ok();
-                    }
+        if obj.contains_key("@graph")
+            && let Some(Value::Array(arr)) = obj.get("@graph")
+        {
+            for item in arr {
+                if is_recipe(item) {
+                    return serde_json::from_value(item.clone()).ok();
                 }
             }
         }
@@ -188,8 +212,12 @@ fn convert_ld_to_recipe(ld: LdRecipe, url: &str) -> Recipe {
     if let Some(desc) = &ld.description {
         markdown.push_str(&format!("{}\n\n", decode_html(desc)));
     }
-    
-    let ingredients: Vec<String> = ld.recipe_ingredient.iter().map(|i| decode_html(i)).collect();
+
+    let ingredients: Vec<String> = ld
+        .recipe_ingredient
+        .iter()
+        .map(|i| decode_html(i))
+        .collect();
 
     markdown.push_str("## Instructions\n\n");
     if let Some(instructions) = ld.recipe_instructions {
@@ -209,10 +237,10 @@ fn convert_ld_to_recipe(ld: LdRecipe, url: &str) -> Recipe {
                     image_url = Some(url_val.to_string());
                 }
             }
-        } else if let Value::Object(obj) = img {
-            if let Some(url_val) = obj.get("url").and_then(|v| v.as_str()) {
-                image_url = Some(url_val.to_string());
-            }
+        } else if let Value::Object(obj) = img
+            && let Some(url_val) = obj.get("url").and_then(|v| v.as_str())
+        {
+            image_url = Some(url_val.to_string());
         }
     }
 
@@ -231,12 +259,11 @@ fn convert_ld_to_recipe(ld: LdRecipe, url: &str) -> Recipe {
             }
         } else if let Value::Number(n) = y {
             servings = n.as_u64().map(|v| v as u32);
-        } else if let Value::Array(arr) = y {
-            if let Some(Value::String(s)) = arr.first() {
-                if let Some(num_str) = s.split_whitespace().next() {
-                    servings = num_str.parse::<u32>().ok();
-                }
-            }
+        } else if let Value::Array(arr) = y
+            && let Some(Value::String(s)) = arr.first()
+            && let Some(num_str) = s.split_whitespace().next()
+        {
+            servings = num_str.parse::<u32>().ok();
         }
     }
 
@@ -270,7 +297,7 @@ fn process_instructions(markdown: &mut String, value: &Value, step_counter: &mut
         }
         Value::Object(obj) => {
             let type_str = obj.get("@type").and_then(|v| v.as_str()).unwrap_or("");
-            
+
             if type_str == "HowToSection" {
                 if let Some(name) = obj.get("name").and_then(|v| v.as_str()) {
                     markdown.push_str(&format!("\n### {}\n\n", decode_html(name)));
@@ -282,9 +309,11 @@ fn process_instructions(markdown: &mut String, value: &Value, step_counter: &mut
                 }
             } else {
                 // Try to get text from 'text' or 'name' or just as string
-                let text = obj.get("text").and_then(|v| v.as_str())
+                let text = obj
+                    .get("text")
+                    .and_then(|v| v.as_str())
                     .or_else(|| obj.get("name").and_then(|v| v.as_str()));
-                
+
                 if let Some(t) = text {
                     markdown.push_str(&format!("{}. {}\n", step_counter, decode_html(t)));
                     *step_counter += 1;
@@ -304,7 +333,7 @@ fn parse_iso8601_duration(duration: &str) -> Option<String> {
     let mut current_num = String::new();
 
     for c in duration.chars() {
-        if c.is_digit(10) {
+        if c.is_ascii_digit() {
             current_num.push(c);
         } else {
             match c {
@@ -353,73 +382,79 @@ pub async fn import_paprika_archive(bytes: &[u8]) -> Vec<Recipe> {
     let cursor = Cursor::new(bytes);
     if let Ok(mut archive) = ZipArchive::new(cursor) {
         for i in 0..archive.len() {
-            if let Ok(mut file) = archive.by_index(i) {
-                if file.name().ends_with(".paprikarecipe") {
-                    let mut compressed_data = Vec::new();
-                    if file.read_to_end(&mut compressed_data).is_ok() {
-                        let mut gz = GzDecoder::new(Cursor::new(compressed_data));
-                        let mut json_str = String::new();
-                        if gz.read_to_string(&mut json_str).is_ok() {
-                            if let Ok(paprika) = serde_json::from_str::<PaprikaRecipe>(&json_str) {
-                                let mut id = slug::slugify(&paprika.name);
-                                if id.is_empty() {
-                                    id = uuid::Uuid::new_v4().to_string();
+            if let Ok(mut file) = archive.by_index(i)
+                && file.name().ends_with(".paprikarecipe")
+            {
+                let mut compressed_data = Vec::new();
+                if file.read_to_end(&mut compressed_data).is_ok() {
+                    let mut gz = GzDecoder::new(Cursor::new(compressed_data));
+                    let mut json_str = String::new();
+                    if gz.read_to_string(&mut json_str).is_ok()
+                        && let Ok(paprika) = serde_json::from_str::<PaprikaRecipe>(&json_str)
+                    {
+                        let mut id = slug::slugify(&paprika.name);
+                        if id.is_empty() {
+                            id = uuid::Uuid::new_v4().to_string();
+                        }
+
+                        let servings = if let Some(s) = &paprika.servings {
+                            s.split_whitespace()
+                                .next()
+                                .and_then(|num| num.parse::<u32>().ok())
+                        } else {
+                            None
+                        };
+
+                        let mut final_image = paprika.photo_url.clone();
+                        let mut base64_strings = Vec::new();
+                        if let Some(d) = paprika.photo_large {
+                            base64_strings.push(d);
+                        }
+                        if let Some(d) = paprika.photo_data {
+                            base64_strings.push(d);
+                        }
+
+                        for mut b64 in base64_strings {
+                            if b64.starts_with("data:image")
+                                && let Some(idx) = b64.find(',')
+                            {
+                                b64 = b64[idx + 1..].to_string();
+                            }
+                            b64 = b64.replace("\n", "").replace("\r", "").replace(" ", "");
+
+                            use base64::{Engine as _, engine::general_purpose};
+                            if let Ok(bytes) = general_purpose::STANDARD.decode(&b64) {
+                                let new_filename = format!("{}.jpg", uuid::Uuid::new_v4());
+                                let filepath = format!("data/uploads/{}", new_filename);
+                                if std::fs::write(&filepath, bytes).is_ok() {
+                                    final_image = Some(format!("uploads/{}", new_filename));
+                                    break;
                                 }
-
-                                let servings = if let Some(s) = &paprika.servings {
-                                    s.split_whitespace()
-                                        .next()
-                                        .and_then(|num| num.parse::<u32>().ok())
-                                } else {
-                                    None
-                                };
-
-                                let mut final_image = paprika.photo_url.clone();
-                                let mut base64_strings = Vec::new();
-                                if let Some(d) = paprika.photo_large {
-                                    base64_strings.push(d);
-                                }
-                                if let Some(d) = paprika.photo_data {
-                                    base64_strings.push(d);
-                                }
-
-                                for mut b64 in base64_strings {
-                                    if b64.starts_with("data:image") {
-                                        if let Some(idx) = b64.find(',') {
-                                            b64 = b64[idx + 1..].to_string();
-                                        }
-                                    }
-                                    b64 = b64.replace("\n", "").replace("\r", "").replace(" ", "");
-
-                                    use base64::{Engine as _, engine::general_purpose};
-                                    if let Ok(bytes) = general_purpose::STANDARD.decode(&b64) {
-                                        let new_filename = format!("{}.jpg", uuid::Uuid::new_v4());
-                                        let filepath = format!("data/uploads/{}", new_filename);
-                                        if std::fs::write(&filepath, bytes).is_ok() {
-                                            final_image = Some(format!("uploads/{}", new_filename));
-                                            break;
-                                        }
-                                    }
-                                }
-
-                                let recipe = Recipe {
-                                    id,
-                                    title: decode_html(&paprika.name),
-                                    description: paprika.description.map(|d| decode_html(&d)),
-                                    image: final_image,
-                                    source_url: paprika.source_url,
-                                    tags: paprika.categories,
-                                    servings,
-                                    prep_time: paprika.prep_time,
-                                    cook_time: paprika.cook_time,
-                                    ingredients: paprika.ingredients.unwrap_or_default().lines().map(|s| decode_html(s.trim())).filter(|s| !s.is_empty()).collect(),
-                                    markdown: decode_html(&paprika.directions.unwrap_or_default()),
-                                    html: None,
-                                    combustion_csv: None,
-                                };
-                                imported.push(recipe);
                             }
                         }
+
+                        let recipe = Recipe {
+                            id,
+                            title: decode_html(&paprika.name),
+                            description: paprika.description.map(|d| decode_html(&d)),
+                            image: final_image,
+                            source_url: paprika.source_url,
+                            tags: paprika.categories,
+                            servings,
+                            prep_time: paprika.prep_time,
+                            cook_time: paprika.cook_time,
+                            ingredients: paprika
+                                .ingredients
+                                .unwrap_or_default()
+                                .lines()
+                                .map(|s| decode_html(s.trim()))
+                                .filter(|s| !s.is_empty())
+                                .collect(),
+                            markdown: decode_html(&paprika.directions.unwrap_or_default()),
+                            html: None,
+                            combustion_csv: None,
+                        };
+                        imported.push(recipe);
                     }
                 }
             }
@@ -432,12 +467,27 @@ pub async fn import_paprika_archive(bytes: &[u8]) -> Vec<Recipe> {
 struct GeminiRecipe {
     title: String,
     description: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_optional_u32")]
     servings: Option<u32>,
+    #[serde(default)]
     ingredients: Vec<String>,
     markdown: String,
+    #[serde(default)]
     tags: Option<Vec<String>>,
     prep_time: Option<String>,
     cook_time: Option<String>,
+}
+
+fn deserialize_optional_u32<'de, D>(deserializer: D) -> Result<Option<u32>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let v: Option<Value> = serde::Deserialize::deserialize(deserializer)?;
+    match v {
+        Some(Value::Number(n)) => Ok(n.as_u64().map(|v| v as u32)),
+        Some(Value::String(s)) => Ok(s.parse::<u32>().ok()),
+        _ => Ok(None),
+    }
 }
 
 pub async fn import_recipe_from_photo(mime_type: &str, image_data: &[u8]) -> Option<Recipe> {
@@ -557,13 +607,91 @@ pub async fn import_recipe_from_photo(mime_type: &str, image_data: &[u8]) -> Opt
     None
 }
 
+pub async fn import_recipe_from_youtube(url: &str) -> Option<Recipe> {
+    let video_id = extract_youtube_id(url)?;
+
+    info!("Fetching transcript for YouTube video: {}", video_id);
+    let api = YouTubeTranscriptApi::new(None, None, None).ok()?;
+
+    // Try English first, then any other language
+    let transcript_res = api.fetch_transcript(&video_id, &["en"], true).await;
+
+    let transcript_text = match transcript_res {
+        Ok(t) => t.text(),
+        Err(e) => {
+            warn!(
+                "Failed to fetch transcript: {}. Falling back to metadata only.",
+                e
+            );
+            // If no transcript, we might still get something from description but it's much worse
+            String::new()
+        }
+    };
+
+    // We also want the title and description from the page if possible
+    let client = reqwest::Client::new();
+    let mut page_text = format!("YouTube Video ID: {}\n", video_id);
+
+    if let Ok(res) = client.get(url).send().await
+        && let Ok(body) = res.text().await
+    {
+        let document = Html::parse_document(&body);
+        let title_selector = Selector::parse("title").unwrap();
+        if let Some(title_el) = document.select(&title_selector).next() {
+            page_text.push_str(&format!("Video Title: {}\n", title_el.inner_html()));
+        }
+
+        // Try to find the description in meta tags
+        let desc_selector = Selector::parse("meta[name=\"description\"]").unwrap();
+        if let Some(desc_el) = document.select(&desc_selector).next()
+            && let Some(desc) = desc_el.value().attr("content")
+        {
+            page_text.push_str(&format!("Video Description: {}\n", desc));
+        }
+    }
+
+    if !transcript_text.is_empty() {
+        page_text.push_str("\nTranscript:\n");
+        page_text.push_str(&transcript_text);
+    }
+
+    if page_text.len() < 100 && transcript_text.is_empty() {
+        warn!(
+            "Could not extract enough information from YouTube video {}",
+            video_id
+        );
+        return None;
+    }
+
+    let mut recipe = import_recipe_from_text(&page_text).await?;
+
+    recipe.source_url = Some(url.to_string());
+    // Use the high-res thumbnail
+    recipe.image = Some(format!(
+        "https://i.ytimg.com/vi/{}/maxresdefault.jpg",
+        video_id
+    ));
+
+    Some(recipe)
+}
+
+fn extract_youtube_id(url: &str) -> Option<String> {
+    let re = regex::Regex::new(r"(?:v=|\/|embed\/|youtu\.be\/)([0-9A-Za-z_-]{11})").ok()?;
+    re.captures(url)
+        .and_then(|caps| caps.get(1))
+        .map(|m| m.as_str().to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_parse_iso8601_duration() {
-        assert_eq!(parse_iso8601_duration("PT1H30M"), Some("1h 30m".to_string()));
+        assert_eq!(
+            parse_iso8601_duration("PT1H30M"),
+            Some("1h 30m".to_string())
+        );
         assert_eq!(parse_iso8601_duration("PT45M"), Some("45m".to_string()));
         assert_eq!(parse_iso8601_duration("PT2H"), Some("2h".to_string()));
         assert_eq!(parse_iso8601_duration("PT10S"), Some("10s".to_string()));
