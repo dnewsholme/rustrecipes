@@ -127,16 +127,16 @@ pub async fn import_recipe_from_text(text: &str) -> Option<Recipe> {
 
             return Some(Recipe {
                 id,
-                title: gemini.title,
-                description: gemini.description,
+                title: decode_html(&gemini.title),
+                description: gemini.description.map(|d| decode_html(&d)),
                 image: None,
                 source_url: None,
                 tags: gemini.tags.unwrap_or_default(),
                 servings: gemini.servings,
                 prep_time: gemini.prep_time,
                 cook_time: gemini.cook_time,
-                ingredients: gemini.ingredients,
-                markdown: gemini.markdown,
+                ingredients: gemini.ingredients.iter().map(|i| decode_html(i)).collect(),
+                markdown: decode_html(&gemini.markdown),
                 html: None,
                 combustion_csv: None,
             });
@@ -374,14 +374,6 @@ pub async fn import_paprika_archive(bytes: &[u8]) -> Vec<Recipe> {
                                     None
                                 };
 
-                                let ingredients = paprika
-                                    .ingredients
-                                    .unwrap_or_default()
-                                    .lines()
-                                    .map(|s| s.trim().to_string())
-                                    .filter(|s| !s.is_empty())
-                                    .collect();
-
                                 let mut final_image = paprika.photo_url.clone();
                                 let mut base64_strings = Vec::new();
                                 if let Some(d) = paprika.photo_large {
@@ -412,16 +404,16 @@ pub async fn import_paprika_archive(bytes: &[u8]) -> Vec<Recipe> {
 
                                 let recipe = Recipe {
                                     id,
-                                    title: paprika.name,
-                                    description: paprika.description,
+                                    title: decode_html(&paprika.name),
+                                    description: paprika.description.map(|d| decode_html(&d)),
                                     image: final_image,
                                     source_url: paprika.source_url,
                                     tags: paprika.categories,
                                     servings,
                                     prep_time: paprika.prep_time,
                                     cook_time: paprika.cook_time,
-                                    ingredients,
-                                    markdown: paprika.directions.unwrap_or_default(),
+                                    ingredients: paprika.ingredients.unwrap_or_default().lines().map(|s| decode_html(s.trim())).filter(|s| !s.is_empty()).collect(),
+                                    markdown: decode_html(&paprika.directions.unwrap_or_default()),
                                     html: None,
                                     combustion_csv: None,
                                 };
@@ -536,16 +528,16 @@ pub async fn import_recipe_from_photo(mime_type: &str, image_data: &[u8]) -> Opt
 
                 return Some(Recipe {
                     id,
-                    title: gemini.title,
-                    description: gemini.description,
+                    title: decode_html(&gemini.title),
+                    description: gemini.description.map(|d| decode_html(&d)),
                     image: None,
                     source_url: None,
                     tags: gemini.tags.unwrap_or_default(),
                     servings: gemini.servings,
                     prep_time: gemini.prep_time,
                     cook_time: gemini.cook_time,
-                    ingredients: gemini.ingredients,
-                    markdown: gemini.markdown,
+                    ingredients: gemini.ingredients.iter().map(|i| decode_html(i)).collect(),
+                    markdown: decode_html(&gemini.markdown),
                     html: None,
                     combustion_csv: None,
                 });
