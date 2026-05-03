@@ -50,6 +50,12 @@
         {% block content %}{% endblock %}
     </main>
 
+    <footer>
+        <div class="container" style="text-align: center; padding: 2rem 0; color: var(--text-secondary); font-size: 0.9rem; border-top: 1px solid var(--border-color); margin-top: 3rem;">
+            <p>&copy; 2026 Rust Recipe Manager • v{{ app_version }}</p>
+        </div>
+    </footer>
+
     {% block scripts %}{% endblock %}
     <script>
         const themeToggle = document.getElementById('theme-toggle');

@@ -4,6 +4,8 @@ FROM rust:slim-bookworm AS builder
 # Install required system dependencies (like OpenSSL for reqwest)
 RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
 
+ARG APP_VERSION=0.1.0
+
 # Set working directory
 WORKDIR /app
 
@@ -23,7 +25,7 @@ COPY templates templates
 COPY static static
 
 # Touch main.rs to force recompilation of the actual code
-RUN touch src/main.rs && cargo build --release
+RUN touch src/main.rs && APP_VERSION=$APP_VERSION cargo build --release
 
 # Stage 2: Create a minimal runtime image
 FROM debian:bookworm-slim

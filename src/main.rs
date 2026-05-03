@@ -20,6 +20,7 @@ use tracing_subscriber;
 struct IndexTemplate {
     recipes: Vec<models::Recipe>,
     base_url: String,
+    app_version: String,
 }
 
 #[derive(Template)]
@@ -27,6 +28,7 @@ struct IndexTemplate {
 struct RecipeTemplate {
     recipe: models::Recipe,
     base_url: String,
+    app_version: String,
 }
 
 #[derive(Template)]
@@ -35,11 +37,14 @@ struct EditTemplate {
     recipe: models::Recipe,
     is_new: bool,
     base_url: String,
+    app_version: String,
 }
 
 fn get_base_url() -> String {
     std::env::var("APP_BASE").unwrap_or_default()
 }
+
+const APP_VERSION: &str = option_env!("APP_VERSION").unwrap_or(env!("CARGO_PKG_VERSION"));
 
 struct RecipeFormData {
     title: String,
@@ -156,13 +161,21 @@ struct UploadData {
 
 async fn index() -> impl IntoResponse {
     let recipes = storage::list_recipes().await;
-    let template = IndexTemplate { recipes, base_url: get_base_url() };
+    let template = IndexTemplate { 
+        recipes, 
+        base_url: get_base_url(),
+        app_version: APP_VERSION.to_string(),
+    };
     Html(template.render().unwrap())
 }
 
 async fn view_recipe(Path(id): Path<String>) -> impl IntoResponse {
     if let Some(recipe) = storage::read_recipe(&id).await {
-        let template = RecipeTemplate { recipe, base_url: get_base_url() };
+        let template = RecipeTemplate { 
+            recipe, 
+            base_url: get_base_url(),
+            app_version: APP_VERSION.to_string(),
+        };
         Ok(Html(template.render().unwrap()))
     } else {
         Err((StatusCode::NOT_FOUND, "Recipe not found"))
@@ -186,6 +199,7 @@ async fn new_recipe() -> impl IntoResponse {
         },
         is_new: true,
         base_url: get_base_url(),
+        app_version: APP_VERSION.to_string(),
     };
     Html(template.render().unwrap())
 }
@@ -224,6 +238,7 @@ async fn edit_recipe(Path(id): Path<String>) -> impl IntoResponse {
             recipe,
             is_new: false,
             base_url: get_base_url(),
+            app_version: APP_VERSION.to_string(),
         };
         Ok(Html(template.render().unwrap()))
     } else {
