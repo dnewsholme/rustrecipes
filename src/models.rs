@@ -21,12 +21,15 @@ pub struct Recipe {
     #[serde(skip)]
     pub html: Option<String>,
     pub combustion_csv: Option<String>,
+    #[serde(default)]
     pub video_url: Option<String>,
 }
 
 impl Recipe {
     pub fn has_tag(&self, tag: &str) -> bool {
-        self.tags.iter().any(|t| t == tag)
+        self.tags
+            .iter()
+            .any(|t| t.to_lowercase() == tag.to_lowercase())
     }
 
     pub fn leaven_info(&self) -> (bool, &'static str) {
@@ -60,11 +63,34 @@ impl Recipe {
     }
 
     pub fn youtube_id(&self) -> Option<String> {
-        let url = self.video_url.as_ref()?;
-        let re = regex::Regex::new(r"(?:v=|\/|embed\/|youtu\.be\/)([0-9A-Za-z_-]{11})").ok()?;
-        re.captures(url)
-            .and_then(|caps| caps.get(1))
-            .map(|m| m.as_str().to_string())
+        let re = regex::Regex::new(r"(?i)(?:v=|\/|embed\/|youtu\.be\/)([0-9A-Za-z_-]{11})").ok()?;
+
+        if let Some(url) = &self.video_url
+            && let Some(caps) = re.captures(url)
+        {
+            return caps.get(1).map(|m| m.as_str().to_string());
+        }
+
+        if let Some(url) = &self.source_url
+            && (url.to_lowercase().contains("youtube.com")
+                || url.to_lowercase().contains("youtu.be"))
+            && let Some(caps) = re.captures(url)
+        {
+            return caps.get(1).map(|m| m.as_str().to_string());
+        }
+
+        None
+    }
+
+    pub fn has_video(&self) -> bool {
+        self.youtube_id().is_some()
+    }
+
+    pub fn has_combustion(&self) -> bool {
+        self.combustion_csv
+            .as_ref()
+            .map(|s| !s.trim().is_empty())
+            .unwrap_or(false)
     }
 }
 

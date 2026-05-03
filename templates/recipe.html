@@ -65,11 +65,9 @@
         {% if leaven.0 %}
         <button id="fermentation-tab-btn" class="tab-btn" onclick="switchTab('fermentation', this)">Fermentation</button>
         {% endif %}
-        {% match recipe.video_url %}
-            {% when Some with (url) %}
+        {% if recipe.has_video() %}
                 <button class="tab-btn" onclick="switchTab('video', this)">Video</button>
-            {% when None %}
-        {% endmatch %}
+        {% endif %}
     </div>
 
     <div id="ingredients-tab" class="tab-content active">
