@@ -51,6 +51,21 @@
         <div class="recipe-card-content">
             <h3 class="recipe-title">
                 <a href="recipe/{{ recipe.id }}">{{ recipe.title }}</a>
+                <div class="recipe-feature-icons" style="display: inline-flex; gap: 0.35rem; margin-left: 0.5rem; vertical-align: middle;">
+                    {% match recipe.combustion_csv %}
+                        {% when Some with (csv) %}
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#e67e22" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" title="Combustion Data"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path></svg>
+                        {% when None %}
+                    {% endmatch %}
+                    {% match recipe.video_url %}
+                        {% when Some with (url) %}
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#e74c3c" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" title="Video Embed"><path d="m22 8-6 4 6 4V8Z"></path><rect width="14" height="12" x="2" y="6" rx="2" ry="2"></rect></svg>
+                        {% when None %}
+                    {% endmatch %}
+                    {% if recipe.leaven_info().0 %}
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#27ae60" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" title="Fermentation Calculator"><path d="M12 2v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="M20 12h2"></path><path d="m19.07 19.07-1.41-1.41"></path><path d="M12 22v-2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="M2 12h2"></path><path d="m7.76 7.76-1.41 1.41"></path><path d="M12 7v5l3 3"></path></svg>
+                    {% endif %}
+                </div>
                 {% match recipe.source_url %}
                     {% when Some with (url) %}
                         {% if !url.trim().is_empty() %}
