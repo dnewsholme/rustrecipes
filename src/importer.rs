@@ -193,18 +193,48 @@ fn convert_ld_to_recipe(ld: LdRecipe, url: &str) -> Recipe {
 
     markdown.push_str("## Instructions\n\n");
     if let Some(instructions) = ld.recipe_instructions {
-        if let Value::Array(arr) = instructions {
-            for (i, step) in arr.iter().enumerate() {
-                if let Some(text) = step.get("text").and_then(|v| v.as_str()) {
-                    markdown.push_str(&format!("{}. {}\n", i + 1, decode_html(text)));
-                } else if let Some(text) = step.as_str() {
-                    markdown.push_str(&format!("{}. {}\n", i + 1, decode_html(text)));
+        let mut step_counter = 1;
+        process_instructions(&mut markdown, &instructions, &mut step_counter);
+    }
+}
+
+fn process_instructions(markdown: &mut String, value: &Value, step_counter: &mut usize) {
+    match value {
+        Value::Array(arr) => {
+            for item in arr {
+                process_instructions(markdown, item, step_counter);
+            }
+        }
+        Value::Object(obj) => {
+            let type_str = obj.get("@type").and_then(|v| v.as_str()).unwrap_or("");
+            
+            if type_str == "HowToSection" {
+                if let Some(name) = obj.get("name").and_then(|v| v.as_str()) {
+                    markdown.push_str(&format!("\n### {}\n\n", decode_html(name)));
+                }
+                if let Some(items) = obj.get("itemListElement").and_then(|v| v.as_array()) {
+                    for item in items {
+                        process_instructions(markdown, item, step_counter);
+                    }
+                }
+            } else {
+                // Try to get text from 'text' or 'name' or just as string
+                let text = obj.get("text").and_then(|v| v.as_str())
+                    .or_else(|| obj.get("name").and_then(|v| v.as_str()));
+                
+                if let Some(t) = text {
+                    markdown.push_str(&format!("{}. {}\n", step_counter, decode_html(t)));
+                    *step_counter += 1;
                 }
             }
-        } else if let Value::String(text) = instructions {
-            markdown.push_str(&format!("{}\n", decode_html(&text)));
         }
+        Value::String(s) => {
+            markdown.push_str(&format!("{}. {}\n", step_counter, decode_html(s)));
+            *step_counter += 1;
+        }
+        _ => {}
     }
+}
 
     let mut image_url = None;
     if let Some(img) = ld.image {
