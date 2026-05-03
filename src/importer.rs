@@ -135,10 +135,52 @@ fn convert_ld_to_recipe(ld: LdRecipe, url: &str) -> Recipe {
         source_url: Some(url.to_string()),
         tags: vec![],
         servings,
+        prep_time: ld.prep_time.map(|t| parse_iso8601_duration(&t)),
+        cook_time: ld.cook_time.map(|t| parse_iso8601_duration(&t)),
         ingredients,
         markdown,
         html: None,
         combustion_csv: None,
+    }
+}
+
+fn parse_iso8601_duration(duration: &str) -> String {
+    let mut result = String::new();
+    let mut current_num = String::new();
+    
+    for c in duration.chars() {
+        if c.is_digit(10) {
+            current_num.push(c);
+        } else {
+            match c {
+                'H' => {
+                    if !current_num.is_empty() {
+                        result.push_str(&format!("{}h ", current_num));
+                        current_num.clear();
+                    }
+                }
+                'M' => {
+                    if !current_num.is_empty() {
+                        result.push_str(&format!("{}m ", current_num));
+                        current_num.clear();
+                    }
+                }
+                'S' => {
+                    if !current_num.is_empty() {
+                        result.push_str(&format!("{}s ", current_num));
+                        current_num.clear();
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    
+    let trimmed = result.trim().to_string();
+    if trimmed.is_empty() && !duration.is_empty() {
+        duration.to_string()
+    } else {
+        trimmed
     }
 }
 
@@ -212,6 +254,8 @@ pub async fn import_paprika_archive(bytes: &[u8]) -> Vec<Recipe> {
                                     source_url: paprika.source_url,
                                     tags: paprika.categories,
                                     servings,
+                                    prep_time: paprika.prep_time,
+                                    cook_time: paprika.cook_time,
                                     ingredients,
                                     markdown: paprika.directions.unwrap_or_default(),
                                     html: None,
@@ -236,6 +280,8 @@ struct GeminiRecipe {
     ingredients: Vec<String>,
     markdown: String,
     tags: Option<Vec<String>>,
+    prep_time: Option<String>,
+    cook_time: Option<String>,
 }
 
 pub async fn import_recipe_from_photo(mime_type: &str, image_data: &[u8]) -> Option<Recipe> {
@@ -257,6 +303,7 @@ pub async fn import_recipe_from_photo(mime_type: &str, image_data: &[u8]) -> Opt
                   Format the response EXACTLY as a JSON object with no markdown formatting around it. \
                   The JSON should match this schema: \
                   { \"title\": \"string\", \"description\": \"string or null\", \"servings\": number or null, \
+                  \"prep_time\": \"string or null\", \"cook_time\": \"string or null\", \
                   \"ingredients\": [\"string\"], \"markdown\": \"string (use markdown for instructions)\", \"tags\": [\"string\"] }";
     
     let body = serde_json::json!({
@@ -322,6 +369,8 @@ pub async fn import_recipe_from_photo(mime_type: &str, image_data: &[u8]) -> Opt
                     source_url: None,
                     tags: gemini.tags.unwrap_or_default(),
                     servings: gemini.servings,
+                    prep_time: gemini.prep_time,
+                    cook_time: gemini.cook_time,
                     ingredients: gemini.ingredients,
                     markdown: gemini.markdown,
                     html: None,

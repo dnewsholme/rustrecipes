@@ -57,6 +57,32 @@
                     {% when None %}
                 {% endmatch %}
             </div>
+            <div style="display: flex; gap: 0.75rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
+                {% match recipe.servings %}
+                    {% when Some with (s) %}
+                        <span style="font-size: 0.85rem; color: var(--text-secondary); display: flex; align-items: center; gap: 0.25rem;">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                            {{ s }}
+                        </span>
+                    {% when None %}
+                {% endmatch %}
+                {% match recipe.prep_time %}
+                    {% when Some with (t) %}
+                        <span style="font-size: 0.85rem; color: var(--text-secondary); display: flex; align-items: center; gap: 0.25rem;">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                            {{ t }}
+                        </span>
+                    {% when None %}
+                {% endmatch %}
+                {% match recipe.cook_time %}
+                    {% when Some with (t) %}
+                        <span style="font-size: 0.85rem; color: var(--text-secondary); display: flex; align-items: center; gap: 0.25rem;">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"></path><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path></svg>
+                            {{ t }}
+                        </span>
+                    {% when None %}
+                {% endmatch %}
+            </div>
             <a href="recipe/{{ recipe.id }}" class="btn btn-secondary" style="width: 100%; margin-top: auto;">View Recipe</a>
         </div>
     </div>

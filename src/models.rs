@@ -12,6 +12,8 @@ pub struct Recipe {
     pub tags: Vec<String>,
     #[serde(default)]
     pub servings: Option<u32>,
+    pub prep_time: Option<String>,
+    pub cook_time: Option<String>,
     #[serde(default)]
     pub ingredients: Vec<String>,
     #[serde(skip)]
@@ -34,6 +36,10 @@ pub struct LdRecipe {
     pub recipe_instructions: Option<serde_json::Value>,
     #[serde(alias = "recipeYield")]
     pub recipe_yield: Option<serde_json::Value>,
+    #[serde(alias = "prepTime")]
+    pub prep_time: Option<String>,
+    #[serde(alias = "cookTime")]
+    pub cook_time: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -50,4 +56,6 @@ pub struct PaprikaRecipe {
     pub photo_large: Option<String>,
     #[serde(default)]
     pub categories: Vec<String>,
+    pub prep_time: Option<String>,
+    pub cook_time: Option<String>,
 }

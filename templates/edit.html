@@ -22,12 +22,20 @@
             <textarea id="description" name="description" class="form-control" rows="2">{% match recipe.description %}{% when Some with (desc) %}{{ desc }}{% when None %}{% endmatch %}</textarea>
         </div>
 
-        <div style="display: flex; gap: 1rem;">
-            <div class="form-group" style="flex: 1;">
+        <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+            <div class="form-group" style="flex: 1; min-width: 100px;">
                 <label class="form-label" for="servings">Servings</label>
                 <input type="number" id="servings" name="servings" class="form-control" min="1" value="{% match recipe.servings %}{% when Some with (s) %}{{ s }}{% when None %}{% endmatch %}">
             </div>
-            <div class="form-group" style="flex: 2;">
+            <div class="form-group" style="flex: 1; min-width: 120px;">
+                <label class="form-label" for="prep_time">Prep Time</label>
+                <input type="text" id="prep_time" name="prep_time" class="form-control" placeholder="15 mins" value="{% match recipe.prep_time %}{% when Some with (t) %}{{ t }}{% when None %}{% endmatch %}">
+            </div>
+            <div class="form-group" style="flex: 1; min-width: 120px;">
+                <label class="form-label" for="cook_time">Cook Time</label>
+                <input type="text" id="cook_time" name="cook_time" class="form-control" placeholder="45 mins" value="{% match recipe.cook_time %}{% when Some with (t) %}{{ t }}{% when None %}{% endmatch %}">
+            </div>
+            <div class="form-group" style="flex: 2; min-width: 200px;">
                 <label class="form-label" for="tags">Tags (comma separated)</label>
                 <input type="text" id="tags" name="tags" class="form-control" value='{{ recipe.tags.join(", ") }}'>
             </div>

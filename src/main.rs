@@ -44,7 +44,10 @@ fn get_base_url() -> String {
     std::env::var("APP_BASE").unwrap_or_default()
 }
 
-const APP_VERSION: &str = option_env!("APP_VERSION").unwrap_or(env!("CARGO_PKG_VERSION"));
+const APP_VERSION: &str = match option_env!("APP_VERSION") {
+    Some(v) => v,
+    None => env!("CARGO_PKG_VERSION"),
+};
 
 struct RecipeFormData {
     title: String,
@@ -55,6 +58,8 @@ struct RecipeFormData {
     tags: Vec<String>,
     ingredients: Vec<String>,
     servings: Option<u32>,
+    prep_time: Option<String>,
+    cook_time: Option<String>,
 }
 
 async fn parse_recipe_multipart(mut multipart: Multipart) -> Option<RecipeFormData> {
@@ -66,6 +71,8 @@ async fn parse_recipe_multipart(mut multipart: Multipart) -> Option<RecipeFormDa
     let mut tags = Vec::new();
     let mut ingredients = Vec::new();
     let mut servings = None;
+    let mut prep_time = None;
+    let mut cook_time = None;
 
     while let Some(field) = multipart.next_field().await.unwrap_or(None) {
         let name = field.name().unwrap_or("").to_string();
@@ -126,6 +133,8 @@ async fn parse_recipe_multipart(mut multipart: Multipart) -> Option<RecipeFormDa
                     ingredients = text.lines().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
                 },
                 "servings" => servings = text.parse::<u32>().ok(),
+                "prep_time" => prep_time = if text.trim().is_empty() { None } else { Some(text) },
+                "cook_time" => cook_time = if text.trim().is_empty() { None } else { Some(text) },
                 _ => {}
             }
         }
@@ -136,7 +145,7 @@ async fn parse_recipe_multipart(mut multipart: Multipart) -> Option<RecipeFormDa
     }
     
     Some(RecipeFormData {
-        title, description, image, combustion_csv, markdown, tags, ingredients, servings
+        title, description, image, combustion_csv, markdown, tags, ingredients, servings, prep_time, cook_time
     })
 }
 
@@ -223,6 +232,8 @@ async fn create_recipe(multipart: Multipart) -> impl IntoResponse {
         source_url: None,
         tags: form.tags,
         servings: form.servings,
+        prep_time: form.prep_time,
+        cook_time: form.cook_time,
         ingredients: form.ingredients,
         markdown: form.markdown,
         html: None,
