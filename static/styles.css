@@ -326,6 +326,68 @@ main {
   }
 }
 
+/* Tabs for mobile */
+.recipe-tabs {
+  display: none;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 0.5rem;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 0.75rem;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  transition: var(--transition);
+}
+
+.tab-btn.active {
+  background-color: var(--accent-color);
+  color: white;
+  box-shadow: 0 4px 12px rgba(249, 115, 22, 0.2);
+}
+
+@media (max-width: 640px) {
+  .recipe-hero-img {
+    display: none;
+  }
+  
+  .recipe-header h1 {
+    font-size: 1.75rem;
+  }
+
+  .recipe-tabs {
+    display: flex;
+  }
+  
+  .recipe-content {
+    padding: 1.25rem;
+  }
+  
+  .tab-content {
+    display: none;
+  }
+  
+  .tab-content.active {
+    display: block;
+  }
+
+  .recipe-content h2 {
+    display: none; /* Hide headings since we have tabs */
+  }
+
+  .unit-scaling-row {
+    flex-direction: column;
+    align-items: flex-start !important;
+  }
+}
+
 /* EasyMDE Overrides for Dark Mode */
 .editor-toolbar, .CodeMirror, .editor-statusbar {
   background-color: var(--surface-color) !important;

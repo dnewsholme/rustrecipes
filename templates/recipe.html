@@ -35,47 +35,57 @@
 </div>
 
 <div class="recipe-content">
-    {% if !recipe.ingredients.is_empty() %}
-    <div style="margin-bottom: 2rem; background: var(--bg-color); padding: 1.5rem; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
-        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1rem;">
-            <h2 style="margin: 0; border: none; padding: 0;">Ingredients</h2>
-            <div style="display: flex; align-items: center; gap: 1rem;">
-                {% match recipe.servings %}
-                    {% when Some with (s) %}
-                        <span style="color: var(--text-secondary);">Servings: <strong id="servings-count" data-base="{{ s }}" style="color: var(--text-primary);">{{ s }}</strong></span>
-                    {% when None %}
-                {% endmatch %}
-                <div style="display: flex; gap: 0.25rem; margin-right: 1rem;">
-                    <button class="btn btn-primary unit-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="setUnitSystem('original', this)">Original</button>
-                    <button class="btn btn-secondary unit-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="setUnitSystem('metric', this)">Metric</button>
-                    <button class="btn btn-secondary unit-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="setUnitSystem('imperial', this)">Imperial</button>
-                </div>
-                <div style="display: flex; gap: 0.25rem;">
-                    <button class="btn btn-secondary scale-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="scaleIngredients(0.5, this)">0.5x</button>
-                    <button class="btn btn-primary scale-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="scaleIngredients(1, this)">1x</button>
-                    <button class="btn btn-secondary scale-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="scaleIngredients(2, this)">2x</button>
-                    <button class="btn btn-secondary scale-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="scaleIngredients(3, this)">3x</button>
-                </div>
-                <button id="wakelock-btn" class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.8rem; display: flex; align-items: center; gap: 0.4rem;" onclick="toggleWakeLock()">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.7 1.5-1.7 1.5-2.7a5 5 0 1 0-10 0c0 1 .5 2 1.5 2.7.8.8 1.3 1.5 1.5 2.5"></path><line x1="9" y1="18" x2="15" y2="18"></line><line x1="10" y1="22" x2="14" y2="22"></line></svg>
-                    Keep Screen On
-                </button>
-            </div>
-        </div>
-        <ul style="list-style-type: none; padding: 0;">
-            {% for ingredient in recipe.ingredients %}
-            <li class="ingredient-item" style="padding: 0.5rem 0; border-bottom: 1px solid var(--border-color);">{{ ingredient }}</li>
-            {% endfor %}
-        </ul>
+    <div class="recipe-tabs">
+        <button class="tab-btn active" onclick="switchTab('ingredients', this)">Ingredients</button>
+        <button class="tab-btn" onclick="switchTab('directions', this)">Directions</button>
     </div>
-    {% endif %}
 
-    <div id="recipe-instructions">
-        {% match recipe.html %}
-            {% when Some with (html) %}
-                {{ html|safe }}
-            {% when None %}
-        {% endmatch %}
+    <div id="ingredients-tab" class="tab-content active">
+        {% if !recipe.ingredients.is_empty() %}
+        <div style="margin-bottom: 2rem; background: var(--bg-color); padding: 1.5rem; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+            <div class="unit-scaling-row" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1rem;">
+                <h2 style="margin: 0; border: none; padding: 0;">Ingredients</h2>
+                <div style="display: flex; align-items: center; gap: 1rem;">
+                    {% match recipe.servings %}
+                        {% when Some with (s) %}
+                            <span style="color: var(--text-secondary);">Servings: <strong id="servings-count" data-base="{{ s }}" style="color: var(--text-primary);">{{ s }}</strong></span>
+                        {% when None %}
+                    {% endmatch %}
+                    <div style="display: flex; gap: 0.25rem; margin-right: 1rem;">
+                        <button class="btn btn-primary unit-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="setUnitSystem('original', this)">Original</button>
+                        <button class="btn btn-secondary unit-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="setUnitSystem('metric', this)">Metric</button>
+                        <button class="btn btn-secondary unit-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="setUnitSystem('imperial', this)">Imperial</button>
+                    </div>
+                    <div style="display: flex; gap: 0.25rem;">
+                        <button class="btn btn-secondary scale-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="scaleIngredients(0.5, this)">0.5x</button>
+                        <button class="btn btn-primary scale-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="scaleIngredients(1, this)">1x</button>
+                        <button class="btn btn-secondary scale-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="scaleIngredients(2, this)">2x</button>
+                        <button class="btn btn-secondary scale-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="scaleIngredients(3, this)">3x</button>
+                    </div>
+                    <button id="wakelock-btn" class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.8rem; display: flex; align-items: center; gap: 0.4rem;" onclick="toggleWakeLock()">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.7 1.5-1.7 1.5-2.7a5 5 0 1 0-10 0c0 1 .5 2 1.5 2.7.8.8 1.3 1.5 1.5 2.5"></path><line x1="9" y1="18" x2="15" y2="18"></line><line x1="10" y1="22" x2="14" y2="22"></line></svg>
+                        Keep Screen On
+                    </button>
+                </div>
+            </div>
+            <ul style="list-style-type: none; padding: 0;">
+                {% for ingredient in recipe.ingredients %}
+                <li class="ingredient-item" style="padding: 0.5rem 0; border-bottom: 1px solid var(--border-color);">{{ ingredient }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+    </div>
+
+    <div id="directions-tab" class="tab-content">
+        <div id="recipe-instructions">
+            <h2>Directions</h2>
+            {% match recipe.html %}
+                {% when Some with (html) %}
+                    {{ html|safe }}
+                {% when None %}
+            {% endmatch %}
+        </div>
     </div>
 
     {% match recipe.combustion_csv %}
@@ -509,6 +519,21 @@ if (csvUrlInput && window.Papa && window.Chart) {
 
     if (!('wakeLock' in navigator)) {
         wakelockBtn.style.display = 'none';
+    }
+
+    function switchTab(tabId, btn) {
+        // Update buttons
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        // Update content
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        document.getElementById(tabId + '-tab').classList.add('active');
+        
+        // Scroll to top of content
+        if (window.innerWidth <= 640) {
+            window.scrollTo({ top: document.querySelector('.recipe-content').offsetTop - 100, behavior: 'smooth' });
+        }
     }
 </script>
 {% endblock %}
