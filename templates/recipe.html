@@ -2,6 +2,13 @@
 
 {% block title %}{{ recipe.title }}{% endblock %}
 
+{% block header_actions %}
+<button id="wakelock-btn" class="btn btn-secondary" style="padding: 0.5rem 0.75rem; font-size: 0.85rem; display: flex; align-items: center; gap: 0.4rem;" onclick="toggleWakeLock()">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.7 1.5-1.7 1.5-2.7a5 5 0 1 0-10 0c0 1 .5 2 1.5 2.7.8.8 1.3 1.5 1.5 2.5"></path><line x1="9" y1="18" x2="15" y2="18"></line><line x1="10" y1="22" x2="14" y2="22"></line></svg>
+    <span class="wakelock-text">Keep Screen On</span>
+</button>
+{% endblock %}
+
 {% block content %}
 <div class="recipe-header">
     <h1>{{ recipe.title }}</h1>
@@ -29,7 +36,11 @@
 
     {% match recipe.image %}
         {% when Some with (img) %}
-            <img src="{{ img }}" alt="{{ recipe.title }}" class="recipe-hero-img">
+            <button id="mobile-image-toggle" class="btn btn-secondary" onclick="toggleMobileImage()" style="margin-top: 1rem; display: none; align-items: center; gap: 0.5rem; width: 100%;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                <span>Show Photo</span>
+            </button>
+            <img src="{{ img }}" alt="{{ recipe.title }}" class="recipe-hero-img" id="recipe-hero-image">
         {% when None %}
     {% endmatch %}
 </div>
@@ -67,21 +78,21 @@
                             </span>
                         {% when None %}
                     {% endmatch %}
-                    <div style="display: flex; gap: 0.25rem; margin-right: 1rem;">
-                        <button class="btn btn-primary unit-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="setUnitSystem('original', this)">Original</button>
-                        <button class="btn btn-secondary unit-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="setUnitSystem('metric', this)">Metric</button>
-                        <button class="btn btn-secondary unit-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="setUnitSystem('imperial', this)">Imperial</button>
-                    </div>
-                    <div style="display: flex; gap: 0.25rem;">
-                        <button class="btn btn-secondary scale-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="scaleIngredients(0.5, this)">0.5x</button>
-                        <button class="btn btn-primary scale-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="scaleIngredients(1, this)">1x</button>
-                        <button class="btn btn-secondary scale-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="scaleIngredients(2, this)">2x</button>
-                        <button class="btn btn-secondary scale-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="scaleIngredients(3, this)">3x</button>
-                    </div>
-                    <button id="wakelock-btn" class="btn btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.8rem; display: flex; align-items: center; gap: 0.4rem;" onclick="toggleWakeLock()">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.7 1.5-1.7 1.5-2.7a5 5 0 1 0-10 0c0 1 .5 2 1.5 2.7.8.8 1.3 1.5 1.5 2.5"></path><line x1="9" y1="18" x2="15" y2="18"></line><line x1="10" y1="22" x2="14" y2="22"></line></svg>
-                        Keep Screen On
-                    </button>
+                </div>
+            </div>
+            <div class="unit-scaling-row" style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; background: var(--bg-color); padding: 0.75rem; border-radius: var(--radius-md);">
+                <div style="display: flex; gap: 0.25rem; align-items: center;">
+                    <span style="font-size: 0.8rem; color: var(--text-secondary); margin-right: 0.5rem;">Units:</span>
+                    <button class="btn btn-primary unit-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="setUnitSystem('original', this)">Original</button>
+                    <button class="btn btn-secondary unit-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="setUnitSystem('metric', this)">Metric</button>
+                    <button class="btn btn-secondary unit-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="setUnitSystem('imperial', this)">Imperial</button>
+                </div>
+                <div style="display: flex; gap: 0.25rem; align-items: center;">
+                    <span style="font-size: 0.8rem; color: var(--text-secondary); margin-right: 0.5rem;">Scale:</span>
+                    <button class="btn btn-secondary scale-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="scaleIngredients(0.5, this)">0.5x</button>
+                    <button class="btn btn-primary scale-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="scaleIngredients(1, this)">1x</button>
+                    <button class="btn btn-secondary scale-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="scaleIngredients(2, this)">2x</button>
+                    <button class="btn btn-secondary scale-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="scaleIngredients(3, this)">3x</button>
                 </div>
             </div>
             <ul style="list-style-type: none; padding: 0;">
@@ -549,6 +560,20 @@ if (csvUrlInput && window.Papa && window.Chart) {
         // Scroll to top of content
         if (window.innerWidth <= 768) {
             window.scrollTo({ top: document.querySelector('.recipe-content').offsetTop - 100, behavior: 'smooth' });
+        }
+    }
+
+    function toggleMobileImage() {
+        const img = document.getElementById('recipe-hero-image');
+        const btn = document.getElementById('mobile-image-toggle');
+        const span = btn.querySelector('span');
+        
+        if (img.classList.contains('force-show')) {
+            img.classList.remove('force-show');
+            span.textContent = 'Show Photo';
+        } else {
+            img.classList.add('force-show');
+            span.textContent = 'Hide Photo';
         }
     }
 </script>

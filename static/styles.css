@@ -357,6 +357,16 @@ main {
   .recipe-hero-img {
     display: none;
   }
+
+  .recipe-hero-img.force-show {
+    display: block !important;
+    margin-top: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  #mobile-image-toggle {
+    display: flex !important;
+  }
   
   .recipe-header h1 {
     font-size: 1.75rem;
@@ -406,4 +416,9 @@ main {
 
 .CodeMirror-cursor {
   border-left: 1px solid var(--text-primary) !important;
+}
+@media (max-width: 768px) {
+  .wakelock-text {
+    display: none;
+  }
 }
