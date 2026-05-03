@@ -269,7 +269,9 @@ fn parse_iso8601_duration(duration: &str) -> String {
                         current_num.clear();
                     }
                 }
-                _ => {}
+                _ => {
+                    current_num.clear();
+                }
             }
         }
     }
@@ -504,4 +506,33 @@ pub async fn import_recipe_from_photo(mime_type: &str, image_data: &[u8]) -> Opt
     }
 
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_iso8601_duration() {
+        assert_eq!(parse_iso8601_duration("PT1H30M"), "1h 30m");
+        assert_eq!(parse_iso8601_duration("PT45M"), "45m");
+        assert_eq!(parse_iso8601_duration("PT2H"), "2h");
+        assert_eq!(parse_iso8601_duration("PT10S"), "10s");
+        assert_eq!(parse_iso8601_duration("P1DT1H"), "1h");
+    }
+
+    #[test]
+    fn test_extract_recipe_from_json() {
+        let json = r#"{
+            "@context": "https://schema.org",
+            "@type": "Recipe",
+            "name": "Test Recipe",
+            "recipeIngredient": ["1 cup water"],
+            "recipeInstructions": [{"@type": "HowToStep", "text": "Boil water"}]
+        }"#;
+        let extracted = extract_recipe_from_json(json);
+        assert!(extracted.is_some());
+        let ld = extracted.unwrap();
+        assert_eq!(ld.name, "Test Recipe");
+    }
 }

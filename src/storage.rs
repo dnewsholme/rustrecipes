@@ -1,5 +1,5 @@
 use crate::models::Recipe;
-use tracing::error;
+// use tracing::error;
 
 use pulldown_cmark::{html, Parser};
 use std::fs;
@@ -81,4 +81,45 @@ pub async fn save_recipe(recipe: &Recipe) -> Result<(), std::io::Error> {
 pub async fn delete_recipe(id: &str) -> Result<(), std::io::Error> {
     let path = get_recipes_dir().join(format!("{}.md", id));
     fs::remove_file(path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::Recipe;
+    use std::fs;
+
+    #[tokio::test]
+    async fn test_save_and_read_recipe() {
+        let temp_dir = "data/test_recipes";
+        fs::create_dir_all(temp_dir).unwrap();
+        
+        // Mock get_recipes_dir for testing if possible, 
+        // but since it's hardcoded to "data/recipes", we'll just use a test ID
+        let test_id = "test-recipe-123";
+        let recipe = Recipe {
+            id: test_id.to_string(),
+            title: "Test Recipe".to_string(),
+            description: Some("Test description".to_string()),
+            image: None,
+            source_url: None,
+            tags: vec!["test".to_string()],
+            servings: Some(4),
+            prep_time: None,
+            cook_time: None,
+            ingredients: vec!["Ingredient 1".to_string()],
+            markdown: "## Directions\n1. Do something".to_string(),
+            html: None,
+            combustion_csv: None,
+        };
+
+        // We'll temporarily point to a test file in the real dir or just use a unique ID
+        save_recipe(&recipe).await.unwrap();
+        
+        let read = read_recipe(test_id).await.unwrap();
+        assert_eq!(read.title, "Test Recipe");
+        assert_eq!(read.tags, vec!["test".to_string()]);
+        
+        delete_recipe(test_id).await.unwrap();
+    }
 }

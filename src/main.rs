@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use tower_http::{services::ServeDir, trace::TraceLayer};
 use tracing::{info, error, warn};
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use tracing_subscriber;
 
 #[derive(Template)]
 #[template(path = "index.html")]
