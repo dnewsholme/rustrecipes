@@ -418,6 +418,39 @@ main {
   border-left: 1px solid var(--text-primary) !important;
 }
 @media (max-width: 768px) {
+  header .container {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+  }
+
+  .logo {
+    font-size: 1.25rem;
+  }
+
+  .logo svg {
+    width: 24px;
+    height: 24px;
+  }
+
+  nav {
+    width: 100%;
+    justify-content: space-between;
+    gap: 0.5rem !important;
+  }
+
+  nav .btn-primary {
+    padding: 0.5rem 0.75rem;
+  }
+
+  nav .btn-primary span:not(.mobile-only) {
+    display: none;
+  }
+
+  nav .btn-primary span.mobile-only {
+    display: inline-flex !important;
+  }
+
   .wakelock-text {
     display: none;
   }
