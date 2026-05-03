@@ -347,10 +347,10 @@ async fn update_recipe(Path(id): Path<String>, multipart: Multipart) -> impl Int
         if form.image.is_some() {
             recipe.image = form.image;
         }
-        if form.combustion_csv.is_some() {
-            recipe.combustion_csv = form.combustion_csv;
-        } else if form.remove_combustion_csv {
+        if form.remove_combustion_csv {
             recipe.combustion_csv = None;
+        } else if form.combustion_csv.is_some() {
+            recipe.combustion_csv = form.combustion_csv;
         }
         recipe.source_url = form.source_url;
         recipe.tags = form.tags;
