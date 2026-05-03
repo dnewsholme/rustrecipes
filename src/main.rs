@@ -60,6 +60,7 @@ struct RecipeFormData {
     servings: Option<u32>,
     prep_time: Option<String>,
     cook_time: Option<String>,
+    source_url: Option<String>,
     remove_combustion_csv: bool,
 }
 
@@ -74,6 +75,7 @@ async fn parse_recipe_multipart(mut multipart: Multipart) -> Option<RecipeFormDa
     let mut servings = None;
     let mut prep_time = None;
     let mut cook_time = None;
+    let mut source_url = None;
     let mut remove_combustion_csv = false;
 
     while let Some(field) = multipart.next_field().await.unwrap_or(None) {
@@ -137,6 +139,7 @@ async fn parse_recipe_multipart(mut multipart: Multipart) -> Option<RecipeFormDa
                 "servings" => servings = text.parse::<u32>().ok(),
                 "prep_time" => prep_time = if text.trim().is_empty() { None } else { Some(text) },
                 "cook_time" => cook_time = if text.trim().is_empty() { None } else { Some(text) },
+                "source_url" => source_url = if text.trim().is_empty() { None } else { Some(text) },
                 "remove_combustion_csv" => remove_combustion_csv = text == "true",
                 _ => {}
             }
@@ -148,7 +151,7 @@ async fn parse_recipe_multipart(mut multipart: Multipart) -> Option<RecipeFormDa
     }
     
     Some(RecipeFormData {
-        title, description, image, combustion_csv, markdown, tags, ingredients, servings, prep_time, cook_time, remove_combustion_csv
+        title, description, image, combustion_csv, markdown, tags, ingredients, servings, prep_time, cook_time, source_url, remove_combustion_csv
     })
 }
 
@@ -234,7 +237,7 @@ async fn create_recipe(multipart: Multipart) -> impl IntoResponse {
         description: form.description,
         image: form.image,
         combustion_csv: form.combustion_csv,
-        source_url: None,
+        source_url: form.source_url,
         tags: form.tags,
         servings: form.servings,
         prep_time: form.prep_time,
@@ -280,6 +283,7 @@ async fn update_recipe(Path(id): Path<String>, multipart: Multipart) -> impl Int
         } else if form.remove_combustion_csv {
             recipe.combustion_csv = None;
         }
+        recipe.source_url = form.source_url;
         recipe.tags = form.tags;
         recipe.servings = form.servings;
         recipe.prep_time = form.prep_time;

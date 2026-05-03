@@ -22,6 +22,11 @@
             <textarea id="description" name="description" class="form-control" rows="2">{% match recipe.description %}{% when Some with (desc) %}{{ desc }}{% when None %}{% endmatch %}</textarea>
         </div>
 
+        <div class="form-group">
+            <label class="form-label" for="source_url">Original Source URL (Optional)</label>
+            <input type="url" id="source_url" name="source_url" class="form-control" value="{% match recipe.source_url %}{% when Some with (url) %}{{ url }}{% when None %}{% endmatch %}" placeholder="https://example.com/recipe">
+        </div>
+
         <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
             <div class="form-group" style="flex: 1; min-width: 100px;">
                 <label class="form-label" for="servings">Servings</label>
