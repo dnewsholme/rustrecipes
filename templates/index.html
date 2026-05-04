@@ -40,20 +40,25 @@
 {% endif %}
 
 <div style="margin-bottom: 2rem;">
-    <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 1rem; flex-wrap: wrap;">
+    <div style="display: flex; gap: 0.75rem; align-items: center; margin-bottom: 1rem; flex-wrap: wrap;">
         <div style="flex-grow: 1; position: relative;">
-            <input type="search" id="recipe-search" class="form-control" placeholder="Search recipes by title, ingredients, or tags..." style="padding: 1rem 3rem 1rem 1rem; font-size: 1.1rem; border-radius: var(--radius-lg); width: 100%;">
-            <button onclick="clearFilters()" style="position: absolute; right: 1rem; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-secondary); cursor: pointer; padding: 0.5rem; display: none;" id="clear-search-btn" title="Clear Search">
+            <input type="search" id="recipe-search" class="form-control" placeholder="Search recipes..." style="padding: 0.8rem 3rem 0.8rem 1rem; font-size: 1.1rem; border-radius: var(--radius-lg); width: 100%;">
+            <button onclick="clearFilters()" style="position: absolute; right: 0.75rem; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-secondary); cursor: pointer; padding: 0.5rem; display: none;" id="clear-search-btn" title="Clear Search">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
             </button>
         </div>
+        {% if !all_tags.is_empty() %}
+        <button id="toggle-filters-btn" class="btn btn-secondary" style="display: flex; align-items: center; gap: 0.5rem; white-space: nowrap; padding: 0.8rem 1.2rem; border-radius: var(--radius-lg);">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+            Filter by Tag
+        </button>
+        {% endif %}
     </div>
 
     {% if !all_tags.is_empty() %}
-    <div id="tag-filters" style="display: flex; gap: 0.5rem; flex-wrap: wrap; background: var(--surface-hover); padding: 1rem; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
-        <span style="font-size: 0.85rem; color: var(--text-secondary); margin-right: 0.5rem; align-self: center; font-weight: 600;">Filter by Tag:</span>
+    <div id="tag-filters" style="display: none; gap: 0.5rem; flex-wrap: wrap; background: var(--surface-hover); padding: 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border-color); margin-bottom: 1rem;">
         {% for tag in all_tags %}
-            <button class="tag-filter-btn" data-tag="{{ tag }}" onclick="toggleTagFilter('{{ tag }}')" style="background: var(--bg-color); border: 1px solid var(--border-color); padding: 0.25rem 0.75rem; border-radius: 15px; font-size: 0.8rem; color: var(--text-secondary); cursor: pointer; transition: var(--transition);">
+            <button class="tag-filter-btn" data-tag="{{ tag }}" onclick="toggleTagFilter('{{ tag }}')" style="background: var(--bg-color); border: 1px solid var(--border-color); padding: 0.35rem 0.85rem; border-radius: 20px; font-size: 0.85rem; color: var(--text-secondary); cursor: pointer; transition: var(--transition);">
                 #{{ tag }}
             </button>
         {% endfor %}
@@ -158,6 +163,19 @@ document.getElementById('toggle-import-btn')?.addEventListener('click', function
         section.style.display = 'block';
     } else {
         section.style.display = 'none';
+    }
+});
+
+document.getElementById('toggle-filters-btn')?.addEventListener('click', function() {
+    const section = document.getElementById('tag-filters');
+    if (section.style.display === 'none') {
+        section.style.display = 'flex';
+        this.classList.remove('btn-secondary');
+        this.classList.add('btn-primary');
+    } else {
+        section.style.display = 'none';
+        this.classList.remove('btn-primary');
+        this.classList.add('btn-secondary');
     }
 });
 
