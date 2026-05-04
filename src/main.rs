@@ -594,7 +594,8 @@ async fn login_submit(
 }
 
 async fn logout(jar: PrivateCookieJar) -> impl IntoResponse {
-    let updated_jar = jar.remove(Cookie::from("admin_session"));
+    let cookie = Cookie::build("admin_session").path("/").build();
+    let updated_jar = jar.remove(cookie);
     (updated_jar, Redirect::to(&format!("{}/", get_base_url())))
 }
 
