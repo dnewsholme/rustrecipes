@@ -34,6 +34,7 @@ impl FromRef<AppState> for Key {
 #[template(path = "index.html")]
 struct IndexTemplate {
     recipes: Vec<models::Recipe>,
+    all_tags: Vec<String>,
     base_url: String,
     app_version: String,
     is_admin: bool,
@@ -283,8 +284,17 @@ fn is_admin_session(jar: &PrivateCookieJar) -> bool {
 
 async fn index(jar: PrivateCookieJar) -> impl IntoResponse {
     let recipes = storage::list_recipes().await;
+    let mut all_tags: Vec<String> = recipes
+        .iter()
+        .flat_map(|r| r.tags.clone())
+        .map(|t| t.to_lowercase())
+        .collect();
+    all_tags.sort();
+    all_tags.dedup();
+
     let template = IndexTemplate {
         recipes,
+        all_tags,
         base_url: get_base_url(),
         app_version: APP_VERSION.to_string(),
         is_admin: is_admin_session(&jar),

@@ -39,9 +39,27 @@
 </section>
 {% endif %}
 
-<form id="search-form" onsubmit="event.preventDefault(); return false;" style="margin-bottom: 2rem;">
-    <input type="search" id="recipe-search" class="form-control" placeholder="Search recipes by title, ingredients, or tags..." style="padding: 1rem; font-size: 1.1rem; border-radius: var(--radius-lg);">
-</form>
+<div style="margin-bottom: 2rem;">
+    <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 1rem; flex-wrap: wrap;">
+        <div style="flex-grow: 1; position: relative;">
+            <input type="search" id="recipe-search" class="form-control" placeholder="Search recipes by title, ingredients, or tags..." style="padding: 1rem 3rem 1rem 1rem; font-size: 1.1rem; border-radius: var(--radius-lg); width: 100%;">
+            <button onclick="clearFilters()" style="position: absolute; right: 1rem; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-secondary); cursor: pointer; padding: 0.5rem; display: none;" id="clear-search-btn" title="Clear Search">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+        </div>
+    </div>
+
+    {% if !all_tags.is_empty() %}
+    <div id="tag-filters" style="display: flex; gap: 0.5rem; flex-wrap: wrap; background: var(--surface-hover); padding: 1rem; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+        <span style="font-size: 0.85rem; color: var(--text-secondary); margin-right: 0.5rem; align-self: center; font-weight: 600;">Filter by Tag:</span>
+        {% for tag in all_tags %}
+            <button class="tag-filter-btn" data-tag="{{ tag }}" onclick="toggleTagFilter('{{ tag }}')" style="background: var(--bg-color); border: 1px solid var(--border-color); padding: 0.25rem 0.75rem; border-radius: 15px; font-size: 0.8rem; color: var(--text-secondary); cursor: pointer; transition: var(--transition);">
+                #{{ tag }}
+            </button>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
 
 <div class="recipe-grid">
     {% for recipe in recipes %}
@@ -144,13 +162,28 @@ document.getElementById('toggle-import-btn')?.addEventListener('click', function
 });
 
 const searchInput = document.getElementById('recipe-search');
+const clearBtn = document.getElementById('clear-search-btn');
+let activeTag = null;
+
 const filterRecipes = () => {
     const term = searchInput.value.toLowerCase();
     const cards = document.querySelectorAll('.recipe-card');
+    
+    if (term || activeTag) {
+        clearBtn.style.display = 'block';
+    } else {
+        clearBtn.style.display = 'none';
+    }
+
     cards.forEach(card => {
-        const text = card.innerText.toLowerCase();
+        const title = card.querySelector('.recipe-title')?.innerText.toLowerCase() || '';
+        const desc = card.querySelector('.recipe-desc')?.innerText.toLowerCase() || '';
         const searchData = (card.dataset.search || '').toLowerCase();
-        if (text.includes(term) || searchData.includes(term)) {
+        
+        const matchesText = !term || title.includes(term) || desc.includes(term) || searchData.includes(term);
+        const matchesTag = !activeTag || searchData.includes(activeTag.toLowerCase());
+
+        if (matchesText && matchesTag) {
             card.style.display = 'flex';
         } else {
             card.style.display = 'none';
@@ -158,19 +191,47 @@ const filterRecipes = () => {
     });
 };
 
+function toggleTagFilter(tag) {
+    const btns = document.querySelectorAll('.tag-filter-btn');
+    if (activeTag === tag) {
+        activeTag = null;
+    } else {
+        activeTag = tag;
+    }
+
+    btns.forEach(btn => {
+        if (btn.dataset.tag === activeTag) {
+            btn.style.background = 'var(--accent-color)';
+            btn.style.color = 'white';
+            btn.style.borderColor = 'var(--accent-color)';
+        } else {
+            btn.style.background = 'var(--bg-color)';
+            btn.style.color = 'var(--text-secondary)';
+            btn.style.borderColor = 'var(--border-color)';
+        }
+    });
+
+    filterRecipes();
+}
+
 function filterByTag(tag, event) {
     if (event) event.preventDefault();
-    searchInput.value = tag;
-    filterRecipes();
+    toggleTagFilter(tag);
     window.scrollTo({ top: searchInput.offsetTop - 100, behavior: 'smooth' });
 }
 
-searchInput?.addEventListener('input', filterRecipes);
-document.getElementById('search-form')?.addEventListener('submit', (e) => {
-    e.preventDefault();
+function clearFilters() {
+    searchInput.value = '';
+    activeTag = null;
+    document.querySelectorAll('.tag-filter-btn').forEach(btn => {
+        btn.style.background = 'var(--bg-color)';
+        btn.style.color = 'var(--text-secondary)';
+        btn.style.borderColor = 'var(--border-color)';
+    });
     filterRecipes();
-    searchInput.blur(); // Hide mobile keyboard
-});
+}
+
+searchInput?.addEventListener('input', filterRecipes);
 
 document.getElementById('photo-import-form')?.addEventListener('submit', function(e) {
     const btn = document.getElementById('photo-import-btn');
