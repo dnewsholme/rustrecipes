@@ -116,6 +116,12 @@
                     <button class="btn btn-secondary scale-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="scaleIngredients(2, this)">2x</button>
                     <button class="btn btn-secondary scale-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="scaleIngredients(3, this)">3x</button>
                 </div>
+                <div style="display: flex; gap: 0.25rem; align-items: center;">
+                    <span style="font-size: 0.8rem; color: var(--text-secondary); margin-right: 0.5rem;">Temp:</span>
+                    <button class="btn btn-primary temp-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="setTempSystem('original', this)">Original</button>
+                    <button class="btn btn-secondary temp-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="setTempSystem('c', this)">°C</button>
+                    <button class="btn btn-secondary temp-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="setTempSystem('f', this)">°F</button>
+                </div>
             </div>
             <ul style="list-style-type: none; padding: 0;">
                 {% for ingredient in recipe.ingredients %}
@@ -168,11 +174,11 @@
                     </div>
                     
                     <div style="margin-bottom: 1.5rem;">
-                        <label style="display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.5rem;">Temperature (<span id="temp-display">24</span>°C)</label>
+                        <label style="display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 0.5rem;">Temperature (<span id="temp-display">24</span>°<span id="temp-unit-display">C</span>)</label>
                         <input type="range" id="ferment-temp" min="10" max="40" value="24" class="form-control" style="padding: 0;" oninput="updateFermentation()">
                         <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem;">
-                            <span>Cool (10°C)</span>
-                            <span>Warm (40°C)</span>
+                            <span id="temp-min-display">Cool (10°C)</span>
+                            <span id="temp-max-display">Warm (40°C)</span>
                         </div>
                     </div>
 
@@ -263,6 +269,7 @@ function parseNumStr(numStr) {
 }
 
 let currentUnitSystem = 'original'; // 'original', 'metric', 'imperial'
+let currentTempSystem = 'original'; // 'original', 'c', 'f'
 let currentMultiplier = 1;
 let showBakersPercentage = false;
 
@@ -276,6 +283,23 @@ function toggleBakersPercentage(btn) {
         btn.classList.add('btn-secondary');
     }
     applyScalingAndUnits();
+}
+
+function setTempSystem(system, btn) {
+    document.querySelectorAll('.temp-btn').forEach(b => {
+        b.classList.remove('btn-primary');
+        b.classList.add('btn-secondary');
+    });
+    btn.classList.add('btn-primary');
+    btn.classList.remove('btn-secondary');
+    
+    currentTempSystem = system;
+    applyScalingAndUnits();
+    
+    // Update fermentation calculator if present
+    if (document.getElementById('ferment-temp')) {
+        updateFermentation();
+    }
 }
 
 function setUnitSystem(system, btn) {
@@ -371,29 +395,46 @@ document.addEventListener('DOMContentLoaded', () => {
     const instructionsDiv = document.getElementById('recipe-instructions');
     if (!instructionsDiv) return;
 
-    // Use a negative lookbehind (or word boundary fallback) to avoid matching inside words,
-    // but without breaking unicode fractions which don't have \b at the start.
-    const regex = new RegExp(`(?:^|\\s|\\()(${numberRegexStr})\\s*(${unitsRegexStr})\\b`, 'gi');
+    // Detect units in instructions
+    const unitRegex = new RegExp(`(?:^|\\s|\\()(${numberRegexStr})\\s*(${unitsRegexStr})\\b`, 'gi');
+    // Detect temperatures in instructions
+    const tempRegex = new RegExp(`(?:^|\\s|\\()(\\d+)\\s*(?:°|degrees?\\s+)?(c|f|celsius|fahrenheit)\\b`, 'gi');
 
     const walker = document.createTreeWalker(instructionsDiv, NodeFilter.SHOW_TEXT, null, false);
     const nodesToReplace = [];
     let node;
     while (node = walker.nextNode()) {
         if (node.parentNode.nodeName === 'SCRIPT' || node.parentNode.nodeName === 'STYLE') continue;
-        if (regex.test(node.nodeValue)) {
+        if (unitRegex.test(node.nodeValue) || tempRegex.test(node.nodeValue)) {
             nodesToReplace.push(node);
         }
-        regex.lastIndex = 0;
+        unitRegex.lastIndex = 0;
+        tempRegex.lastIndex = 0;
     }
 
     nodesToReplace.forEach(textNode => {
         const fragment = document.createDocumentFragment();
-        let lastIndex = 0;
-        let match;
         const text = textNode.nodeValue;
-        regex.lastIndex = 0;
+        let lastIndex = 0;
         
-        while ((match = regex.exec(text)) !== null) {
+        // Find all matches for both regexes
+        const matches = [];
+        let match;
+        unitRegex.lastIndex = 0;
+        while ((match = unitRegex.exec(text)) !== null) {
+            matches.push({ type: 'unit', match });
+        }
+        tempRegex.lastIndex = 0;
+        while ((match = tempRegex.exec(text)) !== null) {
+            matches.push({ type: 'temp', match });
+        }
+        
+        // Sort matches by index
+        matches.sort((a, b) => a.match.index - b.match.index);
+        
+        matches.forEach(({ type, match }) => {
+            if (match.index < lastIndex) return; // Skip overlapping matches
+            
             if (match.index > lastIndex) {
                 fragment.appendChild(document.createTextNode(text.substring(lastIndex, match.index)));
             }
@@ -407,18 +448,24 @@ document.addEventListener('DOMContentLoaded', () => {
             fragment.appendChild(document.createTextNode(leadingChar));
             
             const span = document.createElement('span');
-            span.className = 'instruction-amount';
             span.style.fontWeight = 'bold'; 
             span.style.color = 'var(--primary-color)';
             
-            span.dataset.base = parseNumStr(numStr);
-            span.dataset.unit = unitStr;
-            span.textContent = fullMatch.substring(leadingChar.length);
+            if (type === 'unit') {
+                span.className = 'instruction-amount';
+                span.dataset.base = parseNumStr(numStr);
+                span.dataset.unit = unitStr;
+            } else {
+                span.className = 'instruction-temp';
+                span.dataset.base = numStr;
+                span.dataset.unit = unitStr.toLowerCase().startsWith('c') ? 'c' : 'f';
+            }
             
+            span.textContent = fullMatch.substring(leadingChar.length);
             fragment.appendChild(span);
             
-            lastIndex = regex.lastIndex;
-        }
+            lastIndex = match.index + fullMatch.length;
+        });
         
         if (lastIndex < text.length) {
             fragment.appendChild(document.createTextNode(text.substring(lastIndex)));
@@ -532,6 +579,29 @@ function applyScalingAndUnits() {
             }
             
             span.textContent = displayText;
+        }
+    });
+
+    const instructionTemps = document.querySelectorAll('.instruction-temp');
+    instructionTemps.forEach(span => {
+        const base = parseFloat(span.dataset.base);
+        const baseUnit = span.dataset.unit;
+        
+        if (!isNaN(base)) {
+            let finalVal = base;
+            let finalUnit = baseUnit;
+            
+            if (currentTempSystem !== 'original') {
+                if (baseUnit === 'f' && currentTempSystem === 'c') {
+                    finalVal = (base - 32) * 5 / 9;
+                    finalUnit = 'c';
+                } else if (baseUnit === 'c' && currentTempSystem === 'f') {
+                    finalVal = (base * 9 / 5) + 32;
+                    finalUnit = 'f';
+                }
+            }
+            
+            span.textContent = Math.round(finalVal) + "°" + finalUnit.toUpperCase();
         }
     });
 }
@@ -728,12 +798,27 @@ if (csvUrlInput && window.Papa && window.Chart) {
         }
     }
 
-    // Fermentation Calculator Logic
     function updateFermentation() {
         const type = document.getElementById('leaven-type').value;
-        const temp = parseFloat(document.getElementById('ferment-temp').value);
+        let temp = parseFloat(document.getElementById('ferment-temp').value);
         const amount = parseFloat(document.getElementById('leaven-amount').value);
-        document.getElementById('temp-display').innerText = temp;
+        
+        let displayTemp = temp;
+        let displayUnit = 'C';
+        let displayMin = '10°C';
+        let displayMax = '40°C';
+
+        if (currentTempSystem === 'f') {
+            displayTemp = Math.round((temp * 9 / 5) + 32);
+            displayUnit = 'F';
+            displayMin = '50°F';
+            displayMax = '104°F';
+        }
+
+        document.getElementById('temp-display').innerText = displayTemp;
+        document.getElementById('temp-unit-display').innerText = displayUnit;
+        document.getElementById('temp-min-display').innerText = "Cool (" + displayMin + ")";
+        document.getElementById('temp-max-display').innerText = "Warm (" + displayMax + ")";
 
         if (isNaN(temp) || isNaN(amount) || amount <= 0) {
             document.getElementById('ferment-time-result').innerText = '--';
