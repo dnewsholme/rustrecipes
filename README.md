@@ -24,6 +24,9 @@ A lightning-fast, highly-customizable recipe manager built in Rust. It's designe
   - **URL Import**: Automatically scrape recipes from URLs using LD+JSON or a robust Gemini AI fallback for sites without structured data.
   - **Paprika Import**: Bulk import archives (`.paprikarecipes`) from Paprika Recipe Manager.
   - **AI Photo Import**: Take a photo of a cookbook page, and the built-in Gemini AI Vision integration will automatically extract the title, ingredients, and instructions!
+- **Cooking Temperatures & Safety**: 
+  - **Meat Temp Reference**: A dedicated reference page for internal meat temperatures and doneness levels, covering everything from rare steak to low & slow BBQ brisket.
+  - **USDA Log 7 Calculator**: Interactive calculator for poultry safety. Achieve perfectly juicy chicken at lower temperatures by calculating the required hold time for safe Salmonella lethality.
 - **Secure Admin Login**: Protect your recipes from unauthorized edits or imports. Set an `ADMIN_PASSWORD_HASH` environment variable to restrict modifying actions to yourself while keeping the site read-only for guests.
 - **Interactive Tagging**: Add tags to your recipes and click them on the dashboard to instantly filter your collection.
 - **Prep & Cook Times**: Automated extraction of durations from imports, or manual entry with visual indicators.
