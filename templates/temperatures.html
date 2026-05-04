@@ -141,6 +141,45 @@
             <p style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 1rem; font-style: italic;">Note: For BBQ, tenderness is the ultimate guide. "Probe tender" is the goal.</p>
         </div>
     </div>
+
+    <!-- USDA Log 7 Calculator -->
+    <div style="margin-top: 4rem; background: var(--surface-color); border: 2px solid #e74c3c; border-radius: var(--radius-lg); padding: 2rem;">
+        <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
+            <div style="background: #e74c3c; color: white; padding: 0.75rem; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            </div>
+            <h2 style="margin: 0;">USDA Log 7 Lethality Calculator</h2>
+        </div>
+        
+        <p style="color: var(--text-secondary); margin-bottom: 2rem; line-height: 1.6;">
+            Cooking poultry isn't just about reaching <span class="temp-val" data-c="74">74</span><span class="unit-label">°C</span>. Safety is a function of both <strong>temperature</strong> and <strong>time</strong>. 
+            A 7-log reduction in Salmonella (making it safe) can be achieved at lower temperatures if held for long enough.
+        </p>
+
+        <div style="display: flex; flex-direction: column; gap: 2rem;">
+            <div class="calculator-box" style="background: var(--bg-color); padding: 2rem; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 1rem;">
+                    <label style="font-weight: 600;">Internal Temperature:</label>
+                    <span style="font-weight: 700; color: #e74c3c; font-size: 1.5rem;" id="calc-temp-display">65°C</span>
+                </div>
+                <input type="range" id="log7-temp-range" min="58" max="74" step="0.5" value="65" style="width: 100%; margin-bottom: 2rem; accent-color: #e74c3c;">
+                
+                <div style="background: var(--surface-hover); padding: 1.5rem; border-radius: var(--radius-md); text-align: center;">
+                    <div style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em;">Required Hold Time</div>
+                    <div style="font-size: 2.5rem; font-weight: 800; color: var(--text-color);" id="calc-time-display">2.5 Minutes</div>
+                </div>
+            </div>
+
+            <div style="font-size: 0.85rem; color: var(--text-secondary);">
+                <p><strong>Important Notes:</strong></p>
+                <ul style="padding-left: 1.2rem; display: flex; flex-direction: column; gap: 0.5rem;">
+                    <li>The clock starts <strong>only</strong> when the thermal center reaches the target temperature.</li>
+                    <li>This data is based on FSIS 7.0-log10 lethality for poultry with 12% fat.</li>
+                    <li>For general safety, the USDA continues to recommend an instantaneous internal temperature of <span class="temp-val" data-c="74">74</span><span class="unit-label">°C</span>.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}
 
@@ -173,7 +212,70 @@
         });
         
         localStorage.setItem('temp-unit-pref', unit);
+        updateLog7Calculator();
     }
+
+    // Log 7 Calculator Logic
+    const log7Table = [
+        { f: 136, c: 57.8, s: 4104 }, // 68.4 min
+        { f: 140, c: 60.0, s: 1650 }, // 27.5 min
+        { f: 145, c: 62.8, s: 552 },  // 9.2 min
+        { f: 150, c: 65.6, s: 162 },  // 2.7 min
+        { f: 155, c: 68.3, s: 48 },   // 48 sec
+        { f: 160, c: 71.1, s: 14 },   // 14 sec
+        { f: 165, c: 73.9, s: 0 }    // Instant
+    ];
+
+    const slider = document.getElementById('log7-temp-range');
+    const tempDisplay = document.getElementById('calc-temp-display');
+    const timeDisplay = document.getElementById('calc-time-display');
+
+    function updateLog7Calculator() {
+        let tempC = parseFloat(slider.value);
+        
+        // Update temperature display with current units
+        if (currentUnit === 'fahrenheit') {
+            let tempF = Math.round((tempC * 9/5) + 32);
+            tempDisplay.innerText = `${tempF}°F`;
+        } else {
+            tempDisplay.innerText = `${tempC}°C`;
+        }
+
+        // Interpolate time
+        let seconds = 0;
+        if (tempC >= 73.9) {
+            seconds = 0;
+        } else if (tempC < 57.8) {
+            seconds = 9999; // Out of range
+        } else {
+            // Find the segment
+            for (let i = 0; i < log7Table.length - 1; i++) {
+                const p1 = log7Table[i];
+                const p2 = log7Table[i+1];
+                if (tempC >= p1.c && tempC <= p2.c) {
+                    // Linear interpolation on log scale is better, but simple linear is okay for small steps
+                    // Let's do linear on the seconds for simplicity in this UI
+                    const ratio = (tempC - p1.c) / (p2.c - p1.c);
+                    seconds = p1.s + ratio * (p2.s - p1.s);
+                    break;
+                }
+            }
+        }
+
+        // Format time display
+        if (seconds === 0) {
+            timeDisplay.innerText = "Instantaneous";
+        } else if (seconds > 3600) {
+            timeDisplay.innerText = "> 1 Hour";
+        } else if (seconds >= 60) {
+            let mins = (seconds / 60).toFixed(1);
+            timeDisplay.innerText = `${mins} Minutes`;
+        } else {
+            timeDisplay.innerText = `${Math.round(seconds)} Seconds`;
+        }
+    }
+
+    slider.addEventListener('input', updateLog7Calculator);
 
     // Load preference
     document.addEventListener('DOMContentLoaded', () => {
@@ -183,6 +285,7 @@
         } else {
             setGlobalUnit('celsius');
         }
+        updateLog7Calculator();
     });
 </script>
 {% endblock %}
