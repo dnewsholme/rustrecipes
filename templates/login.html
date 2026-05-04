@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Login{% endblock %}
+
+{% block header_actions %}
+{% endblock %}
+
+{% block content %}
+<div style="max-width: 400px; margin: 4rem auto; padding: 2rem; background: var(--surface-color); border: 1px solid var(--border-color); border-radius: var(--radius-lg); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);">
+    <h2 style="text-align: center; margin-bottom: 2rem; color: var(--text-color);">Admin Login</h2>
+    
+    {% match error %}
+        {% when Some with (msg) %}
+            <div style="background: rgba(239, 68, 68, 0.1); color: #ef4444; padding: 1rem; border-radius: var(--radius-md); margin-bottom: 1.5rem; text-align: center; font-size: 0.9rem;">
+                {{ msg }}
+            </div>
+        {% when None %}
+    {% endmatch %}
+
+    <form action="login" method="POST">
+        <div style="margin-bottom: 1.5rem;">
+            <label for="password" style="display: block; font-size: 0.9rem; font-weight: 500; margin-bottom: 0.5rem; color: var(--text-color);">Password</label>
+            <input type="password" id="password" name="password" class="form-control" required style="width: 100%; box-sizing: border-box;" autofocus>
+        </div>
+        <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center;">Log In</button>
+    </form>
+</div>
+{% endblock %}

@@ -3,10 +3,13 @@
 {% block title %}Home{% endblock %}
 
 {% block header_actions %}
+{% if is_admin %}
 <button id="toggle-import-btn" class="btn btn-secondary">Import Recipe</button>
+{% endif %}
 {% endblock %}
 
 {% block content %}
+{% if is_admin %}
 <section id="importer-section" class="importer-section" style="display: none;">
     <h2>Import Recipe</h2>
     <p style="color: var(--text-secondary); margin-bottom: 1rem;">Import from a URL, upload a Paprika export, or snap a photo of a cookbook using AI!</p>
@@ -34,6 +37,7 @@
         </div>
     </div>
 </section>
+{% endif %}
 
 <form id="search-form" onsubmit="event.preventDefault(); return false;" style="margin-bottom: 2rem;">
     <input type="search" id="recipe-search" class="form-control" placeholder="Search recipes by title, ingredients, or tags..." style="padding: 1rem; font-size: 1.1rem; border-radius: var(--radius-lg);">

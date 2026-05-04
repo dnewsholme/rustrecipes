@@ -5,15 +5,30 @@ mod storage;
 use askama::Template;
 use axum::{
     Form, Router,
-    extract::{DefaultBodyLimit, Multipart, Path},
+    extract::Request,
+    extract::{DefaultBodyLimit, FromRef, Multipart, Path, State},
     http::StatusCode,
+    middleware::{self, Next},
     response::{Html, IntoResponse, Json, Redirect, Response},
     routing::{get, post},
 };
+use axum_extra::extract::cookie::{Cookie, Key, PrivateCookieJar};
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use tower_http::{services::ServeDir, trace::TraceLayer};
 use tracing::{error, info, warn};
+
+#[derive(Clone)]
+struct AppState {
+    key: Key,
+    password_hash: String,
+}
+
+impl FromRef<AppState> for Key {
+    fn from_ref(state: &AppState) -> Self {
+        state.key.clone()
+    }
+}
 
 #[derive(Template)]
 #[template(path = "index.html")]
@@ -21,6 +36,7 @@ struct IndexTemplate {
     recipes: Vec<models::Recipe>,
     base_url: String,
     app_version: String,
+    is_admin: bool,
 }
 
 #[derive(Template)]
@@ -29,6 +45,7 @@ struct RecipeTemplate {
     recipe: models::Recipe,
     base_url: String,
     app_version: String,
+    is_admin: bool,
 }
 
 #[derive(Template)]
@@ -38,6 +55,16 @@ struct EditTemplate {
     is_new: bool,
     base_url: String,
     app_version: String,
+    is_admin: bool,
+}
+
+#[derive(Template)]
+#[template(path = "login.html")]
+struct LoginTemplate {
+    base_url: String,
+    app_version: String,
+    error: Option<String>,
+    is_admin: bool,
 }
 
 fn get_base_url() -> String {
@@ -241,22 +268,29 @@ struct UploadData {
     file_path: String,
 }
 
-async fn index() -> impl IntoResponse {
+fn is_admin_session(jar: &PrivateCookieJar) -> bool {
+    jar.get("admin_session")
+        .is_some_and(|c| c.value() == "true")
+}
+
+async fn index(jar: PrivateCookieJar) -> impl IntoResponse {
     let recipes = storage::list_recipes().await;
     let template = IndexTemplate {
         recipes,
         base_url: get_base_url(),
         app_version: APP_VERSION.to_string(),
+        is_admin: is_admin_session(&jar),
     };
     Html(template.render().unwrap())
 }
 
-async fn view_recipe(Path(id): Path<String>) -> impl IntoResponse {
+async fn view_recipe(jar: PrivateCookieJar, Path(id): Path<String>) -> impl IntoResponse {
     if let Some(recipe) = storage::read_recipe(&id).await {
         let template = RecipeTemplate {
             recipe,
             base_url: get_base_url(),
             app_version: APP_VERSION.to_string(),
+            is_admin: is_admin_session(&jar),
         };
         Ok(Html(template.render().unwrap()))
     } else {
@@ -285,6 +319,7 @@ async fn new_recipe() -> impl IntoResponse {
         is_new: true,
         base_url: get_base_url(),
         app_version: APP_VERSION.to_string(),
+        is_admin: true,
     };
     Html(template.render().unwrap())
 }
@@ -327,6 +362,7 @@ async fn edit_recipe(Path(id): Path<String>) -> impl IntoResponse {
             is_new: false,
             base_url: get_base_url(),
             app_version: APP_VERSION.to_string(),
+            is_admin: true,
         };
         Ok(Html(template.render().unwrap()))
     } else {
@@ -384,6 +420,7 @@ async fn import_recipe(Form(form): Form<ImportForm>) -> impl IntoResponse {
                 is_new: true,
                 base_url: get_base_url(),
                 app_version: APP_VERSION.to_string(),
+                is_admin: true,
             };
             Html(template.render().unwrap()).into_response()
         }
@@ -455,6 +492,7 @@ async fn import_photo(mut multipart: Multipart) -> Response {
                         is_new: true,
                         base_url: get_base_url(),
                         app_version: APP_VERSION.to_string(),
+                        is_admin: true,
                     };
                     return Html(template.render().unwrap()).into_response();
                 } else {
@@ -500,6 +538,66 @@ async fn upload_image(mut multipart: Multipart) -> impl IntoResponse {
     })
 }
 
+async fn require_admin(
+    jar: PrivateCookieJar,
+    req: Request,
+    next: Next,
+) -> Result<Response, Redirect> {
+    if is_admin_session(&jar) {
+        Ok(next.run(req).await)
+    } else {
+        Err(Redirect::to(&format!("{}/login", get_base_url())))
+    }
+}
+
+async fn login_form(jar: PrivateCookieJar) -> impl IntoResponse {
+    if is_admin_session(&jar) {
+        return Redirect::to(&format!("{}/", get_base_url())).into_response();
+    }
+
+    let template = LoginTemplate {
+        base_url: get_base_url(),
+        app_version: APP_VERSION.to_string(),
+        error: None,
+        is_admin: false,
+    };
+    Html(template.render().unwrap()).into_response()
+}
+
+#[derive(Deserialize)]
+struct LoginFormData {
+    password: String,
+}
+
+async fn login_submit(
+    State(state): State<AppState>,
+    jar: PrivateCookieJar,
+    Form(form): Form<LoginFormData>,
+) -> impl IntoResponse {
+    if let Ok(true) = bcrypt::verify(&form.password, &state.password_hash) {
+        let cookie = Cookie::build(("admin_session", "true"))
+            .path("/")
+            .http_only(true)
+            .secure(true)
+            .build();
+        let updated_jar = jar.add(cookie);
+        return (updated_jar, Redirect::to(&format!("{}/", get_base_url()))).into_response();
+    }
+
+    let template = LoginTemplate {
+        base_url: get_base_url(),
+        app_version: APP_VERSION.to_string(),
+        error: Some("Invalid password".to_string()),
+        is_admin: false,
+    };
+    Html(template.render().unwrap()).into_response()
+}
+
+async fn logout(jar: PrivateCookieJar) -> impl IntoResponse {
+    let updated_jar = jar.remove(Cookie::from("admin_session"));
+    (updated_jar, Redirect::to(&format!("{}/", get_base_url())))
+}
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
@@ -508,9 +606,29 @@ async fn main() {
     let _ = std::fs::create_dir_all("data/recipes");
     let _ = std::fs::create_dir_all("data/uploads");
 
-    let app = Router::new()
-        .route("/", get(index))
-        .route("/recipe/{id}", get(view_recipe))
+    let password_hash = std::env::var("ADMIN_PASSWORD_HASH").unwrap_or_else(|_| {
+        warn!("ADMIN_PASSWORD_HASH is not set. Creating a default temporary password 'admin'. Please set this in production!");
+        bcrypt::hash("admin", bcrypt::DEFAULT_COST).unwrap()
+    });
+
+    // Generate a random key for signed cookies if not provided
+    // In production, SESSION_SECRET should be set so sessions persist across restarts
+    let key = if let Ok(secret) = std::env::var("SESSION_SECRET") {
+        let mut key_bytes = [0u8; 64];
+        let secret_bytes = secret.as_bytes();
+        let len = std::cmp::min(secret_bytes.len(), 64);
+        key_bytes[..len].copy_from_slice(&secret_bytes[..len]);
+        Key::from(&key_bytes)
+    } else {
+        warn!(
+            "SESSION_SECRET not set. Using a random key for signed cookies. Sessions will be invalidated on server restart."
+        );
+        Key::generate()
+    };
+
+    let state = AppState { key, password_hash };
+
+    let protected_routes = Router::new()
         .route("/new", get(new_recipe).post(create_recipe))
         .route("/edit/{id}", get(edit_recipe).post(update_recipe))
         .route("/delete/{id}", post(delete_recipe))
@@ -518,10 +636,22 @@ async fn main() {
         .route("/import/paprika", post(import_paprika))
         .route("/import/photo", post(import_photo))
         .route("/upload", post(upload_image))
+        .route_layer(middleware::from_fn_with_state(state.clone(), require_admin));
+
+    let public_routes = Router::new()
+        .route("/", get(index))
+        .route("/recipe/{id}", get(view_recipe))
+        .route("/login", get(login_form).post(login_submit))
+        .route("/logout", post(logout))
         .nest_service("/static", ServeDir::new("static"))
-        .nest_service("/uploads", ServeDir::new("data/uploads"))
+        .nest_service("/uploads", ServeDir::new("data/uploads"));
+
+    let app = Router::new()
+        .merge(public_routes)
+        .merge(protected_routes)
         .layer(TraceLayer::new_for_http())
-        .layer(DefaultBodyLimit::max(1024 * 1024 * 250)); // 250 MB limit
+        .layer(DefaultBodyLimit::max(1024 * 1024 * 250)) // 250 MB limit
+        .with_state(state);
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
     info!("Server starting at http://{}", addr);

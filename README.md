@@ -24,16 +24,39 @@ A lightning-fast, highly-customizable recipe manager built in Rust. It's designe
   - **URL Import**: Automatically scrape recipes from URLs using LD+JSON or a robust Gemini AI fallback for sites without structured data.
   - **Paprika Import**: Bulk import archives (`.paprikarecipes`) from Paprika Recipe Manager.
   - **AI Photo Import**: Take a photo of a cookbook page, and the built-in Gemini AI Vision integration will automatically extract the title, ingredients, and instructions!
+- **Secure Admin Login**: Protect your recipes from unauthorized edits or imports. Set an `ADMIN_PASSWORD_HASH` environment variable to restrict modifying actions to yourself while keeping the site read-only for guests.
 - **Interactive Tagging**: Add tags to your recipes and click them on the dashboard to instantly filter your collection.
 - **Prep & Cook Times**: Automated extraction of durations from imports, or manual entry with visual indicators.
 - **Beautiful Dark/Light Mode**: Premium aesthetic featuring a custom Kamado BBQ logo and vibrant orange accents.
 
 ---
 
+## 🔐 Generating an Admin Password Hash
+
+To secure your recipe manager, you need to set the `ADMIN_PASSWORD_HASH` environment variable. This prevents anyone else from editing or importing recipes. 
+
+You can generate this hash using the included utility script:
+
+**If you have Rust installed locally:**
+```bash
+cargo run --bin hash_password "my_secure_password"
+```
+
+**If you are using Docker:**
+```bash
+docker run --rm dnewsholme/recipemanager:latest ./hash_password "my_secure_password"
+```
+
+Copy the output (e.g., `$2y$12$...`) and use it as the value for `ADMIN_PASSWORD_HASH` when starting your server.
+
+---
+
 ## 🚀 Running Locally (Development)
 
 **Environment Variables**:
-- `GEMINI_API_KEY`: Required if you want to use the AI Photo Import feature. You can get a free key from [Google AI Studio](https://aistudio.google.com/app/apikey).
+- `ADMIN_PASSWORD_HASH`: Required for secure login. See the section above to generate your hash. If omitted, the default temporary password is "admin".
+- `SESSION_SECRET`: (Optional but recommended) A long random string used to cryptographically sign session cookies. If omitted, sessions will reset every time the server restarts.
+- `GEMINI_API_KEY`: Required if you want to use the AI Photo Import or Video URL Import features. You can get a free key from [Google AI Studio](https://aistudio.google.com/app/apikey).
 - `APP_BASE`: (Optional) Set this if you are hosting the app behind a reverse proxy on a subpath (e.g. `APP_BASE="/recipes"`).
 
 To run locally:
@@ -46,6 +69,8 @@ git clone https://github.com/dnewsholme/recipemanager.git
 cd recipemanager
 
 # Run the server locally
+export ADMIN_PASSWORD_HASH='<your_generated_hash>'
+export SESSION_SECRET='your_random_secret_string'
 export GEMINI_API_KEY="your_api_key_here"
 cargo run
 ```
@@ -64,6 +89,8 @@ The easiest way to run the application is via Docker. Be sure to map a volume to
 docker run -d \
   --name recipemanager \
   -p 3000:3000 \
+  -e ADMIN_PASSWORD_HASH='<your_generated_hash>' \
+  -e SESSION_SECRET='your_random_secret_string' \
   -e GEMINI_API_KEY="your_api_key_here" \
   -v /path/to/your/local/data:/app/data \
   dnewsholme/recipemanager:latest

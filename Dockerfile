@@ -35,8 +35,9 @@ RUN apt-get update && apt-get install -y ca-certificates libssl3 && rm -rf /var/
 
 WORKDIR /app
 
-# Copy the compiled binary from the builder
+# Copy the compiled binaries from the builder
 COPY --from=builder /app/target/release/recipemanager ./
+COPY --from=builder /app/target/release/hash_password ./
 
 # Copy static assets (served directly by axum)
 COPY --from=builder /app/static ./static
