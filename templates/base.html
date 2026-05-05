@@ -36,9 +36,9 @@
                 RustRecipes
             </a>
             <nav class="header-nav">
-                <a href="temperatures" class="nav-link" title="Cooking Temperatures">
+                <button id="temps-toggle-btn" class="btn btn-secondary theme-toggle-btn" title="Cooking Temperatures">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4v10.54a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0Z"></path></svg>
-                </a>
+                </button>
                 <button id="timer-toggle-btn" class="btn btn-secondary theme-toggle-btn" title="Cooking Timer">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
                 </button>
@@ -92,6 +92,62 @@
             <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">Suggested Times</div>
             <div id="suggestion-list" style="display: flex; gap: 0.5rem; flex-wrap: wrap;"></div>
         </div>
+    <div id="temps-panel" style="display: none; position: fixed; top: 80px; right: 20px; width: 380px; max-width: calc(100vw - 40px); max-height: 80vh; overflow-y: auto; background: var(--surface-color); border: 1px solid var(--border-color); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); z-index: 1000; padding: 1.5rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem;">
+            <h3 style="margin: 0; font-size: 1.1rem; font-weight: 700;">Cooking Temps</h3>
+            <div class="unit-toggle" style="background: var(--surface-hover); padding: 0.15rem; border-radius: var(--radius-md); display: flex; gap: 0.15rem;">
+                <button onclick="setGlobalUnit('celsius')" class="btn btn-secondary unit-btn active" id="unit-celsius-toggle" style="padding: 0.2rem 0.5rem; font-size: 0.75rem;">°C</button>
+                <button onclick="setGlobalUnit('fahrenheit')" class="btn btn-secondary unit-btn" id="unit-fahrenheit-toggle" style="padding: 0.2rem 0.5rem; font-size: 0.75rem;">°F</button>
+            </div>
+        </div>
+        
+        <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+            <!-- Beef & Pork -->
+            <div style="background: var(--bg-color); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1rem;">
+                <h4 style="margin: 0 0 0.75rem 0; font-size: 0.9rem; color: #c0392b;">Beef, Lamb, Veal, Pork</h4>
+                <table style="width: 100%; font-size: 0.85rem; border-collapse: collapse;">
+                    <tr style="border-bottom: 1px solid var(--border-color);"><td style="padding: 0.4rem 0;">Rare</td><td style="text-align: right; font-weight: 600;"><span class="temp-val-global" data-c="52">52</span><span class="unit-label-global">°C</span></td></tr>
+                    <tr style="border-bottom: 1px solid var(--border-color);"><td style="padding: 0.4rem 0;">Med Rare</td><td style="text-align: right; font-weight: 600;"><span class="temp-val-global" data-c="57">57</span><span class="unit-label-global">°C</span></td></tr>
+                    <tr style="border-bottom: 1px solid var(--border-color);"><td style="padding: 0.4rem 0;">Medium</td><td style="text-align: right; font-weight: 600;"><span class="temp-val-global" data-c="63">63</span><span class="unit-label-global">°C</span></td></tr>
+                    <tr><td style="padding: 0.4rem 0;">Well Done</td><td style="text-align: right; font-weight: 600;"><span class="temp-val-global" data-c="71">71</span><span class="unit-label-global">°C</span></td></tr>
+                </table>
+            </div>
+
+            <!-- Poultry -->
+            <div style="background: var(--bg-color); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1rem;">
+                <h4 style="margin: 0 0 0.75rem 0; font-size: 0.9rem; color: #f1c40f;">Poultry & Ground</h4>
+                <table style="width: 100%; font-size: 0.85rem; border-collapse: collapse;">
+                    <tr style="border-bottom: 1px solid var(--border-color);"><td style="padding: 0.4rem 0;">Chicken / Turkey</td><td style="text-align: right; font-weight: 600;"><span class="temp-val-global" data-c="74">74</span><span class="unit-label-global">°C</span></td></tr>
+                    <tr style="border-bottom: 1px solid var(--border-color);"><td style="padding: 0.4rem 0;">Ground / Sausage</td><td style="text-align: right; font-weight: 600;"><span class="temp-val-global" data-c="71">71</span><span class="unit-label-global">°C</span></td></tr>
+                    <tr><td style="padding: 0.4rem 0;">Fish</td><td style="text-align: right; font-weight: 600;"><span class="temp-val-global" data-c="63">63</span><span class="unit-label-global">°C</span></td></tr>
+                </table>
+            </div>
+
+            <!-- Low & Slow -->
+            <div style="background: var(--bg-color); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1rem;">
+                <h4 style="margin: 0 0 0.75rem 0; font-size: 0.9rem; color: #d35400;">BBQ Low & Slow</h4>
+                <table style="width: 100%; font-size: 0.85rem; border-collapse: collapse;">
+                    <tr style="border-bottom: 1px solid var(--border-color);"><td style="padding: 0.4rem 0;">Brisket (Sliced)</td><td style="text-align: right; font-weight: 600;"><span class="temp-val-global" data-c="93">93</span>-<span class="temp-val-global" data-c="96">96</span><span class="unit-label-global">°C</span></td></tr>
+                    <tr><td style="padding: 0.4rem 0;">Pulled Pork</td><td style="text-align: right; font-weight: 600;"><span class="temp-val-global" data-c="95">95</span>-<span class="temp-val-global" data-c="98">98</span><span class="unit-label-global">°C</span></td></tr>
+                </table>
+            </div>
+
+            <!-- Log 7 -->
+            <div style="border-top: 1px solid var(--border-color); padding-top: 1rem;">
+                <div style="font-size: 0.8rem; font-weight: 700; color: #e74c3c; margin-bottom: 0.75rem; text-transform: uppercase;">USDA Log 7 Calculator</div>
+                <div style="background: var(--surface-hover); padding: 1rem; border-radius: var(--radius-md);">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-size: 0.85rem;">
+                        <span>Internal Temp:</span>
+                        <span id="calc-temp-display" style="font-weight: 700; color: #e74c3c;">65°C</span>
+                    </div>
+                    <input type="range" id="log7-temp-range" min="58" max="74" step="0.5" value="65" style="width: 100%; margin-bottom: 1rem; accent-color: #e74c3c;">
+                    <div style="text-align: center;">
+                        <div style="font-size: 0.7rem; color: var(--text-secondary); text-transform: uppercase;">Hold Time</div>
+                        <div id="calc-time-display" style="font-size: 1.5rem; font-weight: 800;">2.5 Minutes</div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <main class="container">
@@ -138,10 +194,23 @@
         const timerDisplay = document.getElementById('timer-display');
         const timerPanel = document.getElementById('timer-panel');
         const timerToggleBtn = document.getElementById('timer-toggle-btn');
+        const tempsToggleBtn = document.getElementById('temps-toggle-btn');
+        const tempsPanel = document.getElementById('temps-panel');
         const alarmSound = new Audio('/static/mixkit-guitar-notification-alert-2320.wav');
         alarmSound.loop = true;
 
         timerToggleBtn.addEventListener('click', toggleTimerPanel);
+        tempsToggleBtn.addEventListener('click', toggleTempsPanel);
+
+        function toggleTempsPanel() {
+            const isVisible = tempsPanel.style.display === 'block';
+            tempsPanel.style.display = isVisible ? 'none' : 'block';
+            if (isVisible) return;
+            
+            // Close timer if open
+            timerPanel.style.display = 'none';
+            updateLog7Calculator();
+        }
 
         function toggleTimerPanel() {
             if (isAlarming) {
@@ -151,6 +220,9 @@
             const isVisible = timerPanel.style.display === 'block';
             timerPanel.style.display = isVisible ? 'none' : 'block';
             if (!isVisible) {
+                // Close temps if open
+                tempsPanel.style.display = 'none';
+                
                 // Populate suggestions if available
                 const suggestions = window.timerSuggestions || [];
                 const list = document.getElementById('suggestion-list');
@@ -286,6 +358,63 @@
         if ("Notification" in window && Notification.permission === "default") {
             Notification.requestPermission();
         }
+
+        // Global Unit & Calculator Logic
+        let currentGlobalUnit = 'celsius';
+        const log7Table = [
+            { f: 136, c: 57.8, s: 4104 }, { f: 140, c: 60.0, s: 1650 },
+            { f: 145, c: 62.8, s: 552 }, { f: 150, c: 65.6, s: 162 },
+            { f: 155, c: 68.3, s: 48 }, { f: 160, c: 71.1, s: 14 },
+            { f: 165, c: 73.9, s: 0 }
+        ];
+
+        function setGlobalUnit(unit) {
+            currentGlobalUnit = unit;
+            document.getElementById('unit-celsius-toggle').classList.toggle('active', unit === 'celsius');
+            document.getElementById('unit-fahrenheit-toggle').classList.toggle('active', unit === 'fahrenheit');
+
+            document.querySelectorAll('.temp-val-global').forEach(el => {
+                const c = parseFloat(el.getAttribute('data-c'));
+                el.innerText = unit === 'fahrenheit' ? Math.round((c * 9/5) + 32) : c;
+            });
+            document.querySelectorAll('.unit-label-global').forEach(el => {
+                el.innerText = unit === 'fahrenheit' ? '°F' : '°C';
+            });
+            updateLog7Calculator();
+        }
+
+        function updateLog7Calculator() {
+            const slider = document.getElementById('log7-temp-range');
+            if (!slider) return;
+            const tempC = parseFloat(slider.value);
+            const tempDisplay = document.getElementById('calc-temp-display');
+            const timeDisplay = document.getElementById('calc-time-display');
+
+            tempDisplay.innerText = currentGlobalUnit === 'fahrenheit' 
+                ? `${Math.round((tempC * 9/5) + 32)}°F` 
+                : `${tempC}°C`;
+
+            let seconds = 0;
+            if (tempC >= 73.9) seconds = 0;
+            else if (tempC < 57.8) seconds = 9999;
+            else {
+                for (let i = 0; i < log7Table.length - 1; i++) {
+                    const p1 = log7Table[i], p2 = log7Table[i+1];
+                    if (tempC >= p1.c && tempC <= p2.c) {
+                        const ratio = (tempC - p1.c) / (p2.c - p1.c);
+                        seconds = p1.s + ratio * (p2.s - p1.s);
+                        break;
+                    }
+                }
+            }
+
+            if (seconds === 0) timeDisplay.innerText = "Instant";
+            else if (seconds > 3600) timeDisplay.innerText = "> 1 Hour";
+            else if (seconds >= 60) timeDisplay.innerText = `${(seconds/60).toFixed(1)} Min`;
+            else timeDisplay.innerText = `${Math.round(seconds)} Sec`;
+        }
+
+        document.getElementById('log7-temp-range').addEventListener('input', updateLog7Calculator);
     </script>
 </body>
 </html>

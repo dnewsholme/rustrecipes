@@ -68,14 +68,6 @@ struct LoginTemplate {
     is_admin: bool,
 }
 
-#[derive(Template)]
-#[template(path = "temperatures.html")]
-struct CookingTempsTemplate {
-    base_url: String,
-    app_version: String,
-    is_admin: bool,
-}
-
 fn get_base_url() -> String {
     std::env::var("APP_BASE").unwrap_or_default()
 }
@@ -636,15 +628,6 @@ async fn logout(jar: PrivateCookieJar) -> impl IntoResponse {
     (updated_jar, Redirect::to(&format!("{}/", get_base_url())))
 }
 
-async fn view_temperatures(jar: PrivateCookieJar) -> impl IntoResponse {
-    let template = CookingTempsTemplate {
-        base_url: get_base_url(),
-        app_version: APP_VERSION.to_string(),
-        is_admin: is_admin_session(&jar),
-    };
-    Html(template.render().unwrap())
-}
-
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
@@ -688,7 +671,6 @@ async fn main() {
         .route("/", get(index))
         .route("/recipe/{id}", get(view_recipe))
         .route("/recipe/favorite/{id}", post(toggle_favorite))
-        .route("/temperatures", get(view_temperatures))
         .route("/login", get(login_form).post(login_submit))
         .route("/logout", post(logout))
         .nest_service("/static", ServeDir::new("static"))
