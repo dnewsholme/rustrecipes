@@ -7,3 +7,7 @@ test-results/
 playwright-report/
 blob-report/
 playwright/.cache/
+
+# Test Data
+data/recipes/test-*.md
+data/uploads/test-*

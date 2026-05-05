@@ -1,0 +1,51 @@
+name: UI Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Rust
+      uses: dtolnay/rust-toolchain@stable
+      
+    - name: Rust Cache
+      uses: Swatinem/rust-cache@v2
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm install
+
+    - name: Install Playwright Browsers
+      run: npx playwright install --with-deps
+
+    - name: Create data directories
+      run: mkdir -p data/recipes data/uploads
+
+    - name: Run Playwright tests
+      run: npm test
+      env:
+        CI: true
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        ADMIN_PASSWORD_HASH: ${{ secrets.ADMIN_PASSWORD_HASH }}
+        ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+        SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: playwright-report
+        path: playwright-report/
+        retention-days: 30
