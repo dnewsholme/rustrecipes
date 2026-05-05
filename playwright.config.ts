@@ -38,12 +38,10 @@ export default defineConfig({
   ],
 
   /* Run your local dev server before starting the tests */
-  /*
   webServer: {
     command: 'cargo run --bin recipemanager',
     url: 'http://localhost:3000',
-    reuseExistingServer: true,
+    reuseExistingServer: !process.env.CI,
     timeout: 120 * 1000,
   },
-  */
 });
