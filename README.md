@@ -12,6 +12,19 @@ A lightning-fast, highly-customizable recipe manager built in Rust. It's designe
   - **Tabbed Interface**: Switch seamlessly between Ingredients, Directions, and Cook Graphs on mobile devices.
   - **No-Lock Cooking**: Integrated **Wake Lock API** prevents your screen from locking while you cook.
   - **Space Saving**: Collapsible recipe photos and a streamlined header specifically for small screens.
+- **Integrated Cooking Timer**:
+  - **Quick-Access**: Floating timer panel accessible from any page with a single click.
+  - **Smart Suggestions**: Automatically extracts durations from recipe prep/cook fields and directions for one-tap timer setting.
+  - **Multimedia Alerts**: Looping alarm sound and pulsing visual header indicator when time is up.
+  - **Persistence**: Triggers browser notifications to alert you even if you switch tabs.
+- **Advanced Multi-Tag Filtering**:
+  - **Combinatorial Logic**: Apply multiple tags simultaneously to narrow down your collection (AND logic).
+  - **Dynamic Tag Menu**: The filter menu updates in real-time, only showing tags that exist within the currently filtered results—no more "Zero Results" filters.
+  - **Integrated Tag Search**: Quickly find specific tags within your collection using the built-in search box inside the filter menu.
+- **Favorites System**:
+  - **Quick Mark**: Toggle favorites directly from recipe cards on the home screen or the recipe detail page.
+  - **Dedicated Filter**: Instantly view your top recipes with a one-click "Favorites" filter.
+  - **Admin Security**: Only the logged-in administrator can modify favorites, while guests can still view and filter by them.
 - **Dynamic Ingredient Scaling**: Easily multiply recipe yields (e.g., 0.5x, 2x, 3x) with real-time updates directly in the text.
 - **Smart Unit Conversion**: Seamlessly toggle entire recipes between Original, Metric, and Imperial systems (instantly converts measurements embedded within markdown text!).
 - **Baker's Percentage Mode**: Automatically activated for recipes tagged with `bread` or `dough`. It calculates the total flour weight as 100% and displays all other ingredients as a relative percentage—essential for analyzing hydration levels and salt ratios.
@@ -28,8 +41,10 @@ A lightning-fast, highly-customizable recipe manager built in Rust. It's designe
   - **Meat Temp Reference**: A dedicated reference page for internal meat temperatures and doneness levels, covering everything from rare steak to low & slow BBQ brisket.
   - **USDA Log 7 Calculator**: Interactive calculator for poultry safety. Achieve perfectly juicy chicken at lower temperatures by calculating the required hold time for safe Salmonella lethality.
 - **Secure Admin Login**: Protect your recipes from unauthorized edits or imports. Set an `ADMIN_PASSWORD_HASH` environment variable to restrict modifying actions to yourself while keeping the site read-only for guests.
-- **Interactive Tagging**: Add tags to your recipes and click them on the dashboard to instantly filter your collection.
-- **Prep & Cook Times**: Automated extraction of durations from imports, or manual entry with visual indicators.
+- **Streamlined UI & Aesthetics**:
+  - **Minimalist Header**: Clean, icon-only navigation bar that provides more screen real estate for your content.
+  - **Performance Optimized**: Automated image compression and resizing on import to ensure fast page loads even with high-res photos.
+  - **Corrected Unit Conversion**: Precise handling of temperature ranges (e.g., 225–250°F) and various dash types during C/F conversion.
 - **Beautiful Dark/Light Mode**: Premium aesthetic featuring a custom Kamado BBQ logo and vibrant orange accents.
 
 ---
