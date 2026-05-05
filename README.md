@@ -5,6 +5,31 @@ A lightning-fast, highly-customizable recipe manager built in Rust. It's designe
 ![Kamado Theme](https://img.shields.io/badge/Theme-Kamado_BBQ-orange?style=flat-square)
 ![Built with Rust](https://img.shields.io/badge/Built_with-Rust-black?style=flat-square&logo=rust)
 
+## 📸 Preview
+
+<table style="width: 100%; border-collapse: collapse;">
+  <tr>
+    <td style="width: 50%; vertical-align: top;">
+      <strong>Desktop Home</strong><br/>
+      <img src="docs/img/home_desktop.png" alt="Desktop Home" style="width: 100%; border-radius: 8px;"/>
+    </td>
+    <td style="width: 50%; vertical-align: top;">
+      <strong>Integrated Timer</strong><br/>
+      <img src="docs/img/timer_panel.png" alt="Timer Panel" style="width: 100%; border-radius: 8px;"/>
+    </td>
+  </tr>
+  <tr>
+    <td style="width: 50%; vertical-align: top;">
+      <strong>Mobile Experience</strong><br/>
+      <img src="docs/img/home_mobile.png" alt="Mobile Home" style="width: 100%; border-radius: 8px;"/>
+    </td>
+    <td style="width: 50%; vertical-align: top;">
+      <strong>Smart Filtering (Mobile)</strong><br/>
+      <img src="docs/img/filter_mobile.png" alt="Filter Mobile" style="width: 100%; border-radius: 8px;"/>
+    </td>
+  </tr>
+</table>
+
 ## ✨ Features
 
 - **Blazing Fast**: Powered by Rust, Axum, and Askama templates for a near-instant user experience.
