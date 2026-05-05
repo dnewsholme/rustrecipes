@@ -59,7 +59,7 @@
     <div id="recipe-description-container" style="margin-bottom: 2rem; text-align: center; max-width: 800px; margin-left: auto; margin-right: auto; padding: 0 1rem;">
         <button id="description-toggle-btn" class="btn btn-secondary" onclick="toggleDescription()" style="display: none; align-items: center; justify-content: center; gap: 0.5rem; width: 100%; margin-bottom: 1rem;">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
-            <span id="description-toggle-text">Show Notes</span>
+            <span id="description-toggle-text">Show Description</span>
         </button>
         <div id="recipe-description" class="recipe-description" style="color: var(--text-secondary); line-height: 1.6; font-style: italic;">
             {{ desc }}
@@ -360,10 +360,10 @@
         const btnText = document.getElementById('description-toggle-text');
         if (desc.classList.contains('show')) {
             desc.classList.remove('show');
-            btnText.textContent = 'Show Notes';
+            btnText.textContent = 'Show Description';
         } else {
             desc.classList.add('show');
-            btnText.textContent = 'Hide Notes';
+            btnText.textContent = 'Hide Description';
         }
     }
 
