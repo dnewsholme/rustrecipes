@@ -4,7 +4,9 @@
 
 {% block header_actions %}
 {% if is_admin %}
-<button id="toggle-import-btn" class="btn btn-secondary">Import Recipe</button>
+<button id="toggle-import-btn" class="btn btn-secondary theme-toggle-btn" title="Import Recipe">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+</button>
 {% endif %}
 {% endblock %}
 
@@ -82,7 +84,9 @@
 
 <div class="recipe-grid">
     {% for recipe in recipes %}
-    <div class="recipe-card" data-search='{{ recipe.tags.join(" ") }} {{ recipe.ingredients.join(" ") }} {% if recipe.has_video() %}has-video{% endif %} {% if recipe.has_combustion() %}has-combustion{% endif %} {% if recipe.favorite %}is-favorite{% endif %}'>
+    <div class="recipe-card" 
+        data-search='{{ recipe.tags.join(" ") }} {{ recipe.ingredients.join(" ") }} {% if recipe.has_video() %}has-video{% endif %} {% if recipe.has_combustion() %}has-combustion{% endif %} {% if recipe.favorite %}is-favorite{% endif %}'
+        data-tags='{{ recipe.tags.join(",") }}{% if recipe.has_video() %},has-video{% endif %}{% if recipe.has_combustion() %},has-combustion{% endif %}{% if recipe.favorite %},is-favorite{% endif %}'>
         {% match recipe.image %}
             {% when Some with (img) %}
                 <img src="{{ img }}" alt="{{ recipe.title }}" class="recipe-card-img">
@@ -111,21 +115,23 @@
                         {% endif %}
                     </div>
                 </div>
-                <button onclick="toggleFavorite('{{ recipe.id }}', this, event)" 
-                    class="favorite-heart-btn {% if recipe.favorite %}is-favorite{% endif %} {% if is_admin %}is-admin{% endif %}"
-                    {% if !is_admin %}disabled{% endif %}
-                    title="{% if is_admin %}Toggle Favorite{% else %}Favorite{% endif %}">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="{% if recipe.favorite %}currentColor{% else %}none{% endif %}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
-                </button>
-                {% match recipe.source_url %}
-                    {% when Some with (url) %}
-                        {% if !url.trim().is_empty() %}
-                        <a href="{{ url }}" target="_blank" rel="noopener noreferrer" style="color: var(--text-secondary); margin-left: 0.5rem; display: inline-flex; align-items: center;" title="Original Source">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
-                        </a>
-                        {% endif %}
-                    {% when None %}
-                {% endmatch %}
+                <div style="display: flex; align-items: center; gap: 0.25rem;">
+                    <button onclick="toggleFavorite('{{ recipe.id }}', this, event)" 
+                        class="favorite-heart-btn {% if recipe.favorite %}is-favorite{% endif %} {% if is_admin %}is-admin{% endif %}"
+                        {% if !is_admin %}disabled{% endif %}
+                        title="{% if is_admin %}Toggle Favorite{% else %}Favorite{% endif %}">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="{% if recipe.favorite %}currentColor{% else %}none{% endif %}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                    </button>
+                    {% match recipe.source_url %}
+                        {% when Some with (url) %}
+                            {% if !url.trim().is_empty() %}
+                            <a href="{{ url }}" target="_blank" rel="noopener noreferrer" style="color: var(--text-secondary); display: inline-flex; align-items: center; padding: 0.25rem;" title="Original Source">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                            </a>
+                            {% endif %}
+                        {% when None %}
+                    {% endmatch %}
+                </div>
             </h3>
             <div class="recipe-desc">
                 {% match recipe.description %}
@@ -203,31 +209,50 @@ let activeTags = new Set();
 function filterRecipes() {
     const query = searchInput.value.toLowerCase();
     const cards = document.querySelectorAll('.recipe-card');
+    const availableTags = new Set();
     
-    if (query || activeTags.size > 0) {
-        clearBtn.style.display = 'block';
-    } else {
-        clearBtn.style.display = 'none';
-    }
-
     cards.forEach(card => {
         const searchText = card.dataset.search.toLowerCase();
+        const tags = card.dataset.tags.toLowerCase().split(',');
+        
         const matchesSearch = searchText.includes(query);
         
         // Check if ALL active tags are present
         let matchesTags = true;
         activeTags.forEach(tag => {
-            if (!searchText.includes(tag.toLowerCase())) {
+            if (!tags.includes(tag.toLowerCase())) {
                 matchesTags = false;
             }
         });
 
         if (matchesSearch && matchesTags) {
             card.style.display = 'block';
+            // Collect tags from this visible recipe
+            tags.forEach(t => {
+                if (t.trim()) availableTags.add(t);
+            });
         } else {
             card.style.display = 'none';
         }
     });
+
+    // Update tag filter buttons visibility
+    const tagButtons = document.querySelectorAll('.tag-filter-btn');
+    tagButtons.forEach(btn => {
+        const tag = btn.dataset.tag.toLowerCase();
+        // Show if tag is active OR if it's available in the current result set
+        if (activeTags.has(btn.dataset.tag) || availableTags.has(tag)) {
+            btn.style.display = 'flex';
+        } else {
+            btn.style.display = 'none';
+        }
+    });
+
+    if (query || activeTags.size > 0) {
+        clearBtn.style.display = 'block';
+    } else {
+        clearBtn.style.display = 'none';
+    }
 }
 
 function toggleTagFilter(tag) {
@@ -288,10 +313,14 @@ async function toggleFavorite(id, btn, event) {
                 if (!card.dataset.search.includes('is-favorite')) {
                     card.dataset.search += ' is-favorite';
                 }
+                if (!card.dataset.tags.includes('is-favorite')) {
+                    card.dataset.tags += ',is-favorite';
+                }
             } else {
                 btn.classList.remove('is-favorite');
                 svg.setAttribute('fill', 'none');
                 card.dataset.search = card.dataset.search.replace(' is-favorite', '').trim();
+                card.dataset.tags = card.dataset.tags.replace(',is-favorite', '').replace('is-favorite', '').trim();
             }
             filterRecipes();
         } else if (response.status === 401) {

@@ -141,6 +141,7 @@ mod tests {
         let read = read_recipe(test_id).await.unwrap();
         assert_eq!(read.title, "Test Recipe");
         assert_eq!(read.tags, vec!["test".to_string()]);
+        assert_eq!(read.favorite, false);
 
         delete_recipe(test_id).await.unwrap();
     }
