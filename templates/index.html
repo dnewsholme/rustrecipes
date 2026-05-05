@@ -198,13 +198,13 @@ document.getElementById('toggle-filters-btn')?.addEventListener('click', functio
 
 const searchInput = document.getElementById('recipe-search');
 const clearBtn = document.getElementById('clear-search-btn');
-let activeTag = null;
+let activeTags = new Set();
 
 function filterRecipes() {
     const query = searchInput.value.toLowerCase();
     const cards = document.querySelectorAll('.recipe-card');
     
-    if (query || activeTag) {
+    if (query || activeTags.size > 0) {
         clearBtn.style.display = 'block';
     } else {
         clearBtn.style.display = 'none';
@@ -213,9 +213,16 @@ function filterRecipes() {
     cards.forEach(card => {
         const searchText = card.dataset.search.toLowerCase();
         const matchesSearch = searchText.includes(query);
-        const matchesTag = !activeTag || searchText.includes(activeTag.toLowerCase());
+        
+        // Check if ALL active tags are present
+        let matchesTags = true;
+        activeTags.forEach(tag => {
+            if (!searchText.includes(tag.toLowerCase())) {
+                matchesTags = false;
+            }
+        });
 
-        if (matchesSearch && matchesTag) {
+        if (matchesSearch && matchesTags) {
             card.style.display = 'block';
         } else {
             card.style.display = 'none';
@@ -227,22 +234,15 @@ function toggleTagFilter(tag) {
     const btns = document.querySelectorAll('.tag-filter-btn');
     const targetBtn = Array.from(btns).find(b => b.dataset.tag === tag);
 
-    if (activeTag === tag) {
-        activeTag = null;
+    if (activeTags.has(tag)) {
+        activeTags.delete(tag);
         if (targetBtn) {
             targetBtn.style.background = 'var(--bg-color)';
             targetBtn.style.color = 'var(--text-secondary)';
             targetBtn.style.borderColor = 'var(--border-color)';
         }
     } else {
-        // Clear previous active tag styling
-        btns.forEach(btn => {
-            btn.style.background = 'var(--bg-color)';
-            btn.style.color = 'var(--text-secondary)';
-            btn.style.borderColor = 'var(--border-color)';
-        });
-        
-        activeTag = tag;
+        activeTags.add(tag);
         if (targetBtn) {
             targetBtn.style.background = 'var(--accent-color)';
             targetBtn.style.color = 'white';
@@ -260,7 +260,7 @@ function filterByTag(tag, event) {
 
 function clearFilters() {
     searchInput.value = '';
-    activeTag = null;
+    activeTags.clear();
     document.querySelectorAll('.tag-filter-btn').forEach(btn => {
         btn.style.background = 'var(--bg-color)';
         btn.style.color = 'var(--text-secondary)';
