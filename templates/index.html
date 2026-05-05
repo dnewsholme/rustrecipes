@@ -58,21 +58,21 @@
     {% if !all_tags.is_empty() || true %}
     <div id="tag-filters" style="display: none; gap: 0.5rem; flex-wrap: wrap; background: var(--surface-hover); padding: 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border-color); margin-bottom: 1rem;">
         <div style="width: 100%; margin-bottom: 0.5rem; display: flex; gap: 0.5rem; flex-wrap: wrap; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem; margin-bottom: 0.75rem;">
-            <button class="tag-filter-btn" data-tag="has-video" onclick="toggleTagFilter('has-video')" style="background: var(--bg-color); border: 1px solid var(--border-color); padding: 0.35rem 0.85rem; border-radius: 20px; font-size: 0.85rem; color: var(--text-secondary); cursor: pointer; transition: var(--transition); display: flex; align-items: center; gap: 0.4rem;">
+            <button class="tag-filter-btn" data-tag="has-video" onclick="toggleTagFilter('has-video')">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 8-6 4 6 4V8Z"></path><rect width="14" height="12" x="2" y="6" rx="2" ry="2"></rect></svg>
                 With Video
             </button>
-            <button class="tag-filter-btn" data-tag="has-combustion" onclick="toggleTagFilter('has-combustion')" style="background: var(--bg-color); border: 1px solid var(--border-color); padding: 0.35rem 0.85rem; border-radius: 20px; font-size: 0.85rem; color: var(--text-secondary); cursor: pointer; transition: var(--transition); display: flex; align-items: center; gap: 0.4rem;">
+            <button class="tag-filter-btn" data-tag="has-combustion" onclick="toggleTagFilter('has-combustion')">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path></svg>
                 Combustion Data
             </button>
-            <button class="tag-filter-btn" data-tag="is-favorite" onclick="toggleTagFilter('is-favorite')" style="background: var(--bg-color); border: 1px solid var(--border-color); padding: 0.35rem 0.85rem; border-radius: 20px; font-size: 0.85rem; color: var(--text-secondary); cursor: pointer; transition: var(--transition); display: flex; align-items: center; gap: 0.4rem;">
+            <button class="tag-filter-btn" data-tag="is-favorite" onclick="toggleTagFilter('is-favorite')">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
                 Favorites
             </button>
         </div>
         {% for tag in all_tags %}
-            <button class="tag-filter-btn" data-tag="{{ tag }}" onclick="toggleTagFilter('{{ tag }}')" style="background: var(--bg-color); border: 1px solid var(--border-color); padding: 0.35rem 0.85rem; border-radius: 20px; font-size: 0.85rem; color: var(--text-secondary); cursor: pointer; transition: var(--transition);">
+            <button class="tag-filter-btn" data-tag="{{ tag }}" onclick="toggleTagFilter('{{ tag }}')">
                 #{{ tag }}
             </button>
         {% endfor %}
@@ -111,12 +111,12 @@
                         {% endif %}
                     </div>
                 </div>
-                <button onclick="toggleFavorite('{{ recipe.id }}', this, event)" 
-                    style="background: none; border: none; padding: 0.25rem; cursor: {% if is_admin %}pointer{% else %}default{% endif %}; color: {% if recipe.favorite %}var(--accent-color){% else %}var(--text-secondary){% endif %}; transition: var(--transition); flex-shrink: 0;"
-                    {% if !is_admin %}disabled{% endif %}
-                    title="{% if is_admin %}Toggle Favorite{% else %}Favorite{% endif %}">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="{% if recipe.favorite %}currentColor{% else %}none{% endif %}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
-                </button>
+                <button id="favorite-btn" class="btn btn-secondary favorite-btn {% if recipe.favorite %}is-favorite{% endif %} {% if is_admin %}is-admin{% endif %}"
+    onclick="toggleFavorite('{{ recipe.id }}', this)"
+    {% if !is_admin %}disabled{% endif %}>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="{% if recipe.favorite %}currentColor{% else %}none{% endif %}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+    <span class="favorite-text">{% if recipe.favorite %}Favorited{% else %}Favorite{% endif %}</span>
+</button>
                 {% match recipe.source_url %}
                     {% when Some with (url) %}
                         {% if !url.trim().is_empty() %}
@@ -314,5 +314,8 @@ document.getElementById('photo-import-form')?.addEventListener('submit', functio
 <style>
 @keyframes spin { 100% { transform: rotate(360deg); } }
 .spinner { display: inline-block; animation: spin 1s linear infinite; margin-left: 0.5rem; }
+.favorite-btn { background: none; border: none; padding: 0.25rem; transition: var(--transition); flex-shrink: 0; color: var(--text-secondary); cursor: default; }
+.favorite-btn.is-favorite { color: var(--accent-color); }
+.favorite-btn.is-admin { cursor: pointer; }
 </style>
 {% endblock %}
