@@ -36,6 +36,34 @@
     .favorite-btn.is-admin { cursor: pointer !important; }
     .favorite-btn:not(.is-admin) { cursor: default !important; }
 </style>
+<script>
+    (function() {
+        window.timerSuggestions = [];
+        {% if let Some(t) = recipe.prep_time %}
+        window.timerSuggestions.push({ label: 'Prep: {{ t }}', time: '{{ t }}' });
+        {% endif %}
+        {% if let Some(t) = recipe.cook_time %}
+        window.timerSuggestions.push({ label: 'Cook: {{ t }}', time: '{{ t }}' });
+        {% endif %}
+
+        // Extract more times from instructions
+        const directions = `{{ recipe.markdown }}`;
+        const timeRegex = /(\d+)\s*(min|minute|hr|hour|sec|second)s?/gi;
+        let match;
+        const seen = new Set();
+        // Skip prep/cook already added
+        {% if let Some(t) = recipe.prep_time %} seen.add('{{ t }}'.toLowerCase()); {% endif %}
+        {% if let Some(t) = recipe.cook_time %} seen.add('{{ t }}'.toLowerCase()); {% endif %}
+
+        while ((match = timeRegex.exec(directions)) !== null) {
+            const timeVal = match[0].toLowerCase();
+            if (!seen.has(timeVal)) {
+                window.timerSuggestions.push({ label: match[0], time: match[0] });
+                seen.add(timeVal);
+            }
+        }
+    })();
+</script>
 {% endblock %}
 
 {% block content %}

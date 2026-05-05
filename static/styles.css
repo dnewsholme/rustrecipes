@@ -246,6 +246,7 @@ main {
   flex-grow: 1;
   display: -webkit-box;
   -webkit-line-clamp: 3;
+  line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -506,4 +507,15 @@ main {
     width: 24px;
     height: 24px;
   }
+}
+
+@keyframes pulse-red {
+    0% { transform: scale(1); }
+    50% { background-color: var(--danger); color: white; transform: scale(1.1); }
+    100% { transform: scale(1); }
+}
+
+.alarm-pulsing {
+    animation: pulse-red 1s infinite;
+    z-index: 1001;
 }

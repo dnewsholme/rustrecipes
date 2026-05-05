@@ -58,8 +58,12 @@
     </div>
 
     {% if !all_tags.is_empty() || true %}
-    <div id="tag-filters" style="display: none; gap: 0.5rem; flex-wrap: wrap; background: var(--surface-hover); padding: 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border-color); margin-bottom: 1rem;">
-        <div style="width: 100%; margin-bottom: 0.5rem; display: flex; gap: 0.5rem; flex-wrap: wrap; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem; margin-bottom: 0.75rem;">
+    <div id="tag-filters" style="display: none; flex-direction: column; gap: 0.75rem; background: var(--surface-hover); padding: 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border-color); margin-bottom: 1rem;">
+        <div style="display: flex; align-items: center; gap: 0.5rem; background: var(--surface-color); padding: 0.6rem 0.85rem; border-radius: var(--radius-md); border: 1px solid var(--border-color); margin-bottom: 0.25rem;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <input type="text" id="tag-search" placeholder="Search tags..." style="border: none; background: transparent; color: var(--text-primary); font-size: 0.9rem; width: 100%; outline: none;">
+        </div>
+        <div style="width: 100%; display: flex; gap: 0.5rem; flex-wrap: wrap; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem; margin-bottom: 0.25rem;">
             <button class="tag-filter-btn" data-tag="has-video" onclick="toggleTagFilter('has-video')" style="background: var(--bg-color); border: 1px solid var(--border-color); padding: 0.35rem 0.85rem; border-radius: 20px; font-size: 0.85rem; color: var(--text-secondary); cursor: pointer; transition: var(--transition); display: flex; align-items: center; gap: 0.4rem;">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 8-6 4 6 4V8Z"></path><rect width="14" height="12" x="2" y="6" rx="2" ry="2"></rect></svg>
                 With Video
@@ -203,6 +207,7 @@ document.getElementById('toggle-filters-btn')?.addEventListener('click', functio
 });
 
 const searchInput = document.getElementById('recipe-search');
+const tagSearchInput = document.getElementById('tag-search');
 const clearBtn = document.getElementById('clear-search-btn');
 let activeTags = new Set();
 
@@ -238,10 +243,16 @@ function filterRecipes() {
 
     // Update tag filter buttons visibility
     const tagButtons = document.querySelectorAll('.tag-filter-btn');
+    const tagQuery = tagSearchInput?.value.toLowerCase() || "";
+
     tagButtons.forEach(btn => {
         const tag = btn.dataset.tag.toLowerCase();
-        // Show if tag is active OR if it's available in the current result set
-        if (activeTags.has(btn.dataset.tag) || availableTags.has(tag)) {
+        const label = btn.innerText.toLowerCase();
+        
+        const matchesTagSearch = !tagQuery || tag.includes(tagQuery) || label.includes(tagQuery);
+        const isAvailable = activeTags.has(btn.dataset.tag) || availableTags.has(tag);
+
+        if (isAvailable && matchesTagSearch) {
             btn.style.display = 'flex';
         } else {
             btn.style.display = 'none';
@@ -285,6 +296,7 @@ function filterByTag(tag, event) {
 
 function clearFilters() {
     searchInput.value = '';
+    if (tagSearchInput) tagSearchInput.value = '';
     activeTags.clear();
     document.querySelectorAll('.tag-filter-btn').forEach(btn => {
         btn.style.background = 'var(--bg-color)';
@@ -332,6 +344,7 @@ async function toggleFavorite(id, btn, event) {
 }
 
 searchInput?.addEventListener('input', filterRecipes);
+tagSearchInput?.addEventListener('input', filterRecipes);
 
 document.getElementById('photo-import-form')?.addEventListener('submit', function(e) {
     const btn = document.getElementById('photo-import-btn');

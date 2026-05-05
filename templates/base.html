@@ -39,6 +39,9 @@
                 <a href="temperatures" class="nav-link" title="Cooking Temperatures">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4v10.54a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0Z"></path></svg>
                 </a>
+                <button id="timer-toggle-btn" class="btn btn-secondary theme-toggle-btn" title="Cooking Timer">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                </button>
                 <button id="theme-toggle" class="btn btn-secondary theme-toggle-btn" aria-label="Toggle Dark Mode">
                     <svg id="theme-icon-dark" style="display: none;" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
                     <svg id="theme-icon-light" style="display: none;" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
@@ -61,6 +64,35 @@
             </nav>
         </div>
     </header>
+    <div id="timer-panel" style="display: none; position: fixed; top: 80px; right: 20px; width: 300px; background: var(--surface-color); border: 1px solid var(--border-color); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); z-index: 1000; padding: 1.5rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem;">
+            <h3 style="margin: 0; font-size: 1.1rem; font-weight: 700;">Cooking Timer</h3>
+            <button onclick="toggleTimerPanel()" style="background: none; border: none; cursor: pointer; color: var(--text-secondary); padding: 0.25rem; display: flex; align-items: center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
+        </div>
+        <div id="timer-display" style="font-size: 3rem; font-weight: 800; text-align: center; margin-bottom: 1.5rem; font-variant-numeric: tabular-nums; color: var(--text-primary); font-family: monospace;">00:00:00</div>
+        <div id="timer-inputs" style="display: flex; gap: 0.75rem; margin-bottom: 1.5rem;">
+            <div style="flex: 1; text-align: center;">
+                <input type="number" id="timer-h" min="0" max="99" value="0" class="form-control" style="text-align: center; padding: 0.5rem;">
+                <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.4rem; font-weight: 600;">Hrs</div>
+            </div>
+            <div style="flex: 1; text-align: center;">
+                <input type="number" id="timer-m" min="0" max="59" value="0" class="form-control" style="text-align: center; padding: 0.5rem;">
+                <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.4rem; font-weight: 600;">Min</div>
+            </div>
+            <div style="flex: 1; text-align: center;">
+                <input type="number" id="timer-s" min="0" max="59" value="0" class="form-control" style="text-align: center; padding: 0.5rem;">
+                <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.4rem; font-weight: 600;">Sec</div>
+            </div>
+        </div>
+        <div style="display: flex; gap: 0.75rem;">
+            <button id="timer-start-btn" onclick="startTimer()" class="btn btn-primary" style="flex: 2;">Start</button>
+            <button onclick="resetTimer()" class="btn btn-secondary" style="flex: 1; padding: 0.75rem;">Reset</button>
+        </div>
+        <div id="timer-suggestions" style="display: none; margin-top: 1.25rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+            <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">Suggested Times</div>
+            <div id="suggestion-list" style="display: flex; gap: 0.5rem; flex-wrap: wrap;"></div>
+        </div>
+    </div>
 
     <main class="container">
         {% block content %}{% endblock %}
@@ -98,6 +130,162 @@
             localStorage.setItem('theme', newTheme);
             updateThemeIcons();
         });
+
+        // Timer Logic
+        let timerInterval = null;
+        let timerSeconds = 0;
+        let isAlarming = false;
+        const timerDisplay = document.getElementById('timer-display');
+        const timerPanel = document.getElementById('timer-panel');
+        const timerToggleBtn = document.getElementById('timer-toggle-btn');
+        const alarmSound = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+        alarmSound.loop = true;
+
+        timerToggleBtn.addEventListener('click', toggleTimerPanel);
+
+        function toggleTimerPanel() {
+            if (isAlarming) {
+                stopAlarm();
+                return;
+            }
+            const isVisible = timerPanel.style.display === 'block';
+            timerPanel.style.display = isVisible ? 'none' : 'block';
+            if (!isVisible) {
+                // Populate suggestions if available
+                const suggestions = window.timerSuggestions || [];
+                const list = document.getElementById('suggestion-list');
+                const area = document.getElementById('timer-suggestions');
+                
+                if (suggestions.length > 0) {
+                    list.innerHTML = '';
+                    suggestions.forEach(s => {
+                        const btn = document.createElement('button');
+                        btn.className = 'btn btn-secondary';
+                        btn.style.padding = '0.4rem 0.75rem';
+                        btn.style.fontSize = '0.8rem';
+                        btn.innerText = s.label;
+                        btn.onclick = () => setTimerFromSuggestion(s.time);
+                        list.appendChild(btn);
+                    });
+                    area.style.display = 'block';
+                } else {
+                    area.style.display = 'none';
+                }
+                
+                document.getElementById('timer-m').focus();
+            }
+        }
+
+        function setTimerFromSuggestion(timeStr) {
+            const totalSec = parseTimeStr(timeStr);
+            if (totalSec > 0) {
+                timerSeconds = totalSec;
+                updateTimerDisplay();
+                startTimer();
+            }
+        }
+
+        function parseTimeStr(str) {
+            let seconds = 0;
+            // Handle formats like "1h 30m", "45m", "10s", "1.5h"
+            const h = str.match(/(\d+\.?\d*)\s*h/i);
+            const m = str.match(/(\d+\.?\d*)\s*m/i);
+            const s = str.match(/(\d+\.?\d*)\s*s/i);
+            
+            if (h) seconds += parseFloat(h[1]) * 3600;
+            if (m) seconds += parseFloat(m[1]) * 60;
+            if (s) seconds += parseFloat(s[1]);
+            
+            // Fallback for plain numbers (assume minutes)
+            if (seconds === 0 && /^\d+\.?\d*$/.test(str.trim())) {
+                seconds = parseFloat(str.trim()) * 60;
+            }
+            return Math.round(seconds);
+        }
+
+        function stopAlarm() {
+            isAlarming = false;
+            timerToggleBtn.classList.remove('alarm-pulsing');
+            resetTimer();
+        }
+
+        function updateTimerDisplay() {
+            const h = Math.floor(timerSeconds / 3600);
+            const m = Math.floor((timerSeconds % 3600) / 60);
+            const s = timerSeconds % 60;
+            timerDisplay.innerText = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+        }
+
+        function startTimer() {
+            const btn = document.getElementById('timer-start-btn');
+            if (timerInterval || isAlarming) {
+                if (isAlarming) {
+                    stopAlarm();
+                } else {
+                    clearInterval(timerInterval);
+                    timerInterval = null;
+                    btn.innerText = 'Start';
+                    btn.className = 'btn btn-primary';
+                }
+                alarmSound.pause();
+                alarmSound.currentTime = 0;
+            } else {
+                if (timerSeconds === 0) {
+                    const h = parseInt(document.getElementById('timer-h').value) || 0;
+                    const m = parseInt(document.getElementById('timer-m').value) || 0;
+                    const s = parseInt(document.getElementById('timer-s').value) || 0;
+                    timerSeconds = (h * 3600) + (m * 60) + s;
+                }
+                
+                if (timerSeconds <= 0) return;
+
+                btn.innerText = 'Pause';
+                btn.className = 'btn btn-secondary';
+                
+                timerInterval = setInterval(() => {
+                    timerSeconds--;
+                    updateTimerDisplay();
+                    if (timerSeconds <= 0) {
+                        clearInterval(timerInterval);
+                        timerInterval = null;
+                        isAlarming = true;
+                        timerToggleBtn.classList.add('alarm-pulsing');
+                        btn.innerText = 'Stop Alarm';
+                        btn.style.backgroundColor = 'var(--danger)';
+                        btn.style.color = 'white';
+                        alarmSound.play().catch(e => console.log("Sound play failed:", e));
+                        
+                        // Browser notification if supported
+                        if (Notification.permission === "granted") {
+                            new Notification("Timer Finished!", { body: "Your cook is ready!" });
+                        }
+                    }
+                }, 1000);
+            }
+        }
+
+        function resetTimer() {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+            isAlarming = false;
+            timerToggleBtn.classList.remove('alarm-pulsing');
+            timerSeconds = 0;
+            updateTimerDisplay();
+            const btn = document.getElementById('timer-start-btn');
+            btn.innerText = 'Start';
+            btn.className = 'btn btn-primary';
+            btn.style.backgroundColor = '';
+            btn.style.color = '';
+            alarmSound.pause();
+            alarmSound.currentTime = 0;
+        }
+
+        // Request notification permission
+        if ("Notification" in window && Notification.permission === "default") {
+            Notification.requestPermission();
+        }
     </script>
 </body>
 </html>
