@@ -7,16 +7,16 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
   reporter: 'html',
-  timeout: 5000,
+  timeout: process.env.CI ? 30000 : 15000,
   expect: {
-    timeout: 5000
+    timeout: process.env.CI ? 10000 : 10000
   },
   use: {
     baseURL: process.env.BASE_URL || 'http://localhost:3000',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
-    navigationTimeout: 5000,
-    actionTimeout: 5000,
+    navigationTimeout: process.env.CI ? 30000 : 15000,
+    actionTimeout: process.env.CI ? 15000 : 10000,
   },
 
   projects: [
@@ -49,9 +49,9 @@ export default defineConfig({
 
   /* Run your local dev server before starting the tests */
   webServer: {
-    command: process.env.CI ? './target/debug/recipemanager' : 'cargo run --bin recipemanager',
+    command: (process.env.CI || process.env.USE_BINARY) ? './target/debug/recipemanager' : 'cargo run --bin recipemanager',
     url: 'http://localhost:3000',
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: true,
     timeout: 120 * 1000,
   },
 });
