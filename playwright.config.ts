@@ -18,15 +18,19 @@ export default defineConfig({
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
     },
-    {
-      name: 'firefox',
-      use: { ...devices['Desktop Firefox'] },
-    },
-    {
-      name: 'webkit',
-      use: { ...devices['Desktop Safari'] },
-    },
-    /* Test against mobile viewports. */
+    /* Skip Firefox/Webkit in CI to save time, unless specifically needed */
+    ...(!process.env.CI ? [
+      {
+        name: 'firefox',
+        use: { ...devices['Desktop Firefox'] },
+      },
+      {
+        name: 'webkit',
+        use: { ...devices['Desktop Safari'] },
+      },
+    ] : []),
+    
+    /* Test against mobile viewports in both environments */
     {
       name: 'Mobile Chrome',
       use: { ...devices['Pixel 5'] },
@@ -39,7 +43,7 @@ export default defineConfig({
 
   /* Run your local dev server before starting the tests */
   webServer: {
-    command: 'cargo run --bin recipemanager',
+    command: process.env.CI ? './target/debug/recipemanager' : 'cargo run --bin recipemanager',
     url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
     timeout: 120 * 1000,

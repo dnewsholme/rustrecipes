@@ -28,8 +28,11 @@ jobs:
     - name: Install dependencies
       run: npm install
 
+    - name: Build Rust Server
+      run: cargo build --bin recipemanager
+
     - name: Install Playwright Browsers
-      run: npx playwright install --with-deps
+      run: npx playwright install chromium --with-deps
 
     - name: Create data directories
       run: mkdir -p data/recipes data/uploads
