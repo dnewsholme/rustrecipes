@@ -66,6 +66,10 @@
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path></svg>
                 Combustion Data
             </button>
+            <button class="tag-filter-btn" data-tag="is-favorite" onclick="toggleTagFilter('is-favorite')" style="background: var(--bg-color); border: 1px solid var(--border-color); padding: 0.35rem 0.85rem; border-radius: 20px; font-size: 0.85rem; color: var(--text-secondary); cursor: pointer; transition: var(--transition); display: flex; align-items: center; gap: 0.4rem;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                Favorites
+            </button>
         </div>
         {% for tag in all_tags %}
             <button class="tag-filter-btn" data-tag="{{ tag }}" onclick="toggleTagFilter('{{ tag }}')" style="background: var(--bg-color); border: 1px solid var(--border-color); padding: 0.35rem 0.85rem; border-radius: 20px; font-size: 0.85rem; color: var(--text-secondary); cursor: pointer; transition: var(--transition);">
@@ -78,7 +82,7 @@
 
 <div class="recipe-grid">
     {% for recipe in recipes %}
-    <div class="recipe-card" data-search='{{ recipe.tags.join(" ") }} {{ recipe.ingredients.join(" ") }} {% if recipe.has_video() %}has-video{% endif %} {% if recipe.has_combustion() %}has-combustion{% endif %}'>
+    <div class="recipe-card" data-search='{{ recipe.tags.join(" ") }} {{ recipe.ingredients.join(" ") }} {% if recipe.has_video() %}has-video{% endif %} {% if recipe.has_combustion() %}has-combustion{% endif %} {% if recipe.favorite %}is-favorite{% endif %}'>
         {% match recipe.image %}
             {% when Some with (img) %}
                 <img src="{{ img }}" alt="{{ recipe.title }}" class="recipe-card-img">
@@ -86,25 +90,33 @@
                 <div class="recipe-card-img" style="display:flex; align-items:center; justify-content:center; color:#64748b;">No Image</div>
         {% endmatch %}
         <div class="recipe-card-content">
-            <h3 class="recipe-title">
-                <a href="recipe/{{ recipe.id }}">{{ recipe.title }}</a>
-                <div class="recipe-feature-icons" style="display: inline-flex; gap: 0.35rem; margin-left: 0.5rem; vertical-align: middle;">
-                    {% if recipe.has_combustion() %}
-                        <span title="Combustion Data" style="display: inline-flex;">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#e67e22" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><title>Combustion Data</title><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path></svg>
-                        </span>
-                    {% endif %}
-                    {% if recipe.has_video() %}
-                        <span title="Video Embed" style="display: inline-flex;">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#e74c3c" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><title>Video Embed</title><path d="m22 8-6 4 6 4V8Z"></path><rect width="14" height="12" x="2" y="6" rx="2" ry="2"></rect></svg>
-                        </span>
-                    {% endif %}
-                    {% if recipe.leaven_info().0 %}
-                        <span title="Fermentation Calculator" style="display: inline-flex;">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#27ae60" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><title>Fermentation Calculator</title><path d="M12 2v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="M20 12h2"></path><path d="m19.07 19.07-1.41-1.41"></path><path d="M12 22v-2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="M2 12h2"></path><path d="m7.76 7.76-1.41 1.41"></path><path d="M12 7v5l3 3"></path></svg>
-                        </span>
-                    {% endif %}
+            <h3 class="recipe-title" style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem;">
+                <div style="flex-grow: 1;">
+                    <a href="recipe/{{ recipe.id }}">{{ recipe.title }}</a>
+                    <div class="recipe-feature-icons" style="display: inline-flex; gap: 0.35rem; margin-left: 0.5rem; vertical-align: middle;">
+                        {% if recipe.has_combustion() %}
+                            <span title="Combustion Data" style="display: inline-flex;">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#e67e22" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><title>Combustion Data</title><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path></svg>
+                            </span>
+                        {% endif %}
+                        {% if recipe.has_video() %}
+                            <span title="Video Embed" style="display: inline-flex;">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#e74c3c" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><title>Video Embed</title><path d="m22 8-6 4 6 4V8Z"></path><rect width="14" height="12" x="2" y="6" rx="2" ry="2"></rect></svg>
+                            </span>
+                        {% endif %}
+                        {% if recipe.leaven_info().0 %}
+                            <span title="Fermentation Calculator" style="display: inline-flex;">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#27ae60" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><title>Fermentation Calculator</title><path d="M12 2v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="M20 12h2"></path><path d="m19.07 19.07-1.41-1.41"></path><path d="M12 22v-2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="M2 12h2"></path><path d="m7.76 7.76-1.41 1.41"></path><path d="M12 7v5l3 3"></path></svg>
+                            </span>
+                        {% endif %}
+                    </div>
                 </div>
+                <button onclick="toggleFavorite('{{ recipe.id }}', this, event)" 
+                    style="background: none; border: none; padding: 0.25rem; cursor: {% if is_admin %}pointer{% else %}default{% endif %}; color: {% if recipe.favorite %}var(--accent-color){% else %}var(--text-secondary){% endif %}; transition: var(--transition); flex-shrink: 0;"
+                    {% if !is_admin %}disabled{% endif %}
+                    title="{% if is_admin %}Toggle Favorite{% else %}Favorite{% endif %}">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="{% if recipe.favorite %}currentColor{% else %}none{% endif %}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                </button>
                 {% match recipe.source_url %}
                     {% when Some with (url) %}
                         {% if !url.trim().is_empty() %}
@@ -257,6 +269,37 @@ function clearFilters() {
         btn.style.borderColor = 'var(--border-color)';
     });
     filterRecipes();
+}
+
+async function toggleFavorite(id, btn, event) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    
+    try {
+        const response = await fetch(`recipe/favorite/${id}`, { method: 'POST' });
+        if (response.ok) {
+            const data = await response.json();
+            const svg = btn.querySelector('svg');
+            const card = btn.closest('.recipe-card');
+            
+            if (data.favorite) {
+                btn.style.color = 'var(--accent-color)';
+                svg.setAttribute('fill', 'currentColor');
+                card.dataset.search += ' is-favorite';
+            } else {
+                btn.style.color = 'var(--text-secondary)';
+                svg.setAttribute('fill', 'none');
+                card.dataset.search = card.dataset.search.replace(' is-favorite', '');
+            }
+            filterRecipes();
+        } else if (response.status === 401) {
+            alert('You must be logged in as admin to favorite recipes.');
+        }
+    } catch (err) {
+        console.error('Failed to toggle favorite:', err);
+    }
 }
 
 searchInput?.addEventListener('input', filterRecipes);

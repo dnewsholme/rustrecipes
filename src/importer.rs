@@ -173,6 +173,7 @@ pub async fn import_recipe_from_text(text: &str) -> Option<Recipe> {
                     html: None,
                     combustion_csv: None,
                     video_url: None,
+                    favorite: false,
                 });
             }
             Err(e) => {
@@ -299,6 +300,7 @@ fn convert_ld_to_recipe(ld: LdRecipe, url: &str) -> Recipe {
         html: None,
         combustion_csv: None,
         video_url: None,
+        favorite: false,
     }
 }
 
@@ -472,6 +474,7 @@ pub async fn import_paprika_archive(bytes: &[u8]) -> Vec<Recipe> {
                             html: None,
                             combustion_csv: None,
                             video_url: None,
+                            favorite: false,
                         };
                         imported.push(recipe);
                     }
@@ -610,6 +613,7 @@ pub async fn import_recipe_from_photo(mime_type: &str, image_data: &[u8]) -> Opt
                     html: None,
                     combustion_csv: None,
                     video_url: None,
+                    favorite: false,
                 });
             }
             Err(e) => {

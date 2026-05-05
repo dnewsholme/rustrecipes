@@ -333,6 +333,7 @@ async fn new_recipe() -> impl IntoResponse {
             markdown: String::new(),
             html: None,
             video_url: None,
+            favorite: false,
         },
         is_new: true,
         base_url: get_base_url(),
@@ -367,10 +368,25 @@ async fn create_recipe(multipart: Multipart) -> impl IntoResponse {
         html: None,
         combustion_csv: form.combustion_csv,
         video_url: form.video_url,
+        favorite: false,
     };
     let _ = storage::save_recipe(&recipe).await;
     info!("Created new recipe: {} ({})", recipe.title, id);
     Ok(Redirect::to(&format!("{}/recipe/{}", get_base_url(), id)))
+}
+
+async fn toggle_favorite(jar: PrivateCookieJar, Path(id): Path<String>) -> impl IntoResponse {
+    if !is_admin_session(&jar) {
+        return Err((StatusCode::UNAUTHORIZED, "Admin only"));
+    }
+
+    if let Some(mut recipe) = storage::read_recipe(&id).await {
+        recipe.favorite = !recipe.favorite;
+        let _ = storage::save_recipe(&recipe).await;
+        Ok(Json(serde_json::json!({ "favorite": recipe.favorite })))
+    } else {
+        Err((StatusCode::NOT_FOUND, "Recipe not found"))
+    }
 }
 
 async fn edit_recipe(Path(id): Path<String>) -> impl IntoResponse {
@@ -668,6 +684,7 @@ async fn main() {
     let public_routes = Router::new()
         .route("/", get(index))
         .route("/recipe/{id}", get(view_recipe))
+        .route("/recipe/favorite/{id}", post(toggle_favorite))
         .route("/temperatures", get(view_temperatures))
         .route("/login", get(login_form).post(login_submit))
         .route("/logout", post(logout))

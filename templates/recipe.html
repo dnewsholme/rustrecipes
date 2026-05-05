@@ -3,6 +3,13 @@
 {% block title %}{{ recipe.title }}{% endblock %}
 
 {% block header_actions %}
+<button id="favorite-btn" class="btn btn-secondary"
+    style="padding: 0.5rem 0.75rem; font-size: 0.85rem; display: flex; align-items: center; gap: 0.4rem; color: {% if recipe.favorite %}var(--accent-color){% else %}inherit{% endif %}; cursor: {% if is_admin %}pointer{% else %}default{% endif %};"
+    onclick="toggleFavorite('{{ recipe.id }}', this)"
+    {% if !is_admin %}disabled{% endif %}>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="{% if recipe.favorite %}currentColor{% else %}none{% endif %}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+    <span class="favorite-text">{% if recipe.favorite %}Favorited{% else %}Favorite{% endif %}</span>
+</button>
 <button id="wakelock-btn" class="btn btn-secondary"
     style="padding: 0.5rem 0.75rem; font-size: 0.85rem; display: flex; align-items: center; gap: 0.4rem;"
     onclick="toggleWakeLock()">
@@ -15,6 +22,26 @@
     </svg>
     <span class="wakelock-text">Keep Screen On</span>
 </button>
+{% endblock %}
+
+{% block head %}
+<style>
+    @media (max-width: 768px) {
+        #description-toggle-btn {
+            display: flex !important;
+        }
+        #recipe-description {
+            display: none;
+            padding: 1rem;
+            background: var(--surface-hover);
+            border-radius: var(--radius-md);
+            margin-top: 0.5rem;
+        }
+        #recipe-description.show {
+            display: block;
+        }
+    }
+</style>
 {% endblock %}
 
 {% block content %}
@@ -30,6 +57,20 @@
         {% endfor %}
     </div>
     {% endif %}
+
+    {% match recipe.description %}
+    {% when Some with (desc) %}
+    <div id="recipe-description-container" style="margin-bottom: 2rem; text-align: center; max-width: 800px; margin-left: auto; margin-right: auto; padding: 0 1rem;">
+        <button id="description-toggle-btn" class="btn btn-secondary" onclick="toggleDescription()" style="display: none; align-items: center; justify-content: center; gap: 0.5rem; width: 100%; margin-bottom: 1rem;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+            <span id="description-toggle-text">Show Notes</span>
+        </button>
+        <div id="recipe-description" class="recipe-description" style="color: var(--text-secondary); line-height: 1.6; font-style: italic;">
+            {{ desc }}
+        </div>
+    </div>
+    {% when None %}
+    {% endmatch %}
 
     {% if is_admin %}
     <div style="display: flex; gap: 1rem; justify-content: center; margin-bottom: 2rem;">
@@ -312,6 +353,43 @@
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
+    function toggleDescription() {
+        const desc = document.getElementById('recipe-description');
+        const btnText = document.getElementById('description-toggle-text');
+        if (desc.classList.contains('show')) {
+            desc.classList.remove('show');
+            btnText.textContent = 'Show Notes';
+        } else {
+            desc.classList.add('show');
+            btnText.textContent = 'Hide Notes';
+        }
+    }
+
+    async function toggleFavorite(id, btn) {
+        try {
+            const response = await fetch(`recipe/favorite/${id}`, { method: 'POST' });
+            if (response.ok) {
+                const data = await response.json();
+                const svg = btn.querySelector('svg');
+                const text = btn.querySelector('.favorite-text');
+                
+                if (data.favorite) {
+                    btn.style.color = 'var(--accent-color)';
+                    svg.setAttribute('fill', 'currentColor');
+                    text.textContent = 'Favorited';
+                } else {
+                    btn.style.color = 'inherit';
+                    svg.setAttribute('fill', 'none');
+                    text.textContent = 'Favorite';
+                }
+            } else if (response.status === 401) {
+                alert('You must be logged in as admin to favorite recipes.');
+            }
+        } catch (err) {
+            console.error('Failed to toggle favorite:', err);
+        }
+    }
+
     const originalIngredients = [];
     document.querySelectorAll('.ingredient-item').forEach(item => {
         originalIngredients.push(item.innerText.trim());
@@ -417,12 +495,6 @@
         'lb': { to: 'g', ratio: 453.6, type: 'weight', sys: 'metric' },
         'pound': { to: 'g', ratio: 453.6, type: 'weight', sys: 'metric' },
         'pounds': { to: 'g', ratio: 453.6, type: 'weight', sys: 'metric' },
-        'tsp': { to: 'ml', ratio: 5, type: 'vol', sys: 'metric' },
-        'teaspoon': { to: 'ml', ratio: 5, type: 'vol', sys: 'metric' },
-        'teaspoons': { to: 'ml', ratio: 5, type: 'vol', sys: 'metric' },
-        'tbsp': { to: 'ml', ratio: 15, type: 'vol', sys: 'metric' },
-        'tablespoon': { to: 'ml', ratio: 15, type: 'vol', sys: 'metric' },
-        'tablespoons': { to: 'ml', ratio: 15, type: 'vol', sys: 'metric' },
         'pt': { to: 'ml', ratio: 473, type: 'vol', sys: 'metric' },
         'pint': { to: 'ml', ratio: 473, type: 'vol', sys: 'metric' },
         'pints': { to: 'ml', ratio: 473, type: 'vol', sys: 'metric' },
@@ -432,6 +504,8 @@
         'gal': { to: 'l', ratio: 3.785, type: 'vol', sys: 'metric' },
         'gallon': { to: 'l', ratio: 3.785, type: 'vol', sys: 'metric' },
         'gallons': { to: 'l', ratio: 3.785, type: 'vol', sys: 'metric' },
+        'stick': { to: 'g', ratio: 113, type: 'weight', sys: 'metric' },
+        'sticks': { to: 'g', ratio: 113, type: 'weight', sys: 'metric' },
 
         // Metric to Imperial
         'g': { to: 'oz', ratio: 0.035274, type: 'weight', sys: 'imperial' },
@@ -476,7 +550,7 @@
         if (!recipeContent) return;
 
         const unitRegex = new RegExp(`(?:^|\\s|\\()(${numberRegexStr})\\s*(${unitsRegexStr})\\b`, 'gi');
-        const tempRegex = new RegExp(`(?:^|\\s|\\()(\\d+)\\s*(?:°|degrees?\\s+)?(c|f|celsius|fahrenheit)\\b`, 'gi');
+        const tempRegex = new RegExp(`(?:^|\\s|\\()(\\d+(?:\\s*-\\s*\\d+)?)\\s*(?:°|degrees?\\s+)?(c|f|celsius|fahrenheit)\\b`, 'gi');
         // Regex for ingredient amounts at the start of a line
         const startAmountRegex = new RegExp(`^(${numberRegexStr})(?:\\s*(${unitsRegexStr}))?\\b`, 'i');
 
@@ -659,24 +733,28 @@
         // 4. Update all Temperature Spans
         const instructionTemps = document.querySelectorAll('.instruction-temp');
         instructionTemps.forEach(span => {
-            const base = parseFloat(span.dataset.base);
+            const base = span.dataset.base;
             const baseUnit = span.dataset.unit;
 
-            if (!isNaN(base)) {
-                let finalVal = base;
+            if (base) {
+                const parts = base.split('-').map(p => parseFloat(p.trim()));
                 let finalUnit = baseUnit;
 
-                if (currentTempSystem !== 'original') {
+                const convertedParts = parts.map(val => {
+                    if (currentTempSystem === 'original') return val;
                     if (baseUnit === 'f' && currentTempSystem === 'c') {
-                        finalVal = (base - 32) * 5 / 9;
-                        finalUnit = 'c';
+                        return (val - 32) * 5 / 9;
                     } else if (baseUnit === 'c' && currentTempSystem === 'f') {
-                        finalVal = (base * 9 / 5) + 32;
-                        finalUnit = 'f';
+                        return (val * 9 / 5) + 32;
                     }
+                    return val;
+                });
+
+                if (currentTempSystem !== 'original') {
+                    finalUnit = currentTempSystem;
                 }
 
-                span.textContent = Math.round(finalVal) + "°" + finalUnit.toUpperCase();
+                span.textContent = convertedParts.map(p => Math.round(p)).join('-') + "°" + finalUnit.toUpperCase();
             }
         });
     }

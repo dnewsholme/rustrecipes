@@ -23,6 +23,8 @@ pub struct Recipe {
     pub combustion_csv: Option<String>,
     #[serde(default)]
     pub video_url: Option<String>,
+    #[serde(default)]
+    pub favorite: bool,
 }
 
 impl Recipe {

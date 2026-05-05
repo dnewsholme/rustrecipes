@@ -109,6 +109,7 @@ mod tests {
             html: None,
             combustion_csv: None,
             video_url: None,
+            favorite: false,
         };
 
         // We'll temporarily point to a test file in the real dir or just use a unique ID
