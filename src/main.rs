@@ -495,48 +495,48 @@ async fn import_paprika(mut multipart: Multipart) -> impl IntoResponse {
 async fn import_photo(mut multipart: Multipart) -> Response {
     while let Some(field) = multipart.next_field().await.unwrap_or(None) {
         let name = field.name().unwrap_or("").to_string();
-        if name == "photo" {
-            let content_type = field.content_type().unwrap_or("image/jpeg").to_string();
-
-            let filename = field.file_name().unwrap_or("photo.jpg").to_string();
-            let extension = std::path::Path::new(&filename)
-                .extension()
-                .and_then(|e| e.to_str())
-                .unwrap_or("jpg");
-
-            if let Ok(data) = field.bytes().await {
-                // First, save the photo
-                let new_filename = format!("{}.{}", uuid::Uuid::new_v4(), extension);
-                let filepath = format!("data/uploads/{}", new_filename);
-                let _ = std::fs::write(&filepath, &data);
-
-                // Then, call Gemini
-                if let Some(mut recipe) =
-                    importer::import_recipe_from_photo(&content_type, &data).await
-                {
-                    // Set the image
-                    recipe.image = Some(format!("uploads/{}", new_filename));
-
-                    info!(
-                        "Successfully parsed recipe from photo using AI: {}",
-                        recipe.title
-                    );
-                    let template = EditTemplate {
-                        recipe,
-                        is_new: true,
-                        base_url: get_base_url(),
-                        app_version: APP_VERSION.to_string(),
-                        is_admin: true,
-                    };
-                    return Html(template.render().unwrap()).into_response();
-                } else {
-                    warn!("Failed to parse recipe from photo using AI");
-                    return (
-                        StatusCode::BAD_REQUEST,
-                        "Failed to parse recipe from photo using AI. Is GEMINI_API_KEY set?",
-                    )
-                        .into_response();
+        if name == "photo"
+            && let Ok(data) = field.bytes().await
+        {
+            // Process image: resize and compress
+            let processed_data = match storage::process_image(&data) {
+                Ok(d) => d,
+                Err(e) => {
+                    warn!("Failed to process photo: {:?}", e);
+                    data.to_vec()
                 }
+            };
+
+            let new_filename = format!("{}.jpg", uuid::Uuid::new_v4());
+            let filepath = format!("data/uploads/{}", new_filename);
+            let _ = std::fs::write(&filepath, &processed_data);
+
+            // Then, call Gemini using the processed image
+            if let Some(mut recipe) =
+                importer::import_recipe_from_photo("image/jpeg", &processed_data).await
+            {
+                // Set the image
+                recipe.image = Some(format!("uploads/{}", new_filename));
+
+                info!(
+                    "Successfully parsed recipe from photo using AI: {}",
+                    recipe.title
+                );
+                let template = EditTemplate {
+                    recipe,
+                    is_new: true,
+                    base_url: get_base_url(),
+                    app_version: APP_VERSION.to_string(),
+                    is_admin: true,
+                };
+                return Html(template.render().unwrap()).into_response();
+            } else {
+                warn!("Failed to parse recipe from photo using AI");
+                return (
+                    StatusCode::BAD_REQUEST,
+                    "Failed to parse recipe from photo using AI. Is GEMINI_API_KEY set?",
+                )
+                    .into_response();
             }
         }
     }
@@ -546,23 +546,26 @@ async fn import_photo(mut multipart: Multipart) -> Response {
 
 async fn upload_image(mut multipart: Multipart) -> impl IntoResponse {
     while let Some(field) = multipart.next_field().await.unwrap_or(None) {
-        if let Some(filename) = field.file_name() {
-            let extension = std::path::Path::new(filename)
-                .extension()
-                .and_then(|e| e.to_str())
-                .unwrap_or("png");
+        let bytes = field.bytes().await.unwrap();
 
-            let new_filename = format!("{}.{}", uuid::Uuid::new_v4(), extension);
-            let filepath = format!("data/uploads/{}", new_filename);
-
-            let data = field.bytes().await.unwrap();
-            if std::fs::write(&filepath, data).is_ok() {
-                let url = format!("uploads/{}", new_filename);
-                return Json(UploadResponse {
-                    data: Some(UploadData { file_path: url }),
-                    error: None,
-                });
+        // Process image: resize and compress
+        let processed_data = match storage::process_image(&bytes) {
+            Ok(d) => d,
+            Err(e) => {
+                warn!("Failed to process upload: {:?}", e);
+                bytes.to_vec()
             }
+        };
+
+        let new_filename = format!("{}.jpg", uuid::Uuid::new_v4());
+        let filepath = format!("data/uploads/{}", new_filename);
+
+        if std::fs::write(&filepath, processed_data).is_ok() {
+            let url = format!("uploads/{}", new_filename);
+            return Json(UploadResponse {
+                data: Some(UploadData { file_path: url }),
+                error: None,
+            });
         }
     }
 

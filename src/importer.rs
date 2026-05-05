@@ -442,11 +442,22 @@ pub async fn import_paprika_archive(bytes: &[u8]) -> Vec<Recipe> {
                             }
                             b64 = b64.replace("\n", "").replace("\r", "").replace(" ", "");
 
-                            use base64::{Engine as _, engine::general_purpose};
-                            if let Ok(bytes) = general_purpose::STANDARD.decode(&b64) {
+                            use base64::Engine as _;
+                            use base64::engine::general_purpose;
+                            if let Ok(decoded_bytes) = general_purpose::STANDARD.decode(&b64) {
+                                // Process image: resize and compress
+                                let processed_data =
+                                    match crate::storage::process_image(&decoded_bytes) {
+                                        Ok(d) => d,
+                                        Err(e) => {
+                                            warn!("Failed to process Paprika image: {:?}", e);
+                                            decoded_bytes // Fallback to original bytes
+                                        }
+                                    };
+
                                 let new_filename = format!("{}.jpg", uuid::Uuid::new_v4());
                                 let filepath = format!("data/uploads/{}", new_filename);
-                                if std::fs::write(&filepath, bytes).is_ok() {
+                                if std::fs::write(&filepath, processed_data).is_ok() {
                                     final_image = Some(format!("uploads/{}", new_filename));
                                     break;
                                 }

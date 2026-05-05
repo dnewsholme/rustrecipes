@@ -1,8 +1,10 @@
 use crate::models::Recipe;
 // use tracing::error;
 
+use image::{GenericImageView, ImageFormat};
 use pulldown_cmark::{Parser, html};
 use std::fs;
+use std::io::Cursor;
 use std::path::PathBuf;
 
 const RECIPES_DIR: &str = "data/recipes";
@@ -80,6 +82,27 @@ pub async fn save_recipe(recipe: &Recipe) -> Result<(), std::io::Error> {
 pub async fn delete_recipe(id: &str) -> Result<(), std::io::Error> {
     let path = get_recipes_dir().join(format!("{}.md", id));
     fs::remove_file(path)
+}
+
+pub fn process_image(data: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    let img = image::load_from_memory(data)?;
+
+    // Resize if larger than 1200px in either dimension while maintaining aspect ratio
+    let (width, height) = img.dimensions();
+    let img = if width > 1200 || height > 1200 {
+        img.resize(1200, 1200, image::imageops::FilterType::Lanczos3)
+    } else {
+        img
+    };
+
+    let mut buf = Vec::new();
+    let mut cursor = Cursor::new(&mut buf);
+
+    // Save as JPEG with good quality
+    // DynamicImage::write_to with Jpeg format uses a default quality (usually around 75-80)
+    img.write_to(&mut cursor, ImageFormat::Jpeg)?;
+
+    Ok(buf)
 }
 
 #[cfg(test)]

@@ -3,8 +3,8 @@
 {% block title %}{{ recipe.title }}{% endblock %}
 
 {% block header_actions %}
-<button id="favorite-btn" class="btn btn-secondary"
-    style="padding: 0.5rem 0.75rem; font-size: 0.85rem; display: flex; align-items: center; gap: 0.4rem; color: {% if recipe.favorite %}var(--accent-color){% else %}inherit{% endif %}; cursor: {% if is_admin %}pointer{% else %}default{% endif %};"
+<button id="favorite-btn" class="btn btn-secondary favorite-btn {% if recipe.favorite %}is-favorite{% endif %} {% if is_admin %}is-admin{% endif %}"
+    style="padding: 0.5rem 0.75rem; font-size: 0.85rem; display: flex; align-items: center; gap: 0.4rem;"
     onclick="toggleFavorite('{{ recipe.id }}', this)"
     {% if !is_admin %}disabled{% endif %}>
     <svg width="16" height="16" viewBox="0 0 24 24" fill="{% if recipe.favorite %}currentColor{% else %}none{% endif %}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
@@ -41,6 +41,9 @@
             display: block;
         }
     }
+    .favorite-btn.is-favorite { color: var(--accent-color) !important; }
+    .favorite-btn.is-admin { cursor: pointer !important; }
+    .favorite-btn:not(.is-admin) { cursor: default !important; }
 </style>
 {% endblock %}
 
