@@ -11,7 +11,8 @@ test.describe('Recipe Imports', () => {
   });
 
   test('can import recipe from website URL', async ({ page }) => {
-    await page.click('#toggle-import-btn');
+    await page.click('#add-recipe-dropdown-btn');
+    await page.click('text=Import Recipe');
 
     // Using a Serious Eats recipe as it usually has good LD+JSON
     const url = 'https://www.seriouseats.com/the-best-roast-potatoes-ever-recipe';
@@ -32,7 +33,8 @@ test.describe('Recipe Imports', () => {
 
   test('can import recipe from YouTube URL', async ({ page }) => {
     test.skip(!process.env.GEMINI_API_KEY, 'GEMINI_API_KEY is not set');
-    await page.click('#toggle-import-btn');
+    await page.click('#add-recipe-dropdown-btn');
+    await page.click('text=Import Recipe');
 
     // A known cooking video
     const ytUrl = 'https://www.youtube.com/watch?v=41Kt91N4K34';
