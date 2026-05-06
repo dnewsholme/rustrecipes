@@ -300,7 +300,10 @@
     <div id="graph-tab" class="tab-content" data-csv="{% if csv.starts_with("http") %}{{ csv }}{% else %}{{ app_base }}/{{ csv }}{% endif %}">
         <div
             style="margin-top: 1rem; background: var(--bg-color); padding: 1.5rem; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
-            <h2 style="margin-top: 0;">Combustion Inc. Cook Data</h2>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h2 style="margin: 0;">Combustion Inc. Cook Data</h2>
+                <button class="btn btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;" onclick="window.combustionChart.resetZoom()">Reset Zoom</button>
+            </div>
             <div style="height: 400px; width: 100%;">
                 <canvas id="combustionChart"></canvas>
             </div>
@@ -409,6 +412,7 @@
 {% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom"></script>
 <script>
     function toggleDescription() {
         const desc = document.getElementById('recipe-description');
@@ -514,6 +518,11 @@
         // Update fermentation calculator if present
         if (document.getElementById('ferment-temp')) {
             updateFermentation();
+        }
+
+        // Update combustion chart if present
+        if (typeof updateCombustionChart === 'function') {
+            updateCombustionChart();
         }
     }
 
@@ -842,6 +851,32 @@
         return Math.round(num * 100) / 100;
     }
 
+    window.combustionChart = null;
+    window.combustionRawData = null;
+
+    function updateCombustionChart() {
+        if (!window.combustionChart || !window.combustionRawData) return;
+
+        const isFahrenheit = currentTempSystem === 'f';
+        const unit = isFahrenheit ? '°F' : '°C';
+
+        window.combustionChart.options.scales.y.title.text = `Temperature (${unit})`;
+
+        window.combustionChart.data.datasets.forEach(dataset => {
+            const col = dataset.columnId;
+            dataset.data = window.combustionRawData.map(row => {
+                let val = parseFloat(row[col]);
+                if (isNaN(val)) return null;
+                if (isFahrenheit) {
+                    return (val * 9 / 5) + 32;
+                }
+                return val;
+            });
+        });
+
+        window.combustionChart.update();
+    }
+
     const csvUrlInput = document.getElementById('combustion_csv_url');
     if (csvUrlInput && window.Papa && window.Chart) {
         fetch(csvUrlInput.value)
@@ -861,8 +896,8 @@
                     header: true,
                     skipEmptyLines: true,
                     complete: function (results) {
-                        const data = results.data;
-                        const labels = data.map(row => row.Timestamp || row.Time || '');
+                        window.combustionRawData = results.data;
+                        const labels = window.combustionRawData.map(row => row.Timestamp || row.Time || '');
 
                         const datasets = [];
                         const colors = [
@@ -881,10 +916,11 @@
 
                         let colorIdx = 0;
                         targetColumns.forEach(col => {
-                            if (data.length > 0 && data[0][col] !== undefined) {
+                            if (window.combustionRawData.length > 0 && window.combustionRawData[0][col] !== undefined) {
                                 datasets.push({
                                     label: niceLabels[col] || col,
-                                    data: data.map(row => parseFloat(row[col]) || null),
+                                    columnId: col,
+                                    data: [], // Filled by updateCombustionChart
                                     borderColor: colors[colorIdx % colors.length],
                                     fill: false,
                                     tension: 0.1,
@@ -895,7 +931,7 @@
                         });
 
                         const ctx = document.getElementById('combustionChart').getContext('2d');
-                        new Chart(ctx, {
+                        window.combustionChart = new Chart(ctx, {
                             type: 'line',
                             data: {
                                 labels: labels,
@@ -912,7 +948,7 @@
                                     x: {
                                         title: {
                                             display: true,
-                                            text: 'Time'
+                                            text: 'Time (s)'
                                         },
                                         ticks: {
                                             maxTicksLimit: 10
@@ -929,9 +965,27 @@
                                     point: {
                                         radius: 0
                                     }
+                                },
+                                plugins: {
+                                    zoom: {
+                                        zoom: {
+                                            wheel: {
+                                                enabled: true,
+                                            },
+                                            pinch: {
+                                                enabled: true
+                                            },
+                                            mode: 'xy',
+                                        },
+                                        pan: {
+                                            enabled: true,
+                                            mode: 'xy',
+                                        }
+                                    }
                                 }
                             }
                         });
+                        updateCombustionChart();
                     }
                 });
             });

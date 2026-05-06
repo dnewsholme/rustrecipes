@@ -327,9 +327,9 @@ main {
   }
 }
 
-/* Tabs for mobile */
+/* Tabs */
 .recipe-tabs {
-  display: none;
+  display: flex;
   gap: 0.5rem;
   margin-bottom: 1.5rem;
   border-bottom: 1px solid var(--border-color);
@@ -373,9 +373,6 @@ main {
     font-size: 1.75rem;
   }
 
-  .recipe-tabs {
-    display: flex;
-  }
   
   .recipe-content {
     padding: 1.25rem;

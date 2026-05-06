@@ -1,0 +1,18 @@
+Combustion Inc. Probe Data
+App: inc.combustion.app v3.2.4 release
+CSV version: 4
+Probe S/N: 1000A717
+Probe FW version: v2.3.3
+Probe HW revision: v1.1-A1
+Framework: Android v3.4.6 release
+Sample Period: 5000
+Created: 2026-05-03 13:59:28
+
+Timestamp,SessionID,SequenceNumber,T1,T2,T3,T4,T5,T6,T7,T8,VirtualCoreTemperature,VirtualSurfaceTemperature,VirtualAmbientTemperature,EstimatedCoreTemperature,PredictionSetPoint,VirtualCoreSensor,VirtualSurfaceSensor,VirtualAmbientSensor,PredictionState,PredictionMode,PredictionType,PredictionValueSeconds
+0.000,4101699823,0,21.70,21.70,21.60,21.60,21.70,21.70,21.65,21.65,21.70,21.60,21.65,21.70,0.00,T1,T4,T8,Probe Not Inserted,None,None,131071
+5.000,4101699823,1,21.85,21.90,21.90,22.50,22.15,23.40,22.90,22.35,21.85,22.50,23.40,21.80,0.00,T1,T4,T6,Probe Not Inserted,None,None,131071
+10.000,4101699823,2,22.10,22.20,22.30,23.25,24.40,26.05,25.25,23.45,22.10,24.40,26.05,21.90,0.00,T1,T5,T6,Probe Not Inserted,None,None,131071
+15.000,4101699823,3,22.65,22.75,22.95,23.75,25.45,27.20,26.40,24.15,22.65,23.75,27.20,22.30,0.00,T1,T4,T6,Probe Not Inserted,None,None,131071
+20.000,4101699823,4,23.10,23.15,23.40,24.15,25.90,27.30,26.65,24.30,23.10,24.15,27.30,22.70,0.00,T1,T4,T6,Probe Not Inserted,None,None,131071
+25.000,4101699823,5,23.40,23.50,23.75,24.45,26.15,27.30,26.65,24.50,23.40,24.45,27.30,23.00,0.00,T1,T4,T6,Probe Not Inserted,None,None,131071
+30.000,4101699823,6,23.70,23.80,24.10,24.70,26.25,27.15,26.45,24.55,23.70,24.70,27.15,23.40,0.00,T1,T4,T6,Probe Not Inserted,None,None,131071
