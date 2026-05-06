@@ -47,6 +47,8 @@ jobs:
           push: true
           build-args: |
             APP_VERSION=0.1.${{ github.run_number }}
-          tags: dnewsholme/rustrecipes:latest
+          tags: |
+            dnewsholme/rustrecipes:latest
+            dnewsholme/rustrecipes:0.1.${{ github.run_number }}
           cache-from: type=registry,ref=dnewsholme/rustrecipes:buildcache
           cache-to: type=registry,ref=dnewsholme/rustrecipes:buildcache,mode=max

@@ -112,12 +112,14 @@
                 Favorites
             </button>
         </div>
-        {% for tag in all_tags %}
-        <button class="tag-filter-btn" data-tag="{{ tag }}" onclick="toggleTagFilter('{{ tag }}')"
-            style="background: var(--bg-color); border: 1px solid var(--border-color); padding: 0.35rem 0.85rem; border-radius: 20px; font-size: 0.85rem; color: var(--text-secondary); cursor: pointer; transition: var(--transition);">
-            #{{ tag }}
-        </button>
-        {% endfor %}
+        <div id="user-tags-container" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            {% for tag in all_tags %}
+            <button class="tag-filter-btn" data-tag="{{ tag }}" onclick="toggleTagFilter('{{ tag }}')"
+                style="background: var(--bg-color); border: 1px solid var(--border-color); padding: 0.35rem 0.85rem; border-radius: 20px; font-size: 0.85rem; color: var(--text-secondary); cursor: pointer; transition: var(--transition);">
+                #{{ tag }}
+            </button>
+            {% endfor %}
+        </div>
     </div>
     {% endif %}
 </div>
