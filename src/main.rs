@@ -65,8 +65,6 @@ struct LoginTemplate {
     is_admin: bool,
 }
 
-
-
 const APP_VERSION: &str = match option_env!("APP_VERSION") {
     Some(v) => v,
     None => env!("CARGO_PKG_VERSION"),
