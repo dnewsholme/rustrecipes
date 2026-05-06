@@ -5,7 +5,12 @@
 {% block header_actions %}
 {% if is_admin %}
 <button id="toggle-import-btn" class="btn btn-secondary theme-toggle-btn" title="Import Recipe">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+        <polyline points="7 10 12 15 17 10"></polyline>
+        <line x1="12" y1="15" x2="12" y2="3"></line>
+    </svg>
 </button>
 {% endif %}
 {% endblock %}
@@ -14,25 +19,29 @@
 {% if is_admin %}
 <section id="importer-section" class="importer-section" style="display: none;">
     <h2>Import Recipe</h2>
-    <p style="color: var(--text-secondary); margin-bottom: 1rem;">Import from a URL, upload a Paprika export, or snap a photo of a cookbook using AI!</p>
+    <p style="color: var(--text-secondary); margin-bottom: 1rem;">Import from a web URL, YouTube (Requires Gemini),
+        upload a Paprika export, or snap a photo of a cookbook using AI!</p>
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 2rem;">
         <div>
             <h3 style="font-size: 1.1rem; margin-bottom: 0.5rem;">From URL</h3>
             <form action="{{ app_base }}/import" method="POST" class="importer-form">
-                <input type="url" id="url-input" name="url" class="form-control" placeholder="https://example.com/recipe" required>
+                <input type="url" id="url-input" name="url" class="form-control"
+                    placeholder="https://example.com/recipe" required>
                 <button type="submit" id="import-btn" class="btn btn-primary">Import Recipe</button>
             </form>
         </div>
         <div>
             <h3 style="font-size: 1.1rem; margin-bottom: 0.5rem;">From Paprika Export</h3>
-            <form action="{{ app_base }}/import/paprika" method="POST" enctype="multipart/form-data" class="importer-form">
+            <form action="{{ app_base }}/import/paprika" method="POST" enctype="multipart/form-data"
+                class="importer-form">
                 <input type="file" name="paprika_file" class="form-control" accept=".paprikarecipes" required>
                 <button type="submit" class="btn btn-primary">Upload File</button>
             </form>
         </div>
         <div>
             <h3 style="font-size: 1.1rem; margin-bottom: 0.5rem;">From Photo (AI)</h3>
-            <form action="{{ app_base }}/import/photo" method="POST" enctype="multipart/form-data" class="importer-form" id="ai-import-form">
+            <form action="{{ app_base }}/import/photo" method="POST" enctype="multipart/form-data" class="importer-form"
+                id="ai-import-form">
                 <input type="file" name="photo" class="form-control" accept="image/*" required>
                 <button type="submit" class="btn btn-primary" id="photo-import-btn">Scan Photo</button>
             </form>
@@ -44,43 +53,80 @@
 <div style="margin-bottom: 2rem;">
     <div style="display: flex; gap: 0.75rem; align-items: center; margin-bottom: 1rem; flex-wrap: wrap;">
         <div style="flex-grow: 1; position: relative;">
-            <input type="search" id="recipe-search" class="form-control" placeholder="Search recipes..." style="padding: 0.8rem 3rem 0.8rem 1rem; font-size: 1.1rem; border-radius: var(--radius-lg); width: 100%;">
-            <button onclick="clearFilters()" style="position: absolute; right: 0.75rem; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-secondary); cursor: pointer; padding: 0.5rem; display: none;" id="clear-search-btn" title="Clear Search">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            <input type="search" id="recipe-search" class="form-control" placeholder="Search recipes..."
+                style="padding: 0.8rem 3rem 0.8rem 1rem; font-size: 1.1rem; border-radius: var(--radius-lg); width: 100%;">
+            <button onclick="clearFilters()"
+                style="position: absolute; right: 0.75rem; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-secondary); cursor: pointer; padding: 0.5rem; display: none;"
+                id="clear-search-btn" title="Clear Search">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
             </button>
         </div>
         {% if !all_tags.is_empty() %}
-        <button id="toggle-filters-btn" class="btn btn-secondary" style="display: flex; align-items: center; gap: 0.5rem; white-space: nowrap; padding: 0.8rem 1.2rem; border-radius: var(--radius-lg);">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+        <button id="toggle-filters-btn" class="btn btn-secondary"
+            style="display: flex; align-items: center; gap: 0.5rem; white-space: nowrap; padding: 0.8rem 1.2rem; border-radius: var(--radius-lg);">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+            </svg>
             Filter by Tag
         </button>
         {% endif %}
     </div>
 
     {% if !all_tags.is_empty() || true %}
-    <div id="tag-filters" style="display: none; flex-direction: column; gap: 0.75rem; background: var(--surface-hover); padding: 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border-color); margin-bottom: 1rem;">
-        <div style="display: flex; align-items: center; gap: 0.5rem; background: var(--surface-color); padding: 0.6rem 0.85rem; border-radius: var(--radius-md); border: 1px solid var(--border-color); margin-bottom: 0.25rem;">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-            <input type="text" id="tag-search" placeholder="Search tags..." style="border: none; background: transparent; color: var(--text-primary); font-size: 0.9rem; width: 100%; outline: none;">
+    <div id="tag-filters"
+        style="display: none; flex-direction: column; gap: 0.75rem; background: var(--surface-hover); padding: 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border-color); margin-bottom: 1rem;">
+        <div
+            style="display: flex; align-items: center; gap: 0.5rem; background: var(--surface-color); padding: 0.6rem 0.85rem; border-radius: var(--radius-md); border: 1px solid var(--border-color); margin-bottom: 0.25rem;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input type="text" id="tag-search" placeholder="Search tags..."
+                style="border: none; background: transparent; color: var(--text-primary); font-size: 0.9rem; width: 100%; outline: none;">
         </div>
-        <div style="width: 100%; display: flex; gap: 0.5rem; flex-wrap: wrap; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem; margin-bottom: 0.25rem;">
-            <button class="tag-filter-btn" data-tag="has-video" onclick="toggleTagFilter('has-video')" style="background: var(--bg-color); border: 1px solid var(--border-color); padding: 0.35rem 0.85rem; border-radius: 20px; font-size: 0.85rem; color: var(--text-secondary); cursor: pointer; transition: var(--transition); display: flex; align-items: center; gap: 0.4rem;">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 8-6 4 6 4V8Z"></path><rect width="14" height="12" x="2" y="6" rx="2" ry="2"></rect></svg>
+        <div
+            style="width: 100%; display: flex; gap: 0.5rem; flex-wrap: wrap; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem; margin-bottom: 0.25rem;">
+            <button class="tag-filter-btn" data-tag="has-video" onclick="toggleTagFilter('has-video')"
+                style="background: var(--bg-color); border: 1px solid var(--border-color); padding: 0.35rem 0.85rem; border-radius: 20px; font-size: 0.85rem; color: var(--text-secondary); cursor: pointer; transition: var(--transition); display: flex; align-items: center; gap: 0.4rem;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m22 8-6 4 6 4V8Z"></path>
+                    <rect width="14" height="12" x="2" y="6" rx="2" ry="2"></rect>
+                </svg>
                 With Video
             </button>
-            <button class="tag-filter-btn" data-tag="has-combustion" onclick="toggleTagFilter('has-combustion')" style="background: var(--bg-color); border: 1px solid var(--border-color); padding: 0.35rem 0.85rem; border-radius: 20px; font-size: 0.85rem; color: var(--text-secondary); cursor: pointer; transition: var(--transition); display: flex; align-items: center; gap: 0.4rem;">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path></svg>
+            <button class="tag-filter-btn" data-tag="has-combustion" onclick="toggleTagFilter('has-combustion')"
+                style="background: var(--bg-color); border: 1px solid var(--border-color); padding: 0.35rem 0.85rem; border-radius: 20px; font-size: 0.85rem; color: var(--text-secondary); cursor: pointer; transition: var(--transition); display: flex; align-items: center; gap: 0.4rem;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path
+                        d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z">
+                    </path>
+                </svg>
                 Combustion Data
             </button>
-            <button class="tag-filter-btn" data-tag="is-favorite" onclick="toggleTagFilter('is-favorite')" style="background: var(--bg-color); border: 1px solid var(--border-color); padding: 0.35rem 0.85rem; border-radius: 20px; font-size: 0.85rem; color: var(--text-secondary); cursor: pointer; transition: var(--transition); display: flex; align-items: center; gap: 0.4rem;">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+            <button class="tag-filter-btn" data-tag="is-favorite" onclick="toggleTagFilter('is-favorite')"
+                style="background: var(--bg-color); border: 1px solid var(--border-color); padding: 0.35rem 0.85rem; border-radius: 20px; font-size: 0.85rem; color: var(--text-secondary); cursor: pointer; transition: var(--transition); display: flex; align-items: center; gap: 0.4rem;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path
+                        d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z">
+                    </path>
+                </svg>
                 Favorites
             </button>
         </div>
         {% for tag in all_tags %}
-            <button class="tag-filter-btn" data-tag="{{ tag }}" onclick="toggleTagFilter('{{ tag }}')" style="background: var(--bg-color); border: 1px solid var(--border-color); padding: 0.35rem 0.85rem; border-radius: 20px; font-size: 0.85rem; color: var(--text-secondary); cursor: pointer; transition: var(--transition);">
-                #{{ tag }}
-            </button>
+        <button class="tag-filter-btn" data-tag="{{ tag }}" onclick="toggleTagFilter('{{ tag }}')"
+            style="background: var(--bg-color); border: 1px solid var(--border-color); padding: 0.35rem 0.85rem; border-radius: 20px; font-size: 0.85rem; color: var(--text-secondary); cursor: pointer; transition: var(--transition);">
+            #{{ tag }}
+        </button>
         {% endfor %}
     </div>
     {% endif %}
@@ -88,91 +134,151 @@
 
 <div class="recipe-grid">
     {% for recipe in recipes %}
-    <div class="recipe-card" 
+    <div class="recipe-card"
         data-search='{{ recipe.tags.join(" ") }} {{ recipe.ingredients.join(" ") }} {% if recipe.has_video() %}has-video{% endif %} {% if recipe.has_combustion() %}has-combustion{% endif %} {% if recipe.favorite %}is-favorite{% endif %}'
         data-tags='{{ recipe.tags.join(",") }}{% if recipe.has_video() %},has-video{% endif %}{% if recipe.has_combustion() %},has-combustion{% endif %}{% if recipe.favorite %},is-favorite{% endif %}'>
         {% match recipe.image %}
-            {% when Some with (img) %}
-                <img src="{% if img.starts_with("http") %}{{ img }}{% else %}{{ app_base }}/{{ img }}{% endif %}" alt="{{ recipe.title }}" class="recipe-card-img" loading="lazy" decoding="async">
-            {% when None %}
-                <div class="recipe-card-img" style="display:flex; align-items:center; justify-content:center; color:#64748b;">No Image</div>
+        {% when Some with (img) %}
+        <img src="{% if img.starts_with(" http") %}{{ img }}{% else %}{{ app_base }}/{{ img }}{% endif %}"
+            alt="{{ recipe.title }}" class="recipe-card-img" loading="lazy" decoding="async">
+        {% when None %}
+        <div class="recipe-card-img" style="display:flex; align-items:center; justify-content:center; color:#64748b;">No
+            Image</div>
         {% endmatch %}
         <div class="recipe-card-content">
-            <h3 class="recipe-title" style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem;">
+            <h3 class="recipe-title"
+                style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem;">
                 <div style="flex-grow: 1;">
                     <a href="{{ app_base }}/recipe/{{ recipe.id }}">{{ recipe.title }}</a>
-                    <div class="recipe-feature-icons" style="display: inline-flex; gap: 0.35rem; margin-left: 0.5rem; vertical-align: middle;">
+                    <div class="recipe-feature-icons"
+                        style="display: inline-flex; gap: 0.35rem; margin-left: 0.5rem; vertical-align: middle;">
                         {% if recipe.has_combustion() %}
-                            <span title="Combustion Data" style="display: inline-flex;">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#e67e22" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><title>Combustion Data</title><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path></svg>
-                            </span>
+                        <span title="Combustion Data" style="display: inline-flex;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#e67e22"
+                                stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <title>Combustion Data</title>
+                                <path
+                                    d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z">
+                                </path>
+                            </svg>
+                        </span>
                         {% endif %}
                         {% if recipe.has_video() %}
-                            <span title="Video Embed" style="display: inline-flex;">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#e74c3c" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><title>Video Embed</title><path d="m22 8-6 4 6 4V8Z"></path><rect width="14" height="12" x="2" y="6" rx="2" ry="2"></rect></svg>
-                            </span>
+                        <span title="Video Embed" style="display: inline-flex;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#e74c3c"
+                                stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <title>Video Embed</title>
+                                <path d="m22 8-6 4 6 4V8Z"></path>
+                                <rect width="14" height="12" x="2" y="6" rx="2" ry="2"></rect>
+                            </svg>
+                        </span>
                         {% endif %}
                         {% if recipe.leaven_info().0 %}
-                            <span title="Fermentation Calculator" style="display: inline-flex;">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#27ae60" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><title>Fermentation Calculator</title><path d="M12 2v2"></path><path d="m4.93 4.93 1.41 1.41"></path><path d="M20 12h2"></path><path d="m19.07 19.07-1.41-1.41"></path><path d="M12 22v-2"></path><path d="m6.34 17.66-1.41 1.41"></path><path d="M2 12h2"></path><path d="m7.76 7.76-1.41 1.41"></path><path d="M12 7v5l3 3"></path></svg>
-                            </span>
+                        <span title="Fermentation Calculator" style="display: inline-flex;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#27ae60"
+                                stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <title>Fermentation Calculator</title>
+                                <path d="M12 2v2"></path>
+                                <path d="m4.93 4.93 1.41 1.41"></path>
+                                <path d="M20 12h2"></path>
+                                <path d="m19.07 19.07-1.41-1.41"></path>
+                                <path d="M12 22v-2"></path>
+                                <path d="m6.34 17.66-1.41 1.41"></path>
+                                <path d="M2 12h2"></path>
+                                <path d="m7.76 7.76-1.41 1.41"></path>
+                                <path d="M12 7v5l3 3"></path>
+                            </svg>
+                        </span>
                         {% endif %}
                     </div>
                 </div>
                 <div style="display: flex; align-items: center; gap: 0.25rem;">
-                    <button onclick="toggleFavorite('{{ recipe.id }}', this, event)" 
+                    <button onclick="toggleFavorite('{{ recipe.id }}', this, event)"
                         class="favorite-heart-btn {% if recipe.favorite %}is-favorite{% endif %} {% if is_admin %}is-admin{% endif %}"
                         {% if !is_admin %}disabled{% endif %}
                         title="{% if is_admin %}Toggle Favorite{% else %}Favorite{% endif %}">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="{% if recipe.favorite %}currentColor{% else %}none{% endif %}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+                        <svg width="20" height="20" viewBox="0 0 24 24"
+                            fill="{% if recipe.favorite %}currentColor{% else %}none{% endif %}" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path
+                                d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z">
+                            </path>
+                        </svg>
                     </button>
                     {% match recipe.source_url %}
-                        {% when Some with (url) %}
-                            {% if !url.trim().is_empty() %}
-                            <a href="{{ url }}" target="_blank" rel="noopener noreferrer" style="color: var(--text-secondary); display: inline-flex; align-items: center; padding: 0.25rem;" title="Original Source">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
-                            </a>
-                            {% endif %}
-                        {% when None %}
+                    {% when Some with (url) %}
+                    {% if !url.trim().is_empty() %}
+                    <a href="{{ url }}" target="_blank" rel="noopener noreferrer"
+                        style="color: var(--text-secondary); display: inline-flex; align-items: center; padding: 0.25rem;"
+                        title="Original Source">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                            <polyline points="15 3 21 3 21 9"></polyline>
+                            <line x1="10" y1="14" x2="21" y2="3"></line>
+                        </svg>
+                    </a>
+                    {% endif %}
+                    {% when None %}
                     {% endmatch %}
                 </div>
             </h3>
             <div class="recipe-desc">
                 {% match recipe.description %}
-                    {% when Some with (desc) %}
-                        {{ desc }}
-                    {% when None %}
+                {% when Some with (desc) %}
+                {{ desc }}
+                {% when None %}
                 {% endmatch %}
             </div>
             <div style="display: flex; gap: 0.75rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
                 {% match recipe.servings %}
-                    {% when Some with (s) %}
-                        <span style="font-size: 0.85rem; color: var(--text-secondary); display: flex; align-items: center; gap: 0.25rem;">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
-                            {{ s }}
-                        </span>
-                    {% when None %}
+                {% when Some with (s) %}
+                <span
+                    style="font-size: 0.85rem; color: var(--text-secondary); display: flex; align-items: center; gap: 0.25rem;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="9" cy="7" r="4"></circle>
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                    </svg>
+                    {{ s }}
+                </span>
+                {% when None %}
                 {% endmatch %}
                 {% match recipe.prep_time %}
-                    {% when Some with (t) %}
-                        <span style="font-size: 0.85rem; color: var(--text-secondary); display: flex; align-items: center; gap: 0.25rem;">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                            {{ t }}
-                        </span>
-                    {% when None %}
+                {% when Some with (t) %}
+                <span
+                    style="font-size: 0.85rem; color: var(--text-secondary); display: flex; align-items: center; gap: 0.25rem;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <polyline points="12 6 12 12 16 14"></polyline>
+                    </svg>
+                    {{ t }}
+                </span>
+                {% when None %}
                 {% endmatch %}
                 {% match recipe.cook_time %}
-                    {% when Some with (t) %}
-                        <span style="font-size: 0.85rem; color: var(--text-secondary); display: flex; align-items: center; gap: 0.25rem;">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"></path><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path><line x1="6" y1="1" x2="6" y2="4"></line><line x1="10" y1="1" x2="10" y2="4"></line><line x1="14" y1="1" x2="14" y2="4"></line></svg>
-                            {{ t }}
-                        </span>
-                    {% when None %}
+                {% when Some with (t) %}
+                <span
+                    style="font-size: 0.85rem; color: var(--text-secondary); display: flex; align-items: center; gap: 0.25rem;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 8h1a4 4 0 0 1 0 8h-1"></path>
+                        <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path>
+                        <line x1="6" y1="1" x2="6" y2="4"></line>
+                        <line x1="10" y1="1" x2="10" y2="4"></line>
+                        <line x1="14" y1="1" x2="14" y2="4"></line>
+                    </svg>
+                    {{ t }}
+                </span>
+                {% when None %}
                 {% endmatch %}
             </div>
             <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
                 {% for tag in recipe.tags %}
-                    <span class="tag-badge" onclick="filterByTag('{{ tag }}', event)">#{{ tag }}</span>
+                <span class="tag-badge" onclick="filterByTag('{{ tag }}', event)">#{{ tag }}</span>
                 {% endfor %}
             </div>
         </div>
@@ -184,180 +290,204 @@
 
 {% block scripts %}
 <script>
-document.getElementById('toggle-import-btn')?.addEventListener('click', function() {
-    const section = document.getElementById('importer-section');
-    if (section.style.display === 'none') {
-        section.style.display = 'block';
-    } else {
-        section.style.display = 'none';
-    }
-});
+    document.getElementById('toggle-import-btn')?.addEventListener('click', function () {
+        const section = document.getElementById('importer-section');
+        if (section.style.display === 'none') {
+            section.style.display = 'block';
+        } else {
+            section.style.display = 'none';
+        }
+    });
 
-document.getElementById('toggle-filters-btn')?.addEventListener('click', function() {
-    const section = document.getElementById('tag-filters');
-    if (section.style.display === 'none') {
-        section.style.display = 'flex';
-        this.classList.remove('btn-secondary');
-        this.classList.add('btn-primary');
-    } else {
-        section.style.display = 'none';
-        this.classList.remove('btn-primary');
-        this.classList.add('btn-secondary');
-    }
-});
+    document.getElementById('toggle-filters-btn')?.addEventListener('click', function () {
+        const section = document.getElementById('tag-filters');
+        if (section.style.display === 'none') {
+            section.style.display = 'flex';
+            this.classList.remove('btn-secondary');
+            this.classList.add('btn-primary');
+        } else {
+            section.style.display = 'none';
+            this.classList.remove('btn-primary');
+            this.classList.add('btn-secondary');
+        }
+    });
 
-const searchInput = document.getElementById('recipe-search');
-const tagSearchInput = document.getElementById('tag-search');
-const clearBtn = document.getElementById('clear-search-btn');
-let activeTags = new Set();
+    const searchInput = document.getElementById('recipe-search');
+    const tagSearchInput = document.getElementById('tag-search');
+    const clearBtn = document.getElementById('clear-search-btn');
+    let activeTags = new Set();
 
-function filterRecipes() {
-    const query = searchInput.value.toLowerCase();
-    const cards = document.querySelectorAll('.recipe-card');
-    const availableTags = new Set();
-    
-    cards.forEach(card => {
-        const searchText = card.dataset.search.toLowerCase();
-        const tags = card.dataset.tags.toLowerCase().split(',');
-        
-        const matchesSearch = searchText.includes(query);
-        
-        // Check if ALL active tags are present
-        let matchesTags = true;
-        activeTags.forEach(tag => {
-            if (!tags.includes(tag.toLowerCase())) {
-                matchesTags = false;
+    function filterRecipes() {
+        const query = searchInput.value.toLowerCase();
+        const cards = document.querySelectorAll('.recipe-card');
+        const availableTags = new Set();
+
+        cards.forEach(card => {
+            const searchText = card.dataset.search.toLowerCase();
+            const tags = card.dataset.tags.toLowerCase().split(',');
+
+            const matchesSearch = searchText.includes(query);
+
+            // Check if ALL active tags are present
+            let matchesTags = true;
+            activeTags.forEach(tag => {
+                if (!tags.includes(tag.toLowerCase())) {
+                    matchesTags = false;
+                }
+            });
+
+            if (matchesSearch && matchesTags) {
+                card.style.display = 'block';
+                // Collect tags from this visible recipe
+                tags.forEach(t => {
+                    if (t.trim()) availableTags.add(t);
+                });
+            } else {
+                card.style.display = 'none';
             }
         });
 
-        if (matchesSearch && matchesTags) {
-            card.style.display = 'block';
-            // Collect tags from this visible recipe
-            tags.forEach(t => {
-                if (t.trim()) availableTags.add(t);
-            });
-        } else {
-            card.style.display = 'none';
-        }
-    });
+        // Update tag filter buttons visibility
+        const tagButtons = document.querySelectorAll('.tag-filter-btn');
+        const tagQuery = tagSearchInput?.value.toLowerCase() || "";
 
-    // Update tag filter buttons visibility
-    const tagButtons = document.querySelectorAll('.tag-filter-btn');
-    const tagQuery = tagSearchInput?.value.toLowerCase() || "";
+        tagButtons.forEach(btn => {
+            const tag = btn.dataset.tag.toLowerCase();
+            const label = btn.innerText.toLowerCase();
 
-    tagButtons.forEach(btn => {
-        const tag = btn.dataset.tag.toLowerCase();
-        const label = btn.innerText.toLowerCase();
-        
-        const matchesTagSearch = !tagQuery || tag.includes(tagQuery) || label.includes(tagQuery);
-        const isAvailable = activeTags.has(btn.dataset.tag) || availableTags.has(tag);
+            const matchesTagSearch = !tagQuery || tag.includes(tagQuery) || label.includes(tagQuery);
+            const isAvailable = activeTags.has(btn.dataset.tag) || availableTags.has(tag);
 
-        if (isAvailable && matchesTagSearch) {
-            btn.style.display = 'flex';
-        } else {
-            btn.style.display = 'none';
-        }
-    });
-
-    if (query || activeTags.size > 0) {
-        clearBtn.style.display = 'block';
-    } else {
-        clearBtn.style.display = 'none';
-    }
-}
-
-function toggleTagFilter(tag) {
-    const btns = document.querySelectorAll('.tag-filter-btn');
-    const targetBtn = Array.from(btns).find(b => b.dataset.tag === tag);
-
-    if (activeTags.has(tag)) {
-        activeTags.delete(tag);
-        if (targetBtn) {
-            targetBtn.style.background = 'var(--bg-color)';
-            targetBtn.style.color = 'var(--text-secondary)';
-            targetBtn.style.borderColor = 'var(--border-color)';
-        }
-    } else {
-        activeTags.add(tag);
-        if (targetBtn) {
-            targetBtn.style.background = 'var(--accent-color)';
-            targetBtn.style.color = 'white';
-            targetBtn.style.borderColor = 'var(--accent-color)';
-        }
-    }
-    filterRecipes();
-}
-
-function filterByTag(tag, event) {
-    if (event) event.preventDefault();
-    toggleTagFilter(tag);
-    window.scrollTo({ top: searchInput.offsetTop - 100, behavior: 'smooth' });
-}
-
-function clearFilters() {
-    searchInput.value = '';
-    if (tagSearchInput) tagSearchInput.value = '';
-    activeTags.clear();
-    document.querySelectorAll('.tag-filter-btn').forEach(btn => {
-        btn.style.background = 'var(--bg-color)';
-        btn.style.color = 'var(--text-secondary)';
-        btn.style.borderColor = 'var(--border-color)';
-    });
-    filterRecipes();
-}
-
-async function toggleFavorite(id, btn, event) {
-    if (event) {
-        event.preventDefault();
-        event.stopPropagation();
-    }
-    
-    try {
-        const response = await fetch(`{{ app_base }}/recipe/favorite/${id}`, { method: 'POST' });
-        if (response.ok) {
-            const data = await response.json();
-            const svg = btn.querySelector('svg');
-            const card = btn.closest('.recipe-card');
-            
-            if (data.favorite) {
-                btn.classList.add('is-favorite');
-                svg.setAttribute('fill', 'currentColor');
-                if (!card.dataset.search.includes('is-favorite')) {
-                    card.dataset.search += ' is-favorite';
-                }
-                if (!card.dataset.tags.includes('is-favorite')) {
-                    card.dataset.tags += ',is-favorite';
-                }
+            if (isAvailable && matchesTagSearch) {
+                btn.style.display = 'flex';
             } else {
-                btn.classList.remove('is-favorite');
-                svg.setAttribute('fill', 'none');
-                card.dataset.search = card.dataset.search.replace(' is-favorite', '').trim();
-                card.dataset.tags = card.dataset.tags.replace(',is-favorite', '').replace('is-favorite', '').trim();
+                btn.style.display = 'none';
             }
-            filterRecipes();
-        } else if (response.status === 401) {
-            alert('You must be logged in as admin to favorite recipes.');
+        });
+
+        if (query || activeTags.size > 0) {
+            clearBtn.style.display = 'block';
+        } else {
+            clearBtn.style.display = 'none';
         }
-    } catch (err) {
-        console.error('Failed to toggle favorite:', err);
     }
-}
 
-searchInput?.addEventListener('input', filterRecipes);
-tagSearchInput?.addEventListener('input', filterRecipes);
+    function toggleTagFilter(tag) {
+        const btns = document.querySelectorAll('.tag-filter-btn');
+        const targetBtn = Array.from(btns).find(b => b.dataset.tag === tag);
 
-document.getElementById('photo-import-form')?.addEventListener('submit', function(e) {
-    const btn = document.getElementById('photo-import-btn');
-    btn.innerHTML = 'Scanning <span class="spinner">↻</span>';
-    btn.disabled = true;
-    btn.style.opacity = '0.7';
-});
+        if (activeTags.has(tag)) {
+            activeTags.delete(tag);
+            if (targetBtn) {
+                targetBtn.style.background = 'var(--bg-color)';
+                targetBtn.style.color = 'var(--text-secondary)';
+                targetBtn.style.borderColor = 'var(--border-color)';
+            }
+        } else {
+            activeTags.add(tag);
+            if (targetBtn) {
+                targetBtn.style.background = 'var(--accent-color)';
+                targetBtn.style.color = 'white';
+                targetBtn.style.borderColor = 'var(--accent-color)';
+            }
+        }
+        filterRecipes();
+    }
+
+    function filterByTag(tag, event) {
+        if (event) event.preventDefault();
+        toggleTagFilter(tag);
+        window.scrollTo({ top: searchInput.offsetTop - 100, behavior: 'smooth' });
+    }
+
+    function clearFilters() {
+        searchInput.value = '';
+        if (tagSearchInput) tagSearchInput.value = '';
+        activeTags.clear();
+        document.querySelectorAll('.tag-filter-btn').forEach(btn => {
+            btn.style.background = 'var(--bg-color)';
+            btn.style.color = 'var(--text-secondary)';
+            btn.style.borderColor = 'var(--border-color)';
+        });
+        filterRecipes();
+    }
+
+    async function toggleFavorite(id, btn, event) {
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+
+        try {
+            const response = await fetch(`{{ app_base }}/recipe/favorite/${id}`, { method: 'POST' });
+            if (response.ok) {
+                const data = await response.json();
+                const svg = btn.querySelector('svg');
+                const card = btn.closest('.recipe-card');
+
+                if (data.favorite) {
+                    btn.classList.add('is-favorite');
+                    svg.setAttribute('fill', 'currentColor');
+                    if (!card.dataset.search.includes('is-favorite')) {
+                        card.dataset.search += ' is-favorite';
+                    }
+                    if (!card.dataset.tags.includes('is-favorite')) {
+                        card.dataset.tags += ',is-favorite';
+                    }
+                } else {
+                    btn.classList.remove('is-favorite');
+                    svg.setAttribute('fill', 'none');
+                    card.dataset.search = card.dataset.search.replace(' is-favorite', '').trim();
+                    card.dataset.tags = card.dataset.tags.replace(',is-favorite', '').replace('is-favorite', '').trim();
+                }
+                filterRecipes();
+            } else if (response.status === 401) {
+                alert('You must be logged in as admin to favorite recipes.');
+            }
+        } catch (err) {
+            console.error('Failed to toggle favorite:', err);
+        }
+    }
+
+    searchInput?.addEventListener('input', filterRecipes);
+    tagSearchInput?.addEventListener('input', filterRecipes);
+
+    document.getElementById('photo-import-form')?.addEventListener('submit', function (e) {
+        const btn = document.getElementById('photo-import-btn');
+        btn.innerHTML = 'Scanning <span class="spinner">↻</span>';
+        btn.disabled = true;
+        btn.style.opacity = '0.7';
+    });
 </script>
 <style>
-@keyframes spin { 100% { transform: rotate(360deg); } }
-.spinner { display: inline-block; animation: spin 1s linear infinite; margin-left: 0.5rem; }
-.favorite-heart-btn { background: none; border: none; padding: 0.25rem; transition: var(--transition); flex-shrink: 0; color: var(--text-secondary); cursor: default; }
-.favorite-heart-btn.is-favorite { color: var(--accent-color); }
-.favorite-heart-btn.is-admin { cursor: pointer; }
+    @keyframes spin {
+        100% {
+            transform: rotate(360deg);
+        }
+    }
+
+    .spinner {
+        display: inline-block;
+        animation: spin 1s linear infinite;
+        margin-left: 0.5rem;
+    }
+
+    .favorite-heart-btn {
+        background: none;
+        border: none;
+        padding: 0.25rem;
+        transition: var(--transition);
+        flex-shrink: 0;
+        color: var(--text-secondary);
+        cursor: default;
+    }
+
+    .favorite-heart-btn.is-favorite {
+        color: var(--accent-color);
+    }
+
+    .favorite-heart-btn.is-admin {
+        cursor: pointer;
+    }
 </style>
 {% endblock %}
