@@ -23,6 +23,7 @@ use tracing::{error, info, warn};
 struct AppState {
     key: Key,
     password_hash: String,
+    app_base: &'static str,
 }
 
 impl FromRef<AppState> for Key {
@@ -36,6 +37,7 @@ impl FromRef<AppState> for Key {
 struct IndexTemplate {
     recipes: Vec<models::Recipe>,
     all_tags: Vec<String>,
+    app_base: &'static str,
     app_version: String,
     is_admin: bool,
 }
@@ -44,6 +46,7 @@ struct IndexTemplate {
 #[template(path = "recipe.html")]
 struct RecipeTemplate {
     recipe: models::Recipe,
+    app_base: &'static str,
     app_version: String,
     is_admin: bool,
 }
@@ -53,6 +56,7 @@ struct RecipeTemplate {
 struct EditTemplate {
     recipe: models::Recipe,
     is_new: bool,
+    app_base: &'static str,
     app_version: String,
     is_admin: bool,
 }
@@ -60,6 +64,7 @@ struct EditTemplate {
 #[derive(Template)]
 #[template(path = "login.html")]
 struct LoginTemplate {
+    app_base: &'static str,
     app_version: String,
     error: Option<String>,
     is_admin: bool,
@@ -278,7 +283,7 @@ fn is_admin_session(jar: &PrivateCookieJar) -> bool {
     }
 }
 
-async fn index(jar: PrivateCookieJar) -> impl IntoResponse {
+async fn index(State(state): State<AppState>, jar: PrivateCookieJar) -> impl IntoResponse {
     let recipes = storage::list_recipes().await;
     let mut all_tags: Vec<String> = recipes
         .iter()
@@ -291,16 +296,22 @@ async fn index(jar: PrivateCookieJar) -> impl IntoResponse {
     let template = IndexTemplate {
         recipes,
         all_tags,
+        app_base: state.app_base,
         app_version: APP_VERSION.to_string(),
         is_admin: is_admin_session(&jar),
     };
     Html(template.render().unwrap())
 }
 
-async fn view_recipe(jar: PrivateCookieJar, Path(id): Path<String>) -> impl IntoResponse {
+async fn view_recipe(
+    State(state): State<AppState>,
+    jar: PrivateCookieJar,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
     if let Some(recipe) = storage::read_recipe(&id).await {
         let template = RecipeTemplate {
             recipe,
+            app_base: state.app_base,
             app_version: APP_VERSION.to_string(),
             is_admin: is_admin_session(&jar),
         };
@@ -310,7 +321,7 @@ async fn view_recipe(jar: PrivateCookieJar, Path(id): Path<String>) -> impl Into
     }
 }
 
-async fn new_recipe() -> impl IntoResponse {
+async fn new_recipe(State(state): State<AppState>) -> impl IntoResponse {
     let template = EditTemplate {
         recipe: models::Recipe {
             id: String::new(),
@@ -330,13 +341,14 @@ async fn new_recipe() -> impl IntoResponse {
             favorite: false,
         },
         is_new: true,
+        app_base: state.app_base,
         app_version: APP_VERSION.to_string(),
         is_admin: true,
     };
     Html(template.render().unwrap())
 }
 
-async fn create_recipe(multipart: Multipart) -> impl IntoResponse {
+async fn create_recipe(State(state): State<AppState>, multipart: Multipart) -> impl IntoResponse {
     let form = match parse_recipe_multipart(multipart).await {
         Some(f) => f,
         None => return Err((StatusCode::BAD_REQUEST, "Invalid form data")),
@@ -364,7 +376,7 @@ async fn create_recipe(multipart: Multipart) -> impl IntoResponse {
         favorite: false,
     };
     let _ = storage::save_recipe(&recipe).await;
-    let redirect_url = format!("/recipe/{}", id);
+    let redirect_url = format!("{}/recipe/{}", state.app_base, id);
     info!("Redirecting to: {}", redirect_url);
     Ok(Redirect::to(&redirect_url))
 }
@@ -383,11 +395,12 @@ async fn toggle_favorite(jar: PrivateCookieJar, Path(id): Path<String>) -> impl 
     }
 }
 
-async fn edit_recipe(Path(id): Path<String>) -> impl IntoResponse {
+async fn edit_recipe(State(state): State<AppState>, Path(id): Path<String>) -> impl IntoResponse {
     if let Some(recipe) = storage::read_recipe(&id).await {
         let template = EditTemplate {
             recipe,
             is_new: false,
+            app_base: state.app_base,
             app_version: APP_VERSION.to_string(),
             is_admin: true,
         };
@@ -397,7 +410,11 @@ async fn edit_recipe(Path(id): Path<String>) -> impl IntoResponse {
     }
 }
 
-async fn update_recipe(Path(id): Path<String>, multipart: Multipart) -> impl IntoResponse {
+async fn update_recipe(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    multipart: Multipart,
+) -> impl IntoResponse {
     let form = match parse_recipe_multipart(multipart).await {
         Some(f) => f,
         None => return Err((StatusCode::BAD_REQUEST, "Invalid form data")),
@@ -425,26 +442,30 @@ async fn update_recipe(Path(id): Path<String>, multipart: Multipart) -> impl Int
         recipe.video_url = form.video_url;
         let _ = storage::save_recipe(&recipe).await;
         info!("Updated recipe: {} ({})", recipe.title, id);
-        Ok(Redirect::to(&format!("/recipe/{}", id)))
+        Ok(Redirect::to(&format!("{}/recipe/{}", state.app_base, id)))
     } else {
         Err((StatusCode::NOT_FOUND, "Recipe not found"))
     }
 }
 
-async fn delete_recipe(Path(id): Path<String>) -> impl IntoResponse {
+async fn delete_recipe(State(state): State<AppState>, Path(id): Path<String>) -> impl IntoResponse {
     let _ = storage::delete_recipe(&id).await;
     info!("Deleted recipe: {}", id);
-    Redirect::to("/")
+    Redirect::to(&format!("{}/", state.app_base))
 }
 
 #[axum::debug_handler]
-async fn import_recipe(Form(form): Form<ImportForm>) -> impl IntoResponse {
+async fn import_recipe(
+    State(state): State<AppState>,
+    Form(form): Form<ImportForm>,
+) -> impl IntoResponse {
     match importer::import_recipe_from_url(&form.url).await {
         Some(recipe) => {
             info!("Successfully imported recipe from URL: {}", form.url);
             let template = EditTemplate {
                 recipe,
                 is_new: true,
+                app_base: state.app_base,
                 app_version: APP_VERSION.to_string(),
                 is_admin: true,
             };
@@ -457,7 +478,10 @@ async fn import_recipe(Form(form): Form<ImportForm>) -> impl IntoResponse {
     }
 }
 
-async fn import_paprika(mut multipart: Multipart) -> impl IntoResponse {
+async fn import_paprika(
+    State(state): State<AppState>,
+    mut multipart: Multipart,
+) -> impl IntoResponse {
     let mut count = 0;
     info!("Starting Paprika archive import");
     while let Some(field) = multipart.next_field().await.unwrap_or(None) {
@@ -481,10 +505,10 @@ async fn import_paprika(mut multipart: Multipart) -> impl IntoResponse {
     info!("Successfully imported {} Paprika recipes", count);
 
     // Redirect to index after import
-    Redirect::to("/")
+    Redirect::to(&format!("{}/", state.app_base))
 }
 
-async fn import_photo(mut multipart: Multipart) -> Response {
+async fn import_photo(State(state): State<AppState>, mut multipart: Multipart) -> Response {
     while let Some(field) = multipart.next_field().await.unwrap_or(None) {
         let name = field.name().unwrap_or("").to_string();
         if name == "photo"
@@ -517,6 +541,7 @@ async fn import_photo(mut multipart: Multipart) -> Response {
                 let template = EditTemplate {
                     recipe,
                     is_new: true,
+                    app_base: state.app_base,
                     app_version: APP_VERSION.to_string(),
                     is_admin: true,
                 };
@@ -567,6 +592,7 @@ async fn upload_image(mut multipart: Multipart) -> impl IntoResponse {
 }
 
 async fn require_admin(
+    State(state): State<AppState>,
     jar: PrivateCookieJar,
     req: Request,
     next: Next,
@@ -574,16 +600,17 @@ async fn require_admin(
     if is_admin_session(&jar) {
         Ok(next.run(req).await)
     } else {
-        Err(Redirect::to("/login"))
+        Err(Redirect::to(&format!("{}/login", state.app_base)))
     }
 }
 
-async fn login_form(jar: PrivateCookieJar) -> impl IntoResponse {
+async fn login_form(State(state): State<AppState>, jar: PrivateCookieJar) -> impl IntoResponse {
     if is_admin_session(&jar) {
-        return Redirect::to("/").into_response();
+        return Redirect::to(&format!("{}/", state.app_base)).into_response();
     }
 
     let template = LoginTemplate {
+        app_base: state.app_base,
         app_version: APP_VERSION.to_string(),
         error: None,
         is_admin: false,
@@ -602,17 +629,23 @@ async fn login_submit(
     Form(form): Form<LoginFormData>,
 ) -> impl IntoResponse {
     if let Ok(true) = bcrypt::verify(&form.password, &state.password_hash) {
+        let cookie_path = if state.app_base.is_empty() {
+            "/"
+        } else {
+            state.app_base
+        };
         let cookie = Cookie::build(("admin_session", "true"))
-            .path("/")
+            .path(cookie_path)
             .http_only(true)
             .secure(false)
             .same_site(SameSite::Lax)
             .build();
         let updated_jar = jar.add(cookie);
-        return (updated_jar, Redirect::to("/")).into_response();
+        return (updated_jar, Redirect::to(&format!("{}/", state.app_base))).into_response();
     }
 
     let template = LoginTemplate {
+        app_base: state.app_base,
         app_version: APP_VERSION.to_string(),
         error: Some("Invalid password".to_string()),
         is_admin: false,
@@ -620,10 +653,15 @@ async fn login_submit(
     Html(template.render().unwrap()).into_response()
 }
 
-async fn logout(jar: PrivateCookieJar) -> impl IntoResponse {
-    let cookie = Cookie::build("admin_session").path("/").build();
+async fn logout(State(state): State<AppState>, jar: PrivateCookieJar) -> impl IntoResponse {
+    let cookie_path = if state.app_base.is_empty() {
+        "/"
+    } else {
+        state.app_base
+    };
+    let cookie = Cookie::build("admin_session").path(cookie_path).build();
     let updated_jar = jar.remove(cookie);
-    (updated_jar, Redirect::to("/"))
+    (updated_jar, Redirect::to(&format!("{}/", state.app_base)))
 }
 
 #[tokio::main]
@@ -653,7 +691,20 @@ async fn main() {
         Key::generate()
     };
 
-    let state = AppState { key, password_hash };
+    let app_base = std::env::var("APP_BASE").unwrap_or_default();
+    let app_base = if !app_base.is_empty() && !app_base.starts_with('/') {
+        format!("/{}", app_base)
+    } else {
+        app_base
+    };
+    let app_base: &'static str =
+        Box::leak(app_base.trim_end_matches('/').to_string().into_boxed_str());
+
+    let state = AppState {
+        key,
+        password_hash,
+        app_base,
+    };
 
     let protected_routes = Router::new()
         .route("/new", get(new_recipe).post(create_recipe))

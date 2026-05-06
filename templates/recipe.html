@@ -135,8 +135,8 @@
             </svg>
             <span class="favorite-text">{% if recipe.favorite %}Favorited{% else %}Favorite{% endif %}</span>
         </button>
-        <a href="/edit/{{ recipe.id }}" class="btn btn-secondary">Edit Recipe</a>
-        <form action="/delete/{{ recipe.id }}" method="POST" style="display: inline;"
+        <a href="{{ app_base }}/edit/{{ recipe.id }}" class="btn btn-secondary">Edit Recipe</a>
+        <form action="{{ app_base }}/delete/{{ recipe.id }}" method="POST" style="display: inline;"
             onsubmit="return confirm('Are you sure you want to delete this recipe?');">
             <button type="submit" class="btn btn-danger">Delete</button>
         </form>
@@ -174,7 +174,7 @@
         </svg>
         <span>Show Photo</span>
     </button>
-    <img src="{{ img }}" alt="{{ recipe.title }}" class="recipe-hero-img" id="recipe-hero-image">
+    <img src="{% if img.starts_with("http") %}{{ img }}{% else %}{{ app_base }}/{{ img }}{% endif %}" alt="{{ recipe.title }}" class="recipe-hero-img" id="recipe-hero-image">
     {% when None %}
     {% endmatch %}
 </div>
@@ -306,14 +306,14 @@
 
     {% match recipe.combustion_csv %}
     {% when Some with (csv) %}
-    <div id="graph-tab" class="tab-content">
+    <div id="graph-tab" class="tab-content" data-csv="{% if csv.starts_with("http") %}{{ csv }}{% else %}{{ app_base }}/{{ csv }}{% endif %}">
         <div
             style="margin-top: 1rem; background: var(--bg-color); padding: 1.5rem; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
             <h2 style="margin-top: 0;">Combustion Inc. Cook Data</h2>
             <div style="height: 400px; width: 100%;">
                 <canvas id="combustionChart"></canvas>
             </div>
-            <input type="hidden" id="combustion_csv_url" value="{{ csv }}">
+            <input type="hidden" id="combustion_csv_url" value="{% if csv.starts_with("http") %}{{ csv }}{% else %}{{ app_base }}/{{ csv }}{% endif %}">
         </div>
     </div>
     {% when None %}
@@ -433,7 +433,7 @@
 
     async function toggleFavorite(id, btn) {
         try {
-            const response = await fetch(`recipe/favorite/${id}`, { method: 'POST' });
+            const response = await fetch(`{{ app_base }}/recipe/favorite/${id}`, { method: 'POST' });
             if (response.ok) {
                 const data = await response.json();
                 const svg = btn.querySelector('svg');

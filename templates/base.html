@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Recipe Manager{% endblock %} - Rust Recipes</title>
 
-    <link rel="stylesheet" href="/static/styles.css?v={{ app_version }}">
-    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link rel="stylesheet" href="{{ app_base }}/static/styles.css?v={{ app_version }}">
+    <link rel="icon" type="image/svg+xml" href="{{ app_base }}/static/favicon.svg">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -36,7 +36,7 @@
 <body>
     <header>
         <div class="container header-content">
-            <a href="./" class="logo">
+            <a href="{{ app_base }}/" class="logo">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <ellipse cx="12" cy="12" rx="8" ry="10" />
                   <line x1="4" y1="12" x2="20" y2="12" />
@@ -61,16 +61,16 @@
                 </button>
                 {% block header_actions %}{% endblock %}
                 {% if is_admin %}
-                    <a href="/new" class="btn btn-primary nav-btn-new" title="New Recipe">
+                    <a href="{{ app_base }}/new" class="btn btn-primary nav-btn-new" title="New Recipe">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                     </a>
-                    <form action="/logout" method="POST" style="margin: 0; display: inline;">
+                    <form action="{{ app_base }}/logout" method="POST" style="margin: 0; display: inline;">
                         <button type="submit" class="btn-icon-link" title="Logout">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
                         </button>
                     </form>
                 {% else %}
-                    <a href="/login" class="btn-icon-link" title="Login">
+                    <a href="{{ app_base }}/login" class="btn-icon-link" title="Login">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path><polyline points="10 17 15 12 10 7"></polyline><line x1="15" y1="12" x2="3" y2="12"></line></svg>
                     </a>
                 {% endif %}
@@ -210,8 +210,9 @@
         const timerToggleBtn = document.getElementById('timer-toggle-btn');
         const tempsToggleBtn = document.getElementById('temps-toggle-btn');
         const tempsPanel = document.getElementById('temps-panel');
-        const alarmSound = new Audio('/static/mixkit-guitar-notification-alert-2320.wav?v={{ app_version }}');
+        const alarmSound = new Audio('{{ app_base }}/static/mixkit-guitar-notification-alert-2320.wav?v={{ app_version }}');
         alarmSound.loop = true;
+        alarmSound.volume = 1.0;
 
         timerToggleBtn.addEventListener('click', toggleTimerPanel);
         tempsToggleBtn.addEventListener('click', toggleTempsPanel);
@@ -289,10 +290,16 @@
             return Math.round(seconds);
         }
 
+        let vibrationInterval = null;
+
         function stopAlarm() {
             isAlarming = true; // Set to true just to ensure stop logic runs if called directly
             isAlarming = false;
             timerToggleBtn.classList.remove('alarm-pulsing');
+            if (vibrationInterval) {
+                clearInterval(vibrationInterval);
+                vibrationInterval = null;
+            }
             if (navigator.vibrate) navigator.vibrate(0);
             resetTimer();
         }
@@ -319,6 +326,7 @@
                 alarmSound.currentTime = 0;
             } else {
                 // Prime audio for browsers that block autoplay
+                alarmSound.load();
                 alarmSound.play().then(() => {
                     alarmSound.pause();
                     alarmSound.currentTime = 0;
@@ -349,9 +357,16 @@
                         btn.style.color = 'white';
                         
                         // Loop vibration and sound
+                        alarmSound.loop = true;
                         alarmSound.play().catch(e => console.log("Sound play failed:", e));
+                        
                         if (navigator.vibrate) {
-                            navigator.vibrate([500, 200, 500, 200, 500, 200, 500]);
+                            const pattern = [500, 200, 500, 200, 500];
+                            navigator.vibrate(pattern);
+                            if (vibrationInterval) clearInterval(vibrationInterval);
+                            vibrationInterval = setInterval(() => {
+                                navigator.vibrate(pattern);
+                            }, 2000);
                         }
                         
                         // Browser notification if supported
@@ -370,6 +385,10 @@
             }
             isAlarming = false;
             timerToggleBtn.classList.remove('alarm-pulsing');
+            if (vibrationInterval) {
+                clearInterval(vibrationInterval);
+                vibrationInterval = null;
+            }
             if (navigator.vibrate) navigator.vibrate(0);
             timerSeconds = 0;
             updateTimerDisplay();
