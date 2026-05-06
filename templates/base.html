@@ -330,6 +330,22 @@
             const m = Math.floor((timerSeconds % 3600) / 60);
             const s = timerSeconds % 60;
             timerDisplay.innerText = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+            updateTimerUI();
+        }
+
+        function updateTimerUI() {
+            const btn = document.getElementById('timer-toggle-btn');
+            if (!btn) return;
+            const isRunning = localStorage.getItem('timerRunning') === 'true';
+            if (isRunning) {
+                btn.classList.remove('btn-secondary');
+                btn.classList.add('btn-primary');
+                btn.style.boxShadow = '0 0 10px var(--accent-color)';
+            } else {
+                btn.classList.remove('btn-primary');
+                btn.classList.add('btn-secondary');
+                btn.style.boxShadow = 'none';
+            }
         }
 
         function startTimer(isResume = false) {
@@ -439,6 +455,7 @@
             if (navigator.vibrate) navigator.vibrate(0);
             timerSeconds = 0;
             updateTimerDisplay();
+            updateTimerUI();
             releaseWakeLock();
             const btn = document.getElementById('timer-start-btn');
             if (btn) {
@@ -474,6 +491,7 @@
                 updateTimerDisplay();
                 triggerAlarm();
             }
+            updateTimerUI();
         }
 
         window.addEventListener('DOMContentLoaded', syncTimer);
@@ -514,7 +532,11 @@
         function updateWakeLockUI() {
             const btn = document.getElementById('wakelock-btn');
             if (!btn) return;
-            if (isManualWakeLock) {
+            
+            const isTimerRunning = localStorage.getItem('timerRunning') === 'true';
+            const isActive = isManualWakeLock || isTimerRunning;
+
+            if (isActive) {
                 btn.classList.remove('btn-secondary');
                 btn.classList.add('btn-primary');
                 btn.style.boxShadow = '0 0 10px var(--accent-color)';
