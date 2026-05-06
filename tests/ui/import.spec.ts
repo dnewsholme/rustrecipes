@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Recipe Imports', () => {
   test.beforeEach(async ({ page }) => {
+    test.setTimeout(120000); // Allow more time for external imports
     // Login as admin (required for imports)
     await page.goto('/login');
     await page.fill('input[name="password"]', process.env.ADMIN_PASSWORD || 'admin');
@@ -13,16 +14,24 @@ test.describe('Recipe Imports', () => {
     await page.click('#toggle-import-btn');
     
     // Using a Serious Eats recipe as it usually has good LD+JSON
-    const url = 'https://www.seriouseats.com/the-best-roast-potatoes-recipe';
+    const url = 'https://www.seriouseats.com/the-best-roast-potatoes-ever-recipe';
     await page.fill('#url-input', url);
     await page.click('#import-btn');
     
-    // Should redirect to the new recipe page (allow time for scraping)
-    await expect(page).toHaveURL(/\/recipe\//, { timeout: 30000 });
+    // Wait for the form to be pre-filled
+    await expect(page.locator('#title')).not.toHaveValue('', { timeout: 60000 });
+    await expect(page.locator('#title')).toHaveValue(/Potatoes/);
+
+    // Click Save to actually create it
+    await page.click('#save-recipe-btn');
+    
+    // Should redirect to the new recipe page
+    await expect(page).toHaveURL(/\/recipe\//, { timeout: 10000 });
     await expect(page.locator('h1')).toContainText('Potatoes');
   });
 
   test('can import recipe from YouTube URL', async ({ page }) => {
+    test.skip(!process.env.GEMINI_API_KEY, 'GEMINI_API_KEY is not set');
     await page.click('#toggle-import-btn');
     
     // A known cooking video
@@ -31,7 +40,12 @@ test.describe('Recipe Imports', () => {
     await page.click('#import-btn');
     
     // Should handle the Gemini AI processing time
-    await expect(page).toHaveURL(/\/recipe\//, { timeout: 60000 });
+    await expect(page.locator('#title')).not.toHaveValue('', { timeout: 60000 });
+    
+    // Click Save to actually create it
+    await page.click('#save-recipe-btn');
+
+    await expect(page).toHaveURL(/\/recipe\//, { timeout: 10000 });
     await expect(page.locator('.recipe-tabs')).toBeVisible();
   });
 });

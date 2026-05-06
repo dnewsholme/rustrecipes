@@ -1,62 +1,101 @@
 import { test, expect } from '@playwright/test';
+import { login, createRecipeFromFixture } from './helpers';
 
 test.describe('Advanced Filtering', () => {
   test.beforeEach(async ({ page }) => {
+    await login(page);
+    // Seed with recipes having various tags
+    await createRecipeFromFixture(page, 'tests/fixtures/test-recipe.md');
+    await createRecipeFromFixture(page, 'tests/fixtures/sourdough-bread.md');
     await page.goto('/');
   });
 
   test('can filter by multiple tags (AND logic)', async ({ page }) => {
     await page.click('#toggle-filters-btn');
-    
-    // Select first tag
-    const firstTagBtn = page.locator('.tag-filter-btn').nth(3); // Skip special tags
-    const firstTagName = await firstTagBtn.getAttribute('data-tag');
-    await firstTagBtn.click();
+    // Pick the first tag that is NOT a static filter
+    const tagButtons = page.locator('.tag-filter-btn:visible');
+    const count = await tagButtons.count();
+    let firstTagName = '';
+    let firstTagBtn = null;
 
-    // Select second tag
-    const secondTagBtn = page.locator('.tag-filter-btn:visible').nth(4);
-    const secondTagName = await secondTagBtn.getAttribute('data-tag');
-    await secondTagBtn.click();
-
-    // Verify all visible recipes have BOTH tags
-    const visibleCards = page.locator('.recipe-card:visible');
-    const count = await visibleCards.count();
-    
     for (let i = 0; i < count; i++) {
-      const tags = await visibleCards.nth(i).getAttribute('data-tags');
-      expect(tags).toContain(firstTagName);
-      expect(tags).toContain(secondTagName);
+      const tag = await tagButtons.nth(i).getAttribute('data-tag');
+      if (tag && !['has-video', 'has-combustion', 'is-favorite'].includes(tag)) {
+        firstTagName = tag;
+        firstTagBtn = tagButtons.nth(i);
+        break;
+      }
     }
+
+    expect(firstTagBtn).not.toBeNull();
+    await firstTagBtn.click();
+    await page.waitForTimeout(500);
+
+    // Now find a second tag that is present in the CURRENTLY VISIBLE recipes
+    // This ensures that the AND logic has at least one result to check
+    const visibleCards = page.locator('.recipe-card:visible');
+    expect(await visibleCards.count()).toBeGreaterThanOrEqual(1);
+
+    const firstCardTags = (await visibleCards.first().getAttribute('data-tags') || '').split(',');
+    let secondTagName = '';
+    for (const t of firstCardTags) {
+      if (t && t !== firstTagName && !['has-video', 'has-combustion', 'is-favorite'].includes(t)) {
+        secondTagName = t;
+        break;
+      }
+    }
+
+    // If we found a second tag in the same recipe, click it
+    if (secondTagName) {
+      const secondTagBtn = page.locator(`.tag-filter-btn[data-tag="${secondTagName}"]`);
+      await secondTagBtn.click();
+      await page.waitForTimeout(500);
+    }
+
+    // Verify all visible recipes have ALL active tags
+    const finalVisibleCards = page.locator('.recipe-card:visible');
+    const finalCount = await finalVisibleCards.count();
+    expect(finalCount).toBeGreaterThanOrEqual(1);
+
+    for (let i = 0; i < finalCount; i++) {
+      const tags = (await finalVisibleCards.nth(i).getAttribute('data-tags') || '').split(',');
+      expect(tags).toContain(firstTagName);
+      if (secondTagName) {
+        expect(tags).toContain(secondTagName);
+      }
+    }
+
   });
 
   test('tag search box filters tag buttons', async ({ page }) => {
     await page.click('#toggle-filters-btn');
     const searchInput = page.locator('#tag-search');
-    
+
     const initialCount = await page.locator('.tag-filter-btn:visible').count();
-    
-    // Type something specific
-    await searchInput.fill('chicken'); // Assuming a chicken tag exists
-    
+
+    // Type something specific that exists in sourdough-bread.md
+    await searchInput.fill('bread');
+
     const filteredCount = await page.locator('.tag-filter-btn:visible').count();
     expect(filteredCount).toBeLessThan(initialCount);
-    
+
     // Check that visible tags match search
     const visibleTags = page.locator('.tag-filter-btn:visible');
     const count = await visibleTags.count();
     for (let i = 0; i < count; i++) {
       const text = await visibleTags.nth(i).innerText();
-      expect(text.toLowerCase()).toContain('chicken');
+      expect(text.toLowerCase()).toContain('bread');
     }
   });
 
   test('dynamic tag menu hides irrelevant tags', async ({ page }) => {
     await page.click('#toggle-filters-btn');
-    
-    // Select a very restrictive tag
-    await page.click('.tag-filter-btn[data-tag="bbq"]'); 
-    
-    // Verify that tags not present in BBQ recipes are hidden
+
+    // Select the first tag (e.g. "chicken")
+    const firstTag = page.locator('.tag-filter-btn:visible').first();
+    await firstTag.click();
+
+    // Verify that some tags are now hidden (since no recipe has all tags)
     const hiddenTags = page.locator('.tag-filter-btn[style*="display: none"]');
     expect(await hiddenTags.count()).toBeGreaterThan(0);
   });

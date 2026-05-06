@@ -18,21 +18,21 @@
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 2rem;">
         <div>
             <h3 style="font-size: 1.1rem; margin-bottom: 0.5rem;">From URL</h3>
-            <form action="import" method="POST" class="importer-form">
-                <input type="url" name="url" class="form-control" placeholder="https://example.com/recipe" required>
-                <button type="submit" class="btn btn-primary">Import Recipe</button>
+            <form action="/import" method="POST" class="importer-form">
+                <input type="url" id="url-input" name="url" class="form-control" placeholder="https://example.com/recipe" required>
+                <button type="submit" id="import-btn" class="btn btn-primary">Import Recipe</button>
             </form>
         </div>
         <div>
             <h3 style="font-size: 1.1rem; margin-bottom: 0.5rem;">From Paprika Export</h3>
-            <form action="import/paprika" method="POST" enctype="multipart/form-data" class="importer-form">
+            <form action="/import/paprika" method="POST" enctype="multipart/form-data" class="importer-form">
                 <input type="file" name="paprika_file" class="form-control" accept=".paprikarecipes" required>
                 <button type="submit" class="btn btn-primary">Upload File</button>
             </form>
         </div>
         <div>
             <h3 style="font-size: 1.1rem; margin-bottom: 0.5rem;">From Photo (AI)</h3>
-            <form action="import/photo" method="POST" enctype="multipart/form-data" class="importer-form" id="photo-import-form">
+            <form action="/import/photo" method="POST" enctype="multipart/form-data" class="importer-form" id="ai-import-form">
                 <input type="file" name="photo" class="form-control" accept="image/*" required>
                 <button type="submit" class="btn btn-primary" id="photo-import-btn">Scan Photo</button>
             </form>
@@ -100,7 +100,7 @@
         <div class="recipe-card-content">
             <h3 class="recipe-title" style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem;">
                 <div style="flex-grow: 1;">
-                    <a href="recipe/{{ recipe.id }}">{{ recipe.title }}</a>
+                    <a href="/recipe/{{ recipe.id }}">{{ recipe.title }}</a>
                     <div class="recipe-feature-icons" style="display: inline-flex; gap: 0.35rem; margin-left: 0.5rem; vertical-align: middle;">
                         {% if recipe.has_combustion() %}
                             <span title="Combustion Data" style="display: inline-flex;">

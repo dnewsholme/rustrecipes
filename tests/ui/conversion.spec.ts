@@ -5,15 +5,10 @@ test.describe('Unit Conversions', () => {
   let testRecipeSlug: string;
   let breadRecipeSlug: string;
 
-  test.beforeAll(async ({ browser }) => {
-    const page = await browser.newPage();
+  test.beforeEach(async ({ page }) => {
     await login(page);
     testRecipeSlug = await createRecipeFromFixture(page, 'tests/fixtures/test-recipe.md');
     breadRecipeSlug = await createRecipeFromFixture(page, 'tests/fixtures/sourdough-bread.md');
-    await page.close();
-  });
-
-  test.beforeEach(async ({ page }) => {
     await page.goto(`/recipe/${testRecipeSlug}`);
   });
 
@@ -30,7 +25,7 @@ test.describe('Unit Conversions', () => {
     // Switch to Imperial
     await page.click('#unit-imperial');
     const imperialText = await page.locator('.recipe-content').innerText();
-    expect(imperialText).toContain('oz'); // Imperial usually has ounces
+    expect(imperialText).toContain('oz'); // Should have ounces now
   });
 
   test('Baker\'s percentage activates for bread recipes', async ({ page }) => {
@@ -47,11 +42,12 @@ test.describe('Unit Conversions', () => {
 
   test('Temperature range conversion is correct', async ({ page }) => {
     // Check for a temperature range in the text
-    const tempElement = page.locator('span[data-temp-f="225"]');
-    await expect(tempElement).toContainText('225°F');
+    // Use starts-with selector because it might be "225-250"
+    const tempElement = page.locator('span[data-temp-f^="225"]');
+    await expect(tempElement).toContainText('225-250°F');
     
     // Switch to Metric (Celsius)
-    await page.click('#unit-metric');
-    await expect(tempElement).toContainText('107°C');
+    await page.click('#temp-c');
+    await expect(tempElement).toContainText('107-121°C');
   });
 });

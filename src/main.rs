@@ -12,8 +12,9 @@ use axum::{
     response::{Html, IntoResponse, Json, Redirect, Response},
     routing::{get, post},
 };
-use axum_extra::extract::cookie::{Cookie, Key, PrivateCookieJar};
+use axum_extra::extract::cookie::{Cookie, Key, PrivateCookieJar, SameSite};
 use serde::{Deserialize, Serialize};
+use std::env;
 use std::net::SocketAddr;
 use tower_http::{services::ServeDir, trace::TraceLayer};
 use tracing::{error, info, warn};
@@ -35,7 +36,6 @@ impl FromRef<AppState> for Key {
 struct IndexTemplate {
     recipes: Vec<models::Recipe>,
     all_tags: Vec<String>,
-    base_url: String,
     app_version: String,
     is_admin: bool,
 }
@@ -44,7 +44,6 @@ struct IndexTemplate {
 #[template(path = "recipe.html")]
 struct RecipeTemplate {
     recipe: models::Recipe,
-    base_url: String,
     app_version: String,
     is_admin: bool,
 }
@@ -54,7 +53,6 @@ struct RecipeTemplate {
 struct EditTemplate {
     recipe: models::Recipe,
     is_new: bool,
-    base_url: String,
     app_version: String,
     is_admin: bool,
 }
@@ -62,15 +60,12 @@ struct EditTemplate {
 #[derive(Template)]
 #[template(path = "login.html")]
 struct LoginTemplate {
-    base_url: String,
     app_version: String,
     error: Option<String>,
     is_admin: bool,
 }
 
-fn get_base_url() -> String {
-    std::env::var("APP_BASE").unwrap_or_default()
-}
+
 
 const APP_VERSION: &str = match option_env!("APP_VERSION") {
     Some(v) => v,
@@ -270,8 +265,19 @@ struct UploadData {
 }
 
 fn is_admin_session(jar: &PrivateCookieJar) -> bool {
-    jar.get("admin_session")
-        .is_some_and(|c| c.value() == "true")
+    if let Some(c) = jar.get("admin_session") {
+        let val = c.value();
+        info!("Found session cookie with value: {}", val);
+        val == "true"
+    } else {
+        // Distinguish between missing and invalid
+        if jar.iter().any(|c| c.name() == "admin_session") {
+            warn!("Admin session cookie present but failed to verify signature (invalid key?)");
+        } else {
+            warn!("Admin session cookie missing from request");
+        }
+        false
+    }
 }
 
 async fn index(jar: PrivateCookieJar) -> impl IntoResponse {
@@ -287,7 +293,6 @@ async fn index(jar: PrivateCookieJar) -> impl IntoResponse {
     let template = IndexTemplate {
         recipes,
         all_tags,
-        base_url: get_base_url(),
         app_version: APP_VERSION.to_string(),
         is_admin: is_admin_session(&jar),
     };
@@ -298,7 +303,6 @@ async fn view_recipe(jar: PrivateCookieJar, Path(id): Path<String>) -> impl Into
     if let Some(recipe) = storage::read_recipe(&id).await {
         let template = RecipeTemplate {
             recipe,
-            base_url: get_base_url(),
             app_version: APP_VERSION.to_string(),
             is_admin: is_admin_session(&jar),
         };
@@ -328,7 +332,6 @@ async fn new_recipe() -> impl IntoResponse {
             favorite: false,
         },
         is_new: true,
-        base_url: get_base_url(),
         app_version: APP_VERSION.to_string(),
         is_admin: true,
     };
@@ -363,8 +366,9 @@ async fn create_recipe(multipart: Multipart) -> impl IntoResponse {
         favorite: false,
     };
     let _ = storage::save_recipe(&recipe).await;
-    info!("Created new recipe: {} ({})", recipe.title, id);
-    Ok(Redirect::to(&format!("{}/recipe/{}", get_base_url(), id)))
+    let redirect_url = format!("/recipe/{}", id);
+    info!("Redirecting to: {}", redirect_url);
+    Ok(Redirect::to(&redirect_url))
 }
 
 async fn toggle_favorite(jar: PrivateCookieJar, Path(id): Path<String>) -> impl IntoResponse {
@@ -386,7 +390,6 @@ async fn edit_recipe(Path(id): Path<String>) -> impl IntoResponse {
         let template = EditTemplate {
             recipe,
             is_new: false,
-            base_url: get_base_url(),
             app_version: APP_VERSION.to_string(),
             is_admin: true,
         };
@@ -424,7 +427,7 @@ async fn update_recipe(Path(id): Path<String>, multipart: Multipart) -> impl Int
         recipe.video_url = form.video_url;
         let _ = storage::save_recipe(&recipe).await;
         info!("Updated recipe: {} ({})", recipe.title, id);
-        Ok(Redirect::to(&format!("{}/recipe/{}", get_base_url(), id)))
+        Ok(Redirect::to(&format!("/recipe/{}", id)))
     } else {
         Err((StatusCode::NOT_FOUND, "Recipe not found"))
     }
@@ -433,7 +436,7 @@ async fn update_recipe(Path(id): Path<String>, multipart: Multipart) -> impl Int
 async fn delete_recipe(Path(id): Path<String>) -> impl IntoResponse {
     let _ = storage::delete_recipe(&id).await;
     info!("Deleted recipe: {}", id);
-    Redirect::to(&format!("{}/", get_base_url()))
+    Redirect::to("/")
 }
 
 #[axum::debug_handler]
@@ -444,7 +447,6 @@ async fn import_recipe(Form(form): Form<ImportForm>) -> impl IntoResponse {
             let template = EditTemplate {
                 recipe,
                 is_new: true,
-                base_url: get_base_url(),
                 app_version: APP_VERSION.to_string(),
                 is_admin: true,
             };
@@ -481,7 +483,7 @@ async fn import_paprika(mut multipart: Multipart) -> impl IntoResponse {
     info!("Successfully imported {} Paprika recipes", count);
 
     // Redirect to index after import
-    Redirect::to(&format!("{}/", get_base_url()))
+    Redirect::to("/")
 }
 
 async fn import_photo(mut multipart: Multipart) -> Response {
@@ -517,7 +519,6 @@ async fn import_photo(mut multipart: Multipart) -> Response {
                 let template = EditTemplate {
                     recipe,
                     is_new: true,
-                    base_url: get_base_url(),
                     app_version: APP_VERSION.to_string(),
                     is_admin: true,
                 };
@@ -575,17 +576,16 @@ async fn require_admin(
     if is_admin_session(&jar) {
         Ok(next.run(req).await)
     } else {
-        Err(Redirect::to(&format!("{}/login", get_base_url())))
+        Err(Redirect::to("/login"))
     }
 }
 
 async fn login_form(jar: PrivateCookieJar) -> impl IntoResponse {
     if is_admin_session(&jar) {
-        return Redirect::to(&format!("{}/", get_base_url())).into_response();
+        return Redirect::to("/").into_response();
     }
 
     let template = LoginTemplate {
-        base_url: get_base_url(),
         app_version: APP_VERSION.to_string(),
         error: None,
         is_admin: false,
@@ -607,14 +607,14 @@ async fn login_submit(
         let cookie = Cookie::build(("admin_session", "true"))
             .path("/")
             .http_only(true)
-            .secure(true)
+            .secure(false)
+            .same_site(SameSite::Lax)
             .build();
         let updated_jar = jar.add(cookie);
-        return (updated_jar, Redirect::to(&format!("{}/", get_base_url()))).into_response();
+        return (updated_jar, Redirect::to("/")).into_response();
     }
 
     let template = LoginTemplate {
-        base_url: get_base_url(),
         app_version: APP_VERSION.to_string(),
         error: Some("Invalid password".to_string()),
         is_admin: false,
@@ -625,7 +625,7 @@ async fn login_submit(
 async fn logout(jar: PrivateCookieJar) -> impl IntoResponse {
     let cookie = Cookie::build("admin_session").path("/").build();
     let updated_jar = jar.remove(cookie);
-    (updated_jar, Redirect::to(&format!("{}/", get_base_url())))
+    (updated_jar, Redirect::to("/"))
 }
 
 #[tokio::main]

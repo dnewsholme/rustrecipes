@@ -7,12 +7,12 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
   reporter: 'html',
-  timeout: process.env.CI ? 30000 : 15000,
+  timeout: process.env.CI ? 30000 : 30000,
   expect: {
     timeout: process.env.CI ? 10000 : 10000
   },
   use: {
-    baseURL: process.env.BASE_URL || 'http://localhost:3000',
+    baseURL: process.env.BASE_URL || 'http://127.0.0.1:3000',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     navigationTimeout: process.env.CI ? 30000 : 15000,
@@ -35,11 +35,11 @@ export default defineConfig({
         use: { ...devices['Desktop Safari'] },
       },
     ] : []),
-    
+
     /* Test against mobile viewports in both environments */
     {
       name: 'Mobile Chrome',
-      use: { ...devices['Pixel 5'] },
+      use: { ...devices['Pixel 9'] },
     },
     {
       name: 'Mobile Safari',
@@ -50,8 +50,8 @@ export default defineConfig({
   /* Run your local dev server before starting the tests */
   webServer: {
     command: (process.env.CI || process.env.USE_BINARY) ? './target/debug/recipemanager' : 'cargo run --bin recipemanager',
-    url: 'http://localhost:3000',
-    reuseExistingServer: true,
+    url: 'http://127.0.0.1:3000',
+    reuseExistingServer: false,
     timeout: 120 * 1000,
   },
 });

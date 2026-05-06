@@ -8,13 +8,16 @@ fi
 # Configuration
 export ADMIN_PASSWORD=${ADMIN_PASSWORD:-"admin"}
 export SESSION_SECRET=${SESSION_SECRET:-"dev_secret_key_for_testing_only"}
-export APP_BASE=${APP_BASE:-"http://localhost:3000"}
+export APP_BASE=${APP_BASE:-"http://127.0.0.1:3000"}
 
 # If GEMINI_API_KEY is not set, YouTube imports will fail, but other tests will pass.
 # export GEMINI_API_KEY="your_key_here"
 
 # Generate a hash for the admin password if not provided
 # Using a valid hash for "admin"
+# Ensure no stale server is running
+pkill recipemanager || true
+
 export ADMIN_PASSWORD_HASH=${ADMIN_PASSWORD_HASH:-'$2b$12$xU63w1/.HZtlvUU1CFjzeejLtcHV0AcP7QUrVyCgsSQ2suC2rs3pK'}
 
 echo "🚀 Preparing local UI tests..."

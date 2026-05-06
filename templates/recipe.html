@@ -3,8 +3,7 @@
 {% block title %}{{ recipe.title }}{% endblock %}
 
 {% block header_actions %}
-<button id="wakelock-btn" class="btn btn-secondary theme-toggle-btn"
-    onclick="toggleWakeLock()" title="Keep Screen On">
+<button id="wakelock-btn" class="btn btn-secondary theme-toggle-btn" onclick="toggleWakeLock()" title="Keep Screen On">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
         stroke-linecap="round" stroke-linejoin="round">
         <path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.7 1.5-1.7 1.5-2.7a5 5 0 1 0-10 0c0 1 .5 2 1.5 2.7.8.8 1.3 1.5 1.5 2.5">
@@ -21,6 +20,7 @@
         #description-toggle-btn {
             display: flex !important;
         }
+
         #recipe-description {
             display: none;
             padding: 1rem;
@@ -28,32 +28,51 @@
             border-radius: var(--radius-md);
             margin-top: 0.5rem;
         }
+
         #recipe-description.show {
             display: block;
         }
     }
-    .favorite-btn.is-favorite { color: var(--accent-color) !important; }
-    .favorite-btn.is-admin { cursor: pointer !important; }
-    .favorite-btn:not(.is-admin) { cursor: default !important; }
+
+    .favorite-btn.is-favorite {
+        color: var(--accent-color) !important;
+    }
+
+    .favorite-btn.is-admin {
+        cursor: pointer !important;
+    }
+
+    .favorite-btn:not(.is-admin) {
+        cursor: default !important;
+    }
 </style>
+<div id="recipe-data" style="display: none;" 
+    data-prep="{% match recipe.prep_time %}{% when Some with (t) %}{{ t }}{% when None %}{% endmatch %}"
+    data-cook="{% match recipe.cook_time %}{% when Some with (t) %}{{ t }}{% when None %}{% endmatch %}"
+    data-markdown="{{ recipe.markdown }}">
+</div>
+
 <script>
     (function() {
         window.timerSuggestions = [];
-        {% if let Some(t) = recipe.prep_time %}
-        window.timerSuggestions.push({ label: 'Prep: {{ t }}', time: '{{ t }}' });
-        {% endif %}
-        {% if let Some(t) = recipe.cook_time %}
-        window.timerSuggestions.push({ label: 'Cook: {{ t }}', time: '{{ t }}' });
-        {% endif %}
+        const recipeData = document.getElementById('recipe-data');
+        const prep = recipeData.dataset.prep;
+        const cook = recipeData.dataset.cook;
+        
+        if (prep) {
+            window.timerSuggestions.push({ label: 'Prep: ' + prep, time: prep });
+        }
+        if (cook) {
+            window.timerSuggestions.push({ label: 'Cook: ' + cook, time: cook });
+        }
 
         // Extract more times from instructions
-        const directions = `{{ recipe.markdown }}`;
+        const directions = recipeData.dataset.markdown;
         const timeRegex = /(\d+)\s*(min|minute|hr|hour|sec|second)s?/gi;
         let match;
         const seen = new Set();
-        // Skip prep/cook already added
-        {% if let Some(t) = recipe.prep_time %} seen.add('{{ t }}'.toLowerCase()); {% endif %}
-        {% if let Some(t) = recipe.cook_time %} seen.add('{{ t }}'.toLowerCase()); {% endif %}
+        if (prep) seen.add(prep.toLowerCase());
+        if (cook) seen.add(cook.toLowerCase());
 
         while ((match = timeRegex.exec(directions)) !== null) {
             const timeVal = match[0].toLowerCase();
@@ -82,12 +101,18 @@
 
     {% match recipe.description %}
     {% when Some with (desc) %}
-    <div id="recipe-description-container" style="margin-bottom: 2rem; text-align: center; max-width: 800px; margin-left: auto; margin-right: auto; padding: 0 1rem;">
-        <button id="description-toggle-btn" class="btn btn-secondary" onclick="toggleDescription()" style="display: none; align-items: center; justify-content: center; gap: 0.5rem; width: 100%; margin-bottom: 1rem;">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+    <div id="recipe-description-container"
+        style="margin-bottom: 2rem; text-align: center; max-width: 800px; margin-left: auto; margin-right: auto; padding: 0 1rem;">
+        <button id="description-toggle-btn" class="btn btn-secondary" onclick="toggleDescription()"
+            style="display: none; align-items: center; justify-content: center; gap: 0.5rem; width: 100%; margin-bottom: 1rem;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
             <span id="description-toggle-text">Show Description</span>
         </button>
-        <div id="recipe-description" class="recipe-description" style="color: var(--text-secondary); line-height: 1.6; font-style: italic;">
+        <div id="recipe-description" class="recipe-description"
+            style="color: var(--text-secondary); line-height: 1.6; font-style: italic;">
             {{ desc }}
         </div>
     </div>
@@ -95,15 +120,23 @@
     {% endmatch %}
 
     {% if is_admin %}
-    <div style="display: flex; gap: 1rem; justify-content: center; margin-bottom: 2rem; align-items: center; flex-wrap: wrap;">
-        <button id="favorite-btn" class="btn btn-secondary favorite-btn {% if recipe.favorite %}is-favorite{% endif %} is-admin"
+    <div
+        style="display: flex; gap: 1rem; justify-content: center; margin-bottom: 2rem; align-items: center; flex-wrap: wrap;">
+        <button id="favorite-btn"
+            class="btn btn-secondary favorite-btn {% if recipe.favorite %}is-favorite{% endif %} is-admin"
             style="padding: 0.5rem 0.75rem; font-size: 0.85rem; display: flex; align-items: center; gap: 0.4rem;"
             onclick="toggleFavorite('{{ recipe.id }}', this)">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="{% if recipe.favorite %}currentColor{% else %}none{% endif %}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+            <svg width="16" height="16" viewBox="0 0 24 24"
+                fill="{% if recipe.favorite %}currentColor{% else %}none{% endif %}" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path
+                    d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z">
+                </path>
+            </svg>
             <span class="favorite-text">{% if recipe.favorite %}Favorited{% else %}Favorite{% endif %}</span>
         </button>
-        <a href="edit/{{ recipe.id }}" class="btn btn-secondary">Edit Recipe</a>
-        <form action="delete/{{ recipe.id }}" method="POST" style="display: inline;"
+        <a href="/edit/{{ recipe.id }}" class="btn btn-secondary">Edit Recipe</a>
+        <form action="/delete/{{ recipe.id }}" method="POST" style="display: inline;"
             onsubmit="return confirm('Are you sure you want to delete this recipe?');">
             <button type="submit" class="btn btn-danger">Delete</button>
         </form>
@@ -166,6 +199,48 @@
     </div>
 
     <div id="ingredients-tab" class="tab-content active">
+        <div class="unit-scaling-row"
+            style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; background: var(--bg-color); padding: 0.75rem; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+            <div style="display: flex; gap: 0.25rem; align-items: center;">
+                <span style="font-size: 0.8rem; color: var(--text-secondary); margin-right: 0.5rem;">Units:</span>
+                <button id="unit-original" class="btn btn-primary unit-btn"
+                    style="padding: 0.25rem 0.5rem; font-size: 0.8rem;"
+                    onclick="setUnitSystem('original', this)">Original</button>
+                <button id="unit-metric" class="btn btn-secondary unit-btn"
+                    style="padding: 0.25rem 0.5rem; font-size: 0.8rem;"
+                    onclick="setUnitSystem('metric', this)">Metric</button>
+                <button id="unit-imperial" class="btn btn-secondary unit-btn"
+                    style="padding: 0.25rem 0.5rem; font-size: 0.8rem;"
+                    onclick="setUnitSystem('imperial', this)">Imperial</button>
+                {% if recipe.has_tag("bread") || recipe.has_tag("dough") %}
+                <button id="unit-bakers" class="btn btn-secondary unit-btn"
+                    style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="toggleBakersPercentage(this)">Baker's
+                    %</button>
+                {% endif %}
+            </div>
+            <div style="display: flex; gap: 0.25rem; align-items: center;">
+                <span style="font-size: 0.8rem; color: var(--text-secondary); margin-right: 0.5rem;">Scale:</span>
+                <button class="btn btn-secondary scale-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;"
+                    onclick="scaleIngredients(0.5, this)">0.5x</button>
+                <button class="btn btn-primary scale-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;"
+                    onclick="scaleIngredients(1, this)">1x</button>
+                <button class="btn btn-secondary scale-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;"
+                    onclick="scaleIngredients(2, this)">2x</button>
+                <button class="btn btn-secondary scale-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;"
+                    onclick="scaleIngredients(3, this)">3x</button>
+            </div>
+            <div style="display: flex; gap: 0.25rem; align-items: center;">
+                <span style="font-size: 0.8rem; color: var(--text-secondary); margin-right: 0.5rem;">Temp:</span>
+                <button id="temp-original" class="btn btn-primary temp-btn"
+                    style="padding: 0.25rem 0.5rem; font-size: 0.8rem;"
+                    onclick="setTempSystem('original', this)">Original</button>
+                <button id="temp-c" class="btn btn-secondary temp-btn"
+                    style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="setTempSystem('c', this)">°C</button>
+                <button id="temp-f" class="btn btn-secondary temp-btn"
+                    style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="setTempSystem('f', this)">°F</button>
+            </div>
+        </div>
+
         {% if !recipe.ingredients.is_empty() %}
         <div
             style="margin-bottom: 2rem; background: var(--bg-color); padding: 1.5rem; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
@@ -206,43 +281,6 @@
                     </span>
                     {% when None %}
                     {% endmatch %}
-                </div>
-            </div>
-            <div class="unit-scaling-row"
-                style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; background: var(--bg-color); padding: 0.75rem; border-radius: var(--radius-md);">
-                <div style="display: flex; gap: 0.25rem; align-items: center;">
-                    <span style="font-size: 0.8rem; color: var(--text-secondary); margin-right: 0.5rem;">Units:</span>
-                    <button class="btn btn-primary unit-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;"
-                        onclick="setUnitSystem('original', this)">Original</button>
-                    <button class="btn btn-secondary unit-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;"
-                        onclick="setUnitSystem('metric', this)">Metric</button>
-                    <button class="btn btn-secondary unit-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;"
-                        onclick="setUnitSystem('imperial', this)">Imperial</button>
-                    {% if recipe.has_tag("bread") || recipe.has_tag("dough") %}
-                    <button class="btn btn-secondary unit-btn" id="bakers-percent-btn"
-                        style="padding: 0.25rem 0.5rem; font-size: 0.8rem;"
-                        onclick="toggleBakersPercentage(this)">Baker's %</button>
-                    {% endif %}
-                </div>
-                <div style="display: flex; gap: 0.25rem; align-items: center;">
-                    <span style="font-size: 0.8rem; color: var(--text-secondary); margin-right: 0.5rem;">Scale:</span>
-                    <button class="btn btn-secondary scale-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;"
-                        onclick="scaleIngredients(0.5, this)">0.5x</button>
-                    <button class="btn btn-primary scale-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;"
-                        onclick="scaleIngredients(1, this)">1x</button>
-                    <button class="btn btn-secondary scale-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;"
-                        onclick="scaleIngredients(2, this)">2x</button>
-                    <button class="btn btn-secondary scale-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;"
-                        onclick="scaleIngredients(3, this)">3x</button>
-                </div>
-                <div style="display: flex; gap: 0.25rem; align-items: center;">
-                    <span style="font-size: 0.8rem; color: var(--text-secondary); margin-right: 0.5rem;">Temp:</span>
-                    <button class="btn btn-primary temp-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;"
-                        onclick="setTempSystem('original', this)">Original</button>
-                    <button class="btn btn-secondary temp-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;"
-                        onclick="setTempSystem('c', this)">°C</button>
-                    <button class="btn btn-secondary temp-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;"
-                        onclick="setTempSystem('f', this)">°F</button>
                 </div>
             </div>
             <ul style="list-style-type: none; padding: 0;">
@@ -400,7 +438,7 @@
                 const data = await response.json();
                 const svg = btn.querySelector('svg');
                 const text = btn.querySelector('.favorite-text');
-                
+
                 if (data.favorite) {
                     btn.style.color = 'var(--accent-color)';
                     svg.setAttribute('fill', 'currentColor');
@@ -652,7 +690,10 @@
                 } else {
                     span.className = 'instruction-temp';
                     span.dataset.base = numStr;
-                    span.dataset.unit = unitStr.toLowerCase().startsWith('c') ? 'c' : 'f';
+                    const u = unitStr.toLowerCase().startsWith('c') ? 'c' : 'f';
+                    span.dataset.unit = u;
+                    // Add legacy data attributes for tests
+                    span.setAttribute(`data-temp-${u}`, numStr);
                 }
 
                 span.textContent = fullMatch.substring(leadingChar.length);
