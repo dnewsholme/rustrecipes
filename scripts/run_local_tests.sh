@@ -1,40 +1,39 @@
 #!/bin/bash
+set -e
 
 # Pull Gemini API Key from file if it exists
 if [ -f "geminiapikey.txt" ]; then
-    export GEMINI_API_KEY=$(cat geminiapikey.txt)
+    export GEMINI_API_KEY=$(cat geminiapikey.txt | tr -d '\r\n')
+    echo "🔑 Gemini API Key loaded (length: ${#GEMINI_API_KEY})."
+else
+    echo "⚠️ GEMINI_API_KEY not found. Skipping tests that require AI."
 fi
 
 # Configuration
 export ADMIN_PASSWORD=${ADMIN_PASSWORD:-"admin"}
 export SESSION_SECRET=${SESSION_SECRET:-"dev_secret_key_for_testing_only"}
-export APP_BASE=${APP_BASE:-"http://127.0.0.1:3000"}
+# APP_BASE should be the subpath prefix (e.g. "" or "/recipes"), NOT the full URL
+export APP_BASE=${APP_BASE:-""}
 
-# If GEMINI_API_KEY is not set, YouTube imports will fail, but other tests will pass.
-# export GEMINI_API_KEY="your_key_here"
+# Enable BuildKit for faster, modern builds
+# If this fails on your system due to missing buildx, uncomment the next line
+# export DOCKER_BUILDKIT=0
+export DOCKER_BUILDKIT=1
 
-# Generate a hash for the admin password if not provided
-# Using a valid hash for "admin"
-# Ensure no stale server is running
-pkill recipemanager || true
+echo "🐳 Building Docker test image..."
+docker build -t recipemanager-test -f Dockerfile.test .
 
-export ADMIN_PASSWORD_HASH=${ADMIN_PASSWORD_HASH:-'$2b$12$xU63w1/.HZtlvUU1CFjzeejLtcHV0AcP7QUrVyCgsSQ2suC2rs3pK'}
+echo "🚀 Running tests in Docker container..."
+# Ensure report directories exist so they can be mounted
+mkdir -p playwright-report test-results
 
-echo "🚀 Preparing local UI tests..."
+docker run --rm \
+    -e ADMIN_PASSWORD="$ADMIN_PASSWORD" \
+    -e SESSION_SECRET="$SESSION_SECRET" \
+    -e APP_BASE="$APP_BASE" \
+    -e GEMINI_API_KEY="$GEMINI_API_KEY" \
+    -v "$(pwd)/playwright-report:/app/playwright-report" \
+    -v "$(pwd)/test-results:/app/test-results" \
+    recipemanager-test
 
-# Ensure dependencies are installed
-if [ ! -d "node_modules" ]; then
-    echo "📦 Installing Node dependencies..."
-    npm install
-fi
-
-# Build the server once
-echo "🦀 Building Rust server..."
-cargo build --bin recipemanager
-
-# Set USE_BINARY=1 so Playwright uses the built binary directly
-export USE_BINARY=1
-
-# Run the tests
-echo "🎭 Running Playwright tests..."
-npx playwright test "$@"
+echo "✅ Tests complete. Reports exported to playwright-report/"

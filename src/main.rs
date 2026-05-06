@@ -460,7 +460,7 @@ async fn import_recipe(
     Form(form): Form<ImportForm>,
 ) -> impl IntoResponse {
     match importer::import_recipe_from_url(&form.url).await {
-        Some(recipe) => {
+        Ok(recipe) => {
             info!("Successfully imported recipe from URL: {}", form.url);
             let template = EditTemplate {
                 recipe,
@@ -471,9 +471,10 @@ async fn import_recipe(
             };
             Html(template.render().unwrap()).into_response()
         }
-        None => {
-            warn!("Failed to import recipe from URL: {}", form.url);
-            (StatusCode::BAD_REQUEST, "Failed to import recipe").into_response()
+        Err(e) => {
+            warn!("Failed to import recipe from URL {}: {:?}", form.url, e);
+            let msg = format!("Failed to import: {}", e);
+            (StatusCode::BAD_REQUEST, msg).into_response()
         }
     }
 }
@@ -528,31 +529,29 @@ async fn import_photo(State(state): State<AppState>, mut multipart: Multipart) -
             let _ = std::fs::write(&filepath, &processed_data);
 
             // Then, call Gemini using the processed image
-            if let Some(mut recipe) =
-                importer::import_recipe_from_photo("image/jpeg", &processed_data).await
-            {
-                // Set the image
-                recipe.image = Some(format!("uploads/{}", new_filename));
+            match importer::import_recipe_from_photo("image/jpeg", &processed_data).await {
+                Ok(mut recipe) => {
+                    // Set the image
+                    recipe.image = Some(format!("uploads/{}", new_filename));
 
-                info!(
-                    "Successfully parsed recipe from photo using AI: {}",
-                    recipe.title
-                );
-                let template = EditTemplate {
-                    recipe,
-                    is_new: true,
-                    app_base: state.app_base,
-                    app_version: APP_VERSION.to_string(),
-                    is_admin: true,
-                };
-                return Html(template.render().unwrap()).into_response();
-            } else {
-                warn!("Failed to parse recipe from photo using AI");
-                return (
-                    StatusCode::BAD_REQUEST,
-                    "Failed to parse recipe from photo using AI. Is GEMINI_API_KEY set?",
-                )
-                    .into_response();
+                    info!(
+                        "Successfully parsed recipe from photo using AI: {}",
+                        recipe.title
+                    );
+                    let template = EditTemplate {
+                        recipe,
+                        is_new: true,
+                        app_base: state.app_base,
+                        app_version: APP_VERSION.to_string(),
+                        is_admin: true,
+                    };
+                    return Html(template.render().unwrap()).into_response();
+                }
+                Err(e) => {
+                    warn!("Failed to parse recipe from photo using AI: {:?}", e);
+                    let msg = format!("Failed to parse recipe from photo using AI: {}", e);
+                    return (StatusCode::BAD_REQUEST, msg).into_response();
+                }
             }
         }
     }

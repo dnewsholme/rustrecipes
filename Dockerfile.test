@@ -1,0 +1,49 @@
+# Stage 1: Build the Rust application
+FROM rust:1.93-slim-bookworm AS builder
+
+RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY Cargo.toml Cargo.lock ./
+RUN mkdir src && echo "fn main() {}" > src/main.rs && cargo build --release && rm -rf src
+
+COPY src src
+COPY templates templates
+COPY static static
+RUN touch src/main.rs && cargo build --release
+
+# Stage 2: Run tests in Playwright-ready environment
+FROM mcr.microsoft.com/playwright:v1.59.1-noble
+
+WORKDIR /app
+
+# Copy the built binary
+COPY --from=builder /app/target/release/recipemanager ./target/release/recipemanager
+
+# Copy Node.js dependency manifests
+COPY package.json package-lock.json ./
+RUN npm install
+
+# Copy the rest of the project (tests, static, templates)
+COPY tests tests
+COPY static static
+COPY templates templates
+COPY playwright.config.ts ./
+
+# Create data directories needed by the app
+RUN mkdir -p data/recipes data/uploads
+
+# Expose port (not strictly needed but good practice)
+EXPOSE 3000
+
+# Set required environment variables
+ENV HOST=0.0.0.0
+ENV PORT=3000
+ENV CI=true
+ENV ADMIN_PASSWORD=admin
+ENV ADMIN_PASSWORD_HASH='$2b$12$xU63w1/.HZtlvUU1CFjzeejLtcHV0AcP7QUrVyCgsSQ2suC2rs3pK'
+ENV USE_BINARY=true
+ENV BINARY_PATH=./target/release/recipemanager
+
+# Command to run tests
+CMD ["npx", "playwright", "test"]

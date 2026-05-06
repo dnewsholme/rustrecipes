@@ -39,6 +39,15 @@ test.describe('Recipe Imports', () => {
     await page.fill('#url-input', ytUrl);
     await page.click('#import-btn', { timeout: 60000 });
 
+    // If we hit a rate limit, the page will show an error message.
+    // We should skip the test in this case rather than failing.
+    const bodyContent = await page.textContent('body');
+    if (bodyContent?.includes('rate limit reached')) {
+      console.warn('⚠️ Gemini AI rate limit reached. Skipping YouTube import test.');
+      test.skip(true, 'Gemini AI rate limit reached');
+      return;
+    }
+
     // Should handle the Gemini AI processing time
     await expect(page.locator('#title')).not.toHaveValue('', { timeout: 60000 });
 

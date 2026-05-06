@@ -49,7 +49,7 @@ export default defineConfig({
 
   /* Run your local dev server before starting the tests */
   webServer: {
-    command: (process.env.CI || process.env.USE_BINARY) ? './target/debug/recipemanager' : 'cargo run --bin recipemanager',
+    command: (process.env.CI || process.env.USE_BINARY) ? (process.env.BINARY_PATH || './target/debug/recipemanager') : 'cargo run --bin recipemanager',
     url: 'http://127.0.0.1:3000',
     reuseExistingServer: true,
     timeout: 120 * 1000,

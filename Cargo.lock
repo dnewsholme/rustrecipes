@@ -2847,6 +2847,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "slug",
+ "thiserror",
  "tokio",
  "tower-http",
  "tracing",

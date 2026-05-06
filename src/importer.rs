@@ -1,10 +1,26 @@
 use crate::models::{LdRecipe, Recipe};
+use reqwest::StatusCode;
 use scraper::{Html, Selector};
 use serde_json::Value;
+use thiserror::Error;
 use tracing::{error, info, warn};
 use yt_transcript_rs::YouTubeTranscriptApi;
 
-pub async fn import_recipe_from_url(url: &str) -> Option<Recipe> {
+#[derive(Debug, Error)]
+pub enum ImportError {
+    #[error("Failed to fetch URL: {0}")]
+    FetchFailed(String),
+    #[error("Failed to parse recipe from page")]
+    ParseFailed,
+    #[error("Gemini AI rate limit reached. Please try again later.")]
+    RateLimited,
+    #[error("Gemini API key not set")]
+    NoApiKey,
+    #[error("AI failed to extract recipe: {0}")]
+    AiFailed(String),
+}
+
+pub async fn import_recipe_from_url(url: &str) -> Result<Recipe, ImportError> {
     if url.contains("youtube.com") || url.contains("youtu.be") {
         return import_recipe_from_youtube(url).await;
     }
@@ -30,14 +46,21 @@ pub async fn import_recipe_from_url(url: &str) -> Option<Recipe> {
         .default_headers(headers)
         .cookie_store(true)
         .build()
-        .ok()?;
+        .map_err(|e| ImportError::FetchFailed(e.to_string()))?;
 
-    let res = client.get(url).send().await.ok()?;
+    let res = client
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| ImportError::FetchFailed(e.to_string()))?;
     if !res.status().is_success() {
         warn!("Failed to fetch URL {}: Status {}", url, res.status());
-        return None;
+        return Err(ImportError::FetchFailed(res.status().to_string()));
     }
-    let body = res.text().await.ok()?;
+    let body = res
+        .text()
+        .await
+        .map_err(|e| ImportError::FetchFailed(e.to_string()))?;
 
     let (ld_recipe, og_image) = {
         let document = Html::parse_document(&body);
@@ -67,7 +90,7 @@ pub async fn import_recipe_from_url(url: &str) -> Option<Recipe> {
     };
 
     if let Some(recipe) = ld_recipe {
-        return Some(recipe);
+        return Ok(recipe);
     }
 
     // Fallback: Try Gemini on the text content
@@ -80,29 +103,32 @@ pub async fn import_recipe_from_url(url: &str) -> Option<Recipe> {
         Ok(t) => t,
         Err(e) => {
             warn!("Failed to convert HTML to text: {:?}", e);
-            return None;
+            return Err(ImportError::ParseFailed);
         }
     };
     info!("Extracted {} characters of text for Gemini", text.len());
 
-    if let Some(mut ai_recipe) = import_recipe_from_text(&text).await {
-        ai_recipe.source_url = Some(url.to_string());
-        if ai_recipe.image.is_none() {
-            ai_recipe.image = og_image;
+    match import_recipe_from_text(&text).await {
+        Ok(mut ai_recipe) => {
+            ai_recipe.source_url = Some(url.to_string());
+            if ai_recipe.image.is_none() {
+                ai_recipe.image = og_image;
+            }
+            Ok(ai_recipe)
         }
-        return Some(ai_recipe);
+        Err(e) => {
+            warn!("Gemini fallback failed for {}: {:?}", url, e);
+            Err(e)
+        }
     }
-
-    warn!("Gemini fallback failed to return a recipe for {}", url);
-    None
 }
 
-pub async fn import_recipe_from_text(text: &str) -> Option<Recipe> {
+pub async fn import_recipe_from_text(text: &str) -> Result<Recipe, ImportError> {
     let api_key = match std::env::var("GEMINI_API_KEY") {
         Ok(key) => key,
         Err(_) => {
             warn!("GEMINI_API_KEY not set, cannot use Gemini fallback");
-            return None;
+            return Err(ImportError::NoApiKey);
         }
     };
 
@@ -131,8 +157,16 @@ pub async fn import_recipe_from_text(text: &str) -> Option<Recipe> {
         }
     });
 
-    let res = client.post(&url).json(&body).send().await.ok()?;
-    let res_json: serde_json::Value = res.json().await.ok()?;
+    let res = client
+        .post(&url)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| ImportError::AiFailed(e.to_string()))?;
+    let res_json: serde_json::Value = res
+        .json()
+        .await
+        .map_err(|e| ImportError::AiFailed(e.to_string()))?;
 
     if let Some(text) = res_json["candidates"][0]["content"]["parts"][0]["text"].as_str() {
         let clean_text = text.trim();
@@ -158,7 +192,7 @@ pub async fn import_recipe_from_text(text: &str) -> Option<Recipe> {
                     id = uuid::Uuid::new_v4().to_string();
                 }
 
-                return Some(Recipe {
+                Ok(Recipe {
                     id,
                     title: gemini.title,
                     description: gemini.description,
@@ -174,17 +208,29 @@ pub async fn import_recipe_from_text(text: &str) -> Option<Recipe> {
                     combustion_csv: None,
                     video_url: None,
                     favorite: false,
-                });
+                })
             }
             Err(e) => {
                 error!("Failed to deserialize Gemini response: {:?}", e);
                 info!("Raw AI response was: {}", clean_text);
+                Err(ImportError::AiFailed(e.to_string()))
             }
         }
     } else {
-        warn!("Gemini AI response did not contain expected text field");
+        // Check for rate limit error
+        if let Some(status) = res_json["error"]["status"].as_str()
+            && status == "RESOURCE_EXHAUSTED"
+        {
+            return Err(ImportError::RateLimited);
+        }
+        warn!(
+            "Gemini AI response did not contain expected text field. Full response: {:?}",
+            res_json
+        );
+        Err(ImportError::AiFailed(
+            "Invalid AI response structure".to_string(),
+        ))
     }
-    None
 }
 
 fn extract_recipe_from_json(json_str: &str) -> Option<LdRecipe> {
@@ -523,12 +569,15 @@ where
     }
 }
 
-pub async fn import_recipe_from_photo(mime_type: &str, image_data: &[u8]) -> Option<Recipe> {
+pub async fn import_recipe_from_photo(
+    mime_type: &str,
+    image_data: &[u8],
+) -> Result<Recipe, ImportError> {
     let api_key = match std::env::var("GEMINI_API_KEY") {
         Ok(key) => key,
         Err(e) => {
             println!("Error reading GEMINI_API_KEY: {:?}", e);
-            return None;
+            return Err(ImportError::NoApiKey);
         }
     };
 
@@ -569,7 +618,7 @@ pub async fn import_recipe_from_photo(mime_type: &str, image_data: &[u8]) -> Opt
         Ok(r) => r,
         Err(e) => {
             println!("Request to Gemini failed: {:?}", e);
-            return None;
+            return Err(ImportError::AiFailed(e.to_string()));
         }
     };
 
@@ -578,16 +627,24 @@ pub async fn import_recipe_from_photo(mime_type: &str, image_data: &[u8]) -> Opt
         Ok(v) => v,
         Err(e) => {
             println!("Failed to parse Gemini response as JSON: {:?}", e);
-            return None;
+            return Err(ImportError::AiFailed(e.to_string()));
         }
     };
 
     if !status.is_success() {
+        if status == StatusCode::TOO_MANY_REQUESTS {
+            return Err(ImportError::RateLimited);
+        }
+        if let Some(status_str) = res_json["error"]["status"].as_str()
+            && status_str == "RESOURCE_EXHAUSTED"
+        {
+            return Err(ImportError::RateLimited);
+        }
         error!(
             "Gemini API returned error status {}: {:?}",
             status, res_json
         );
-        return None;
+        return Err(ImportError::AiFailed(format!("API error: {}", status)));
     }
 
     if let Some(text) = res_json["candidates"][0]["content"]["parts"][0]["text"].as_str() {
@@ -609,7 +666,7 @@ pub async fn import_recipe_from_photo(mime_type: &str, image_data: &[u8]) -> Opt
                     id = uuid::Uuid::new_v4().to_string();
                 }
 
-                return Some(Recipe {
+                Ok(Recipe {
                     id,
                     title: decode_html(&gemini.title),
                     description: gemini.description.map(|d| decode_html(&d)),
@@ -625,7 +682,7 @@ pub async fn import_recipe_from_photo(mime_type: &str, image_data: &[u8]) -> Opt
                     combustion_csv: None,
                     video_url: None,
                     favorite: false,
-                });
+                })
             }
             Err(e) => {
                 error!(
@@ -633,20 +690,22 @@ pub async fn import_recipe_from_photo(mime_type: &str, image_data: &[u8]) -> Opt
                     e
                 );
                 info!("Raw JSON was: {}", clean_text);
+                Err(ImportError::AiFailed(e.to_string()))
             }
         }
     } else {
         warn!("Unexpected response structure from Gemini: {:?}", res_json);
+        Err(ImportError::AiFailed(
+            "Invalid AI response structure".to_string(),
+        ))
     }
-
-    None
 }
 
-pub async fn import_recipe_from_youtube(url: &str) -> Option<Recipe> {
-    let video_id = extract_youtube_id(url)?;
+pub async fn import_recipe_from_youtube(url: &str) -> Result<Recipe, ImportError> {
+    let video_id = extract_youtube_id(url).ok_or(ImportError::ParseFailed)?;
 
     info!("Fetching transcript for YouTube video: {}", video_id);
-    let api = YouTubeTranscriptApi::new(None, None, None).ok()?;
+    let api = YouTubeTranscriptApi::new(None, None, None).map_err(|_| ImportError::ParseFailed)?;
 
     // Try English first, then any other language
     let transcript_res = api.fetch_transcript(&video_id, &["en"], true).await;
@@ -695,7 +754,7 @@ pub async fn import_recipe_from_youtube(url: &str) -> Option<Recipe> {
             "Could not extract enough information from YouTube video {}",
             video_id
         );
-        return None;
+        return Err(ImportError::ParseFailed);
     }
 
     let mut recipe = import_recipe_from_text(&page_text).await?;
@@ -708,7 +767,7 @@ pub async fn import_recipe_from_youtube(url: &str) -> Option<Recipe> {
         video_id
     ));
 
-    Some(recipe)
+    Ok(recipe)
 }
 
 fn extract_youtube_id(url: &str) -> Option<String> {
