@@ -11,6 +11,8 @@ playwright/.cache/
 # Test Data
 data/recipes/test-*.md
 data/uploads/test-*
+data/recipes/*.md
+
 geminiapikey.txt
 
 #api key
