@@ -523,7 +523,7 @@ async fn import_photo(State(state): State<AppState>, mut multipart: Multipart) -
                 }
             };
 
-            let new_filename = format!("{}.jpg", uuid::Uuid::new_v4());
+            let new_filename = format!("{}.webp", uuid::Uuid::new_v4());
             let filepath = format!("data/uploads/{}", new_filename);
             let _ = std::fs::write(&filepath, &processed_data);
 
@@ -573,7 +573,7 @@ async fn upload_image(mut multipart: Multipart) -> impl IntoResponse {
             }
         };
 
-        let new_filename = format!("{}.jpg", uuid::Uuid::new_v4());
+        let new_filename = format!("{}.webp", uuid::Uuid::new_v4());
         let filepath = format!("data/uploads/{}", new_filename);
 
         if std::fs::write(&filepath, processed_data).is_ok() {
@@ -716,14 +716,21 @@ async fn main() {
         .route("/upload", post(upload_image))
         .route_layer(middleware::from_fn_with_state(state.clone(), require_admin));
 
+    let static_assets = Router::new()
+        .nest_service("/static", ServeDir::new("static"))
+        .nest_service("/uploads", ServeDir::new("data/uploads"))
+        .layer(tower_http::set_header::SetResponseHeaderLayer::overriding(
+            axum::http::header::CACHE_CONTROL,
+            axum::http::HeaderValue::from_static("public, max-age=31536000, immutable"),
+        ));
+
     let public_routes = Router::new()
         .route("/", get(index))
         .route("/recipe/{id}", get(view_recipe))
         .route("/recipe/favorite/{id}", post(toggle_favorite))
         .route("/login", get(login_form).post(login_submit))
         .route("/logout", post(logout))
-        .nest_service("/static", ServeDir::new("static"))
-        .nest_service("/uploads", ServeDir::new("data/uploads"));
+        .merge(static_assets);
 
     let app = Router::new()
         .merge(public_routes)

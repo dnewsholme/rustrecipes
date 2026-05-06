@@ -51,7 +51,7 @@ export default defineConfig({
   webServer: {
     command: (process.env.CI || process.env.USE_BINARY) ? './target/debug/recipemanager' : 'cargo run --bin recipemanager',
     url: 'http://127.0.0.1:3000',
-    reuseExistingServer: false,
+    reuseExistingServer: true,
     timeout: 120 * 1000,
   },
 });

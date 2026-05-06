@@ -93,7 +93,7 @@
         data-tags='{{ recipe.tags.join(",") }}{% if recipe.has_video() %},has-video{% endif %}{% if recipe.has_combustion() %},has-combustion{% endif %}{% if recipe.favorite %},is-favorite{% endif %}'>
         {% match recipe.image %}
             {% when Some with (img) %}
-                <img src="{% if img.starts_with("http") %}{{ img }}{% else %}{{ app_base }}/{{ img }}{% endif %}" alt="{{ recipe.title }}" class="recipe-card-img">
+                <img src="{% if img.starts_with("http") %}{{ img }}{% else %}{{ app_base }}/{{ img }}{% endif %}" alt="{{ recipe.title }}" class="recipe-card-img" loading="lazy" decoding="async">
             {% when None %}
                 <div class="recipe-card-img" style="display:flex; align-items:center; justify-content:center; color:#64748b;">No Image</div>
         {% endmatch %}

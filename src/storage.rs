@@ -98,9 +98,9 @@ pub fn process_image(data: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>>
     let mut buf = Vec::new();
     let mut cursor = Cursor::new(&mut buf);
 
-    // Save as JPEG with good quality
-    // DynamicImage::write_to with Jpeg format uses a default quality (usually around 75-80)
-    img.write_to(&mut cursor, ImageFormat::Jpeg)?;
+    // Save as WebP for better compression
+    // We use the webp crate for more control or just ImageFormat::Webp if supported by the image crate
+    img.write_to(&mut cursor, ImageFormat::WebP)?;
 
     Ok(buf)
 }
