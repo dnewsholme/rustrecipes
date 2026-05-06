@@ -3,15 +3,6 @@
 {% block title %}{{ recipe.title }}{% endblock %}
 
 {% block header_actions %}
-<button id="wakelock-btn" class="btn btn-secondary theme-toggle-btn" onclick="toggleWakeLock()" title="Keep Screen On">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-        stroke-linecap="round" stroke-linejoin="round">
-        <path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.7 1.5-1.7 1.5-2.7a5 5 0 1 0-10 0c0 1 .5 2 1.5 2.7.8.8 1.3 1.5 1.5 2.5">
-        </path>
-        <line x1="9" y1="18" x2="15" y2="18"></line>
-        <line x1="10" y1="22" x2="14" y2="22"></line>
-    </svg>
-</button>
 {% endblock %}
 
 {% block head %}
@@ -940,55 +931,6 @@
                     }
                 });
             });
-    }
-    // Wake Lock Implementation
-    let wakeLock = null;
-    const wakelockBtn = document.getElementById('wakelock-btn');
-
-    async function requestWakeLock() {
-        try {
-            wakeLock = await navigator.wakeLock.request('screen');
-            wakelockBtn.classList.remove('btn-secondary');
-            wakelockBtn.classList.add('btn-primary');
-            wakelockBtn.style.boxShadow = '0 0 10px var(--accent-orange)';
-
-            wakeLock.addEventListener('release', () => {
-                console.log('Wake Lock was released');
-                if (wakeLock) {
-                    wakelockBtn.classList.remove('btn-primary');
-                    wakelockBtn.classList.add('btn-secondary');
-                    wakelockBtn.style.boxShadow = 'none';
-                    wakeLock = null;
-                }
-            });
-        } catch (err) {
-            console.error(`${err.name}, ${err.message}`);
-        }
-    }
-
-    function toggleWakeLock() {
-        if (!('wakeLock' in navigator)) {
-            alert('Your browser does not support keeping the screen on.');
-            return;
-        }
-
-        if (wakeLock) {
-            wakeLock.release();
-            wakeLock = null;
-        } else {
-            requestWakeLock();
-        }
-    }
-
-    // Re-acquire lock if tab becomes visible again
-    document.addEventListener('visibilitychange', async () => {
-        if (wakeLock !== null && document.visibilityState === 'visible') {
-            await requestWakeLock();
-        }
-    });
-
-    if (!('wakeLock' in navigator)) {
-        wakelockBtn.style.display = 'none';
     }
 
     function switchTab(tabId, btn) {
