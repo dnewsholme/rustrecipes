@@ -16,7 +16,7 @@ test.describe('Recipe Imports', () => {
     // Using a Serious Eats recipe as it usually has good LD+JSON
     const url = 'https://www.seriouseats.com/the-best-roast-potatoes-ever-recipe';
     await page.fill('#url-input', url);
-    await page.click('#import-btn');
+    await page.click('#import-btn', { timeout: 60000 });
     
     // Wait for the form to be pre-filled
     await expect(page.locator('#title')).not.toHaveValue('', { timeout: 60000 });
@@ -37,7 +37,7 @@ test.describe('Recipe Imports', () => {
     // A known cooking video
     const ytUrl = 'https://www.youtube.com/watch?v=0S13mP_68v8'; 
     await page.fill('#url-input', ytUrl);
-    await page.click('#import-btn');
+    await page.click('#import-btn', { timeout: 60000 });
     
     // Should handle the Gemini AI processing time
     await expect(page.locator('#title')).not.toHaveValue('', { timeout: 60000 });
@@ -46,6 +46,8 @@ test.describe('Recipe Imports', () => {
     await page.click('#save-recipe-btn');
 
     await expect(page).toHaveURL(/\/recipe\//, { timeout: 10000 });
-    await expect(page.locator('.recipe-tabs')).toBeVisible();
+    await expect(page.locator('h1')).not.toBeEmpty();
+    // Check for content that exists on both mobile and desktop
+    await expect(page.locator('.recipe-content')).toBeVisible();
   });
 });

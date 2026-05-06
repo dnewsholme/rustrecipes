@@ -32,7 +32,7 @@ jobs:
       run: cargo build --bin recipemanager
 
     - name: Install Playwright Browsers
-      run: npx playwright install chromium --with-deps
+      run: npx playwright install --with-deps
 
     - name: Create data directories
       run: mkdir -p data/recipes data/uploads

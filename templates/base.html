@@ -210,7 +210,7 @@
         const timerToggleBtn = document.getElementById('timer-toggle-btn');
         const tempsToggleBtn = document.getElementById('temps-toggle-btn');
         const tempsPanel = document.getElementById('temps-panel');
-        const alarmSound = new Audio('/static/mixkit-guitar-notification-alert-2320.wav');
+        const alarmSound = new Audio('/static/mixkit-guitar-notification-alert-2320.wav?v={{ app_version }}');
         alarmSound.loop = true;
 
         timerToggleBtn.addEventListener('click', toggleTimerPanel);
@@ -290,8 +290,10 @@
         }
 
         function stopAlarm() {
+            isAlarming = true; // Set to true just to ensure stop logic runs if called directly
             isAlarming = false;
             timerToggleBtn.classList.remove('alarm-pulsing');
+            if (navigator.vibrate) navigator.vibrate(0);
             resetTimer();
         }
 
@@ -316,6 +318,12 @@
                 alarmSound.pause();
                 alarmSound.currentTime = 0;
             } else {
+                // Prime audio for browsers that block autoplay
+                alarmSound.play().then(() => {
+                    alarmSound.pause();
+                    alarmSound.currentTime = 0;
+                }).catch(e => console.log("Audio priming failed:", e));
+
                 if (timerSeconds === 0) {
                     const h = parseInt(document.getElementById('timer-h').value) || 0;
                     const m = parseInt(document.getElementById('timer-m').value) || 0;
@@ -339,7 +347,12 @@
                         btn.innerText = 'Stop Alarm';
                         btn.style.backgroundColor = 'var(--danger)';
                         btn.style.color = 'white';
+                        
+                        // Loop vibration and sound
                         alarmSound.play().catch(e => console.log("Sound play failed:", e));
+                        if (navigator.vibrate) {
+                            navigator.vibrate([500, 200, 500, 200, 500, 200, 500]);
+                        }
                         
                         // Browser notification if supported
                         if (Notification.permission === "granted") {
@@ -357,6 +370,7 @@
             }
             isAlarming = false;
             timerToggleBtn.classList.remove('alarm-pulsing');
+            if (navigator.vibrate) navigator.vibrate(0);
             timerSeconds = 0;
             updateTimerDisplay();
             const btn = document.getElementById('timer-start-btn');
