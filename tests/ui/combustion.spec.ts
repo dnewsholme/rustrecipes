@@ -31,10 +31,11 @@ test.describe('Combustion Data', () => {
     await expect(page).toHaveURL(/\/recipe\//);
     await expect(page.locator('h1')).toContainText('Roast Chicken with Probe');
 
-    // Check for Graph tab and switch to it
+    // Check for Graph tab and switch to it if on mobile
     const graphTab = page.locator('button.tab-btn:has-text("Graph")');
-    await expect(graphTab).toBeVisible();
-    await graphTab.click();
+    if (await graphTab.isVisible()) {
+      await graphTab.click();
+    }
 
     // Verify chart exists
     const chart = page.locator('#combustionChart');
@@ -44,23 +45,31 @@ test.describe('Combustion Data', () => {
     await page.waitForTimeout(1000);
 
     // Verify initial axis labels (defaults to Celsius)
-    // Note: We check the Chart.js instance directly since text in canvas isn't in DOM
     let yAxisTitle = await page.evaluate(() => (window as any).combustionChart.options.scales.y.title.text);
     expect(yAxisTitle).toBe('Temperature (°C)');
 
     // Switch to Fahrenheit and verify label updates
-    await page.click('button.tab-btn:has-text("Ingredients")');
+    const ingredientsTab = page.locator('button.tab-btn:has-text("Ingredients")');
+    if (await ingredientsTab.isVisible()) {
+      await ingredientsTab.click();
+    }
     await page.click('#temp-f');
-
-    // Go back to graph
-    await graphTab.click();
+    
+    // Check graph again
+    if (await graphTab.isVisible()) {
+      await graphTab.click();
+    }
     yAxisTitle = await page.evaluate(() => (window as any).combustionChart.options.scales.y.title.text);
     expect(yAxisTitle).toBe('Temperature (°F)');
 
     // Switch back to Celsius
-    await page.click('button.tab-btn:has-text("Ingredients")');
+    if (await ingredientsTab.isVisible()) {
+      await ingredientsTab.click();
+    }
     await page.click('#temp-c');
-    await graphTab.click();
+    if (await graphTab.isVisible()) {
+      await graphTab.click();
+    }
     yAxisTitle = await page.evaluate(() => (window as any).combustionChart.options.scales.y.title.text);
     expect(yAxisTitle).toBe('Temperature (°C)');
   });
