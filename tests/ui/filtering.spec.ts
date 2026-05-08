@@ -36,10 +36,10 @@ test.describe('Advanced Filtering', () => {
     const visibleCards = page.locator('.recipe-card:visible');
     expect(await visibleCards.count()).toBeGreaterThanOrEqual(1);
 
-    const firstCardTags = (await visibleCards.first().getAttribute('data-tags') || '').split(',');
+    const firstCardTags = (await visibleCards.first().getAttribute('data-tags') || '').split(',').map(t => t.toLowerCase());
     let secondTagName = '';
     for (const t of firstCardTags) {
-      if (t && t !== firstTagName && !['has-video', 'has-combustion', 'is-favorite'].includes(t)) {
+      if (t && t !== firstTagName.toLowerCase() && !['has-video', 'has-combustion', 'is-favorite'].includes(t)) {
         secondTagName = t;
         break;
       }
@@ -47,7 +47,8 @@ test.describe('Advanced Filtering', () => {
 
     // If we found a second tag in the same recipe, click it
     if (secondTagName) {
-      const secondTagBtn = page.locator(`.tag-filter-btn[data-tag="${secondTagName}"]`);
+      // Tags in buttons are lowercased by the server
+      const secondTagBtn = page.locator(`.tag-filter-btn[data-tag="${secondTagName.toLowerCase()}"]`);
       await secondTagBtn.click();
       await page.waitForTimeout(500);
     }
@@ -58,10 +59,10 @@ test.describe('Advanced Filtering', () => {
     expect(finalCount).toBeGreaterThanOrEqual(1);
 
     for (let i = 0; i < finalCount; i++) {
-      const tags = (await finalVisibleCards.nth(i).getAttribute('data-tags') || '').split(',');
-      expect(tags).toContain(firstTagName);
+      const tags = (await finalVisibleCards.nth(i).getAttribute('data-tags') || '').split(',').map(t => t.toLowerCase());
+      expect(tags).toContain(firstTagName.toLowerCase());
       if (secondTagName) {
-        expect(tags).toContain(secondTagName);
+        expect(tags).toContain(secondTagName.toLowerCase());
       }
     }
 

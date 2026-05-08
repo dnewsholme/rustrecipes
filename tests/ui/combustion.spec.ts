@@ -24,20 +24,29 @@ test.describe('Combustion Data', () => {
     const csvPath = path.resolve(__dirname, '../fixtures/ProbeData_1000A717_20260503135928.csv');
     await page.setInputFiles('#combustion_csv_upload', csvPath);
 
-    // Save recipe
-    await page.click('#save-recipe-btn');
-
-    // Should redirect to recipe page
-    await expect(page).toHaveURL(/\/recipe\//);
+    // Save recipe and wait for redirect
+    await Promise.all([
+      page.waitForURL(/\/recipe\//, { timeout: 30000 }),
+      page.getByRole('button', { name: 'Save Recipe' }).click()
+    ]);
     await expect(page.locator('h1')).toContainText('Roast Chicken with Probe');
 
-    // Check for Graph tab and switch to it if on mobile
-    const graphTab = page.locator('button.tab-btn:has-text("Graph")');
-    if (await graphTab.isVisible()) {
-      await graphTab.click();
+    // Determine if we are in mobile layout (where tabs are used)
+    const isMobile = await page.evaluate(() => window.innerWidth <= 768);
+
+    // Switch to Graph tab if on mobile
+    if (isMobile) {
+      const graphTab = page.locator('button.tab-btn:has-text("Graph")');
+      await graphTab.click({ force: true });
+      // Wait for the tab to actually become active in the DOM
+      await page.waitForSelector('#graph-tab.active', { timeout: 10000 });
     }
 
-    // Verify chart exists
+    // Wait for the CSV data to be parsed and the chart to be initialized
+    // This is crucial for Safari which might be slower with the microtask queue
+    await page.waitForFunction(() => (window as any).combustionRawData !== null, { timeout: 10000 });
+
+    // Verify chart exists and is visible
     const chart = page.locator('#combustionChart');
     await expect(chart).toBeVisible();
 
@@ -53,26 +62,31 @@ test.describe('Combustion Data', () => {
     expect(yAxisTitle).toBe('Temperature (°C)');
 
     // Switch to Fahrenheit and verify label updates
-    const ingredientsTab = page.locator('button.tab-btn:has-text("Ingredients")');
-    if (await ingredientsTab.isVisible()) {
-      await ingredientsTab.click();
+    if (isMobile) {
+      await page.locator('button.tab-btn:has-text("Ingredients")').click({ force: true });
+      await page.waitForSelector('#ingredients-tab.active');
     }
     await page.click('#temp-f');
     
     // Check graph again
-    if (await graphTab.isVisible()) {
-      await graphTab.click();
+    if (isMobile) {
+      const graphTab = page.locator('button.tab-btn:has-text("Graph")');
+      await graphTab.click({ force: true });
+      await page.waitForSelector('#graph-tab.active');
     }
     yAxisTitle = await page.evaluate(() => (window as any).combustionChart.options.scales.y.title.text);
     expect(yAxisTitle).toBe('Temperature (°F)');
 
     // Switch back to Celsius
-    if (await ingredientsTab.isVisible()) {
-      await ingredientsTab.click();
+    if (isMobile) {
+      await page.locator('button.tab-btn:has-text("Ingredients")').click({ force: true });
+      await page.waitForSelector('#ingredients-tab.active');
     }
     await page.click('#temp-c');
-    if (await graphTab.isVisible()) {
-      await graphTab.click();
+    if (isMobile) {
+      const graphTab = page.locator('button.tab-btn:has-text("Graph")');
+      await graphTab.click({ force: true });
+      await page.waitForSelector('#graph-tab.active');
     }
     yAxisTitle = await page.evaluate(() => (window as any).combustionChart.options.scales.y.title.text);
     expect(yAxisTitle).toBe('Temperature (°C)');
