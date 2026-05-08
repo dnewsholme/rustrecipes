@@ -897,7 +897,10 @@
                     skipEmptyLines: true,
                     complete: function (results) {
                         window.combustionRawData = results.data;
-                        const labels = window.combustionRawData.map(row => row.Timestamp || row.Time || '');
+                        const labels = window.combustionRawData.map(row => {
+                            let sec = parseFloat(row.Timestamp || row.Time || '0');
+                            return (sec / 60).toFixed(2);
+                        });
 
                         const datasets = [];
                         const colors = [
@@ -948,7 +951,7 @@
                                     x: {
                                         title: {
                                             display: true,
-                                            text: 'Time (s)'
+                                            text: 'Time (min)'
                                         },
                                         ticks: {
                                             maxTicksLimit: 10
