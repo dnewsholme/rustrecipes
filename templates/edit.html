@@ -95,7 +95,7 @@
 {% block scripts %}
 <script src="https://unpkg.com/easymde/dist/easymde.min.js"></script>
 <script>
-    const easymde = new EasyMDE({
+    window.easymde = new EasyMDE({
         element: document.getElementById('markdown'),
         uploadImage: true,
         imageUploadEndpoint: '{{ app_base }}/upload',

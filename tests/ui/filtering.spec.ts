@@ -28,7 +28,7 @@ test.describe('Advanced Filtering', () => {
     }
 
     expect(firstTagBtn).not.toBeNull();
-    await firstTagBtn.click();
+    await firstTagBtn!.click();
     await page.waitForTimeout(500);
 
     // Now find a second tag that is present in the CURRENTLY VISIBLE recipes

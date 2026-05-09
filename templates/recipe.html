@@ -457,8 +457,13 @@
     });
 
     const fractionStr = "½|⅓|⅔|¼|¾|⅕|⅖|⅗|⅘|⅙|⅚|⅛|⅜|⅝|⅞";
-    const numberRegexStr = `(?:\\d+\\s+\\d+\\s*\\/\\s*\\d+|\\d+\\s*\\/\\s*\\d+|\\d*\\.\\d+|\\d+|\\d+\\s+(?:${fractionStr})|(?:${fractionStr}))`;
+    const numberRegexStr = `(?:\\d+[\\s\\-]+\\d+\\s*\\/\\s*\\d+|\\d+\\s*\\/\\s*\\d+|\\d*\\.\\d+|\\d+|\\d+[\\s\\-]+(?:${fractionStr})|(?:${fractionStr}))`;
     const unitsRegexStr = "cup|cups|tsp|teaspoon|teaspoons|tbsp|tablespoon|tablespoons|oz|ounce|ounces|lb|pound|pounds|g|gram|grams|kg|kilogram|kilograms|ml|milliliter|milliliters|l|liter|liters|pt|pint|pints|qt|quart|quarts|gal|gallon|gallons|pinch|pinches|dash|dashes|clove|cloves|slice|slices|can|cans|package|packages|pkg|stick|sticks";
+    
+    // Create regexes once for reuse
+    const unitRegex = new RegExp(`(?:^|\\s|\\()(${numberRegexStr})\\s*(${unitsRegexStr})\\b`, 'gi');
+    const tempRegex = new RegExp(`(?:^|\\s|\\()(\\d+(?:\\s*[\\-–—]\\s*\\d+)?)\\s*(?:°|degrees?\\s+)?(c|f|celsius|fahrenheit)\\b`, 'gi');
+    const startAmountRegex = new RegExp(`^(${numberRegexStr})(?:\\s*(${unitsRegexStr}))?\\b`, 'i');
 
     const unicodeFractions = {
         '½': 0.5, '⅓': 0.333, '⅔': 0.666, '¼': 0.25, '¾': 0.75,
@@ -474,8 +479,8 @@
         // Replace spaces around slash
         let cleanNum = numStr.replace(/\s*\/\s*/g, '/');
 
-        if (cleanNum.includes(' ')) {
-            let parts = cleanNum.split(' ');
+        if (cleanNum.includes(' ') || cleanNum.includes('-')) {
+            let parts = cleanNum.split(/[\s\-]+/);
             let whole = parseFloat(parts[0]);
             let frac = parts[1];
             if (unicodeFractions[frac]) return whole + unicodeFractions[frac];
@@ -572,6 +577,12 @@
         'gallons': { to: 'l', ratio: 3.785, type: 'vol', sys: 'metric' },
         'stick': { to: 'g', ratio: 113, type: 'weight', sys: 'metric' },
         'sticks': { to: 'g', ratio: 113, type: 'weight', sys: 'metric' },
+        'tsp': { to: 'ml', ratio: 5, type: 'vol', sys: 'metric' },
+        'teaspoon': { to: 'ml', ratio: 5, type: 'vol', sys: 'metric' },
+        'teaspoons': { to: 'ml', ratio: 5, type: 'vol', sys: 'metric' },
+        'tbsp': { to: 'ml', ratio: 15, type: 'vol', sys: 'metric' },
+        'tablespoon': { to: 'ml', ratio: 15, type: 'vol', sys: 'metric' },
+        'tablespoons': { to: 'ml', ratio: 15, type: 'vol', sys: 'metric' },
 
         // Metric to Imperial
         'g': { to: 'oz', ratio: 0.035274, type: 'weight', sys: 'imperial' },
@@ -615,11 +626,6 @@
         const recipeContent = document.querySelector('.recipe-content');
         if (!recipeContent) return;
 
-        const unitRegex = new RegExp(`(?:^|\\s|\\()(${numberRegexStr})\\s*(${unitsRegexStr})\\b`, 'gi');
-        const tempRegex = new RegExp(`(?:^|\\s|\\()(\\d+(?:\\s*[\\-–—]\\s*\\d+)?)\\s*(?:°|degrees?\\s+)?(c|f|celsius|fahrenheit)\\b`, 'gi');
-        // Regex for ingredient amounts at the start of a line
-        const startAmountRegex = new RegExp(`^(${numberRegexStr})(?:\\s*(${unitsRegexStr}))?\\b`, 'i');
-
         const walker = document.createTreeWalker(recipeContent, NodeFilter.SHOW_TEXT, null, false);
         const nodesToReplace = [];
         let node;
@@ -627,12 +633,14 @@
             if (node.parentNode.nodeName === 'SCRIPT' || node.parentNode.nodeName === 'STYLE' || node.parentNode.nodeName === 'CANVAS') continue;
 
             const isStartOfIngredient = node.parentNode.classList.contains('ingredient-item') && node === node.parentNode.firstChild;
+            
+            // Reset regexes before testing
+            unitRegex.lastIndex = 0;
+            tempRegex.lastIndex = 0;
 
             if (unitRegex.test(node.nodeValue) || tempRegex.test(node.nodeValue) || (isStartOfIngredient && startAmountRegex.test(node.nodeValue))) {
                 nodesToReplace.push({ node, isStartOfIngredient });
             }
-            unitRegex.lastIndex = 0;
-            tempRegex.lastIndex = 0;
         }
 
         nodesToReplace.forEach(({ node: textNode, isStartOfIngredient }) => {
@@ -1001,7 +1009,15 @@
 
         // Update content
         document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-        document.getElementById(tabId + '-tab').classList.add('active');
+        const tabContent = document.getElementById(tabId + '-tab');
+        if (tabContent) {
+            tabContent.classList.add('active');
+        }
+
+        // Force chart resize if switching to graph tab
+        if (tabId === 'graph' && window.combustionChart) {
+            window.combustionChart.resize();
+        }
 
         // Scroll to top of content
         if (window.innerWidth <= 768) {

@@ -42,8 +42,8 @@ test.describe('Unit Conversions', () => {
 
   test('Temperature range conversion is correct', async ({ page }) => {
     // Check for a temperature range in the text
-    // Use starts-with selector because it might be "225-250"
-    const tempElement = page.locator('span[data-temp-f^="225"]');
+    // Use first() because it might appear in both ingredients and instructions
+    const tempElement = page.locator('span[data-temp-f^="225"]').first();
     await expect(tempElement).toContainText('225-250°F');
     
     // Switch to Metric (Celsius)

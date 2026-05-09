@@ -48,6 +48,10 @@ test.describe('Combustion Data', () => {
 
     // Verify chart exists and is visible
     const chart = page.locator('#combustionChart');
+    await page.waitForFunction(() => {
+        const el = document.getElementById('combustionChart');
+        return el && el.clientWidth > 0;
+    }, { timeout: 10000 });
     await expect(chart).toBeVisible();
 
     // Give it a moment to render
