@@ -32,6 +32,9 @@ test.describe('Recipe Imports', () => {
   });
 
   test('can import recipe from YouTube URL', async ({ page }) => {
+    // Only run this test when explicitly allowed (e.g. from run_local_tests.sh)
+    // to save Gemini API calls in GitHub Actions
+    test.skip(!process.env.ALLOW_YOUTUBE_TESTS, 'YouTube tests are only allowed in local runs');
     test.skip(!process.env.GEMINI_API_KEY, 'GEMINI_API_KEY is not set');
     await page.click('#add-recipe-dropdown-btn');
     await page.click('text=Import Recipe');
