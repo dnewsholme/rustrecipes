@@ -457,7 +457,7 @@
     });
 
     const fractionStr = "½|⅓|⅔|¼|¾|⅕|⅖|⅗|⅘|⅙|⅚|⅛|⅜|⅝|⅞";
-    const numberRegexStr = `(?:\\d+[\\s\\-]+\\d+\\s*\\/\\s*\\d+|\\d+\\s*\\/\\s*\\d+|\\d*\\.\\d+|\\d+|\\d+[\\s\\-]+(?:${fractionStr})|(?:${fractionStr}))`;
+    const numberRegexStr = `(?:\\d+[\\s\\-]+\\d+\\s*[\\/⁄]\\s*\\d+|\\d+\\s*[\\/⁄]\\s*\\d+|\\d*\\.\\d+|\\d+[\\s\\-]*(?:${fractionStr})|(?:${fractionStr})|\\d+)`;
     const unitsRegexStr = "cup|cups|tsp|teaspoon|teaspoons|tbsp|tablespoon|tablespoons|oz|ounce|ounces|lb|pound|pounds|g|gram|grams|kg|kilogram|kilograms|ml|milliliter|milliliters|l|liter|liters|pt|pint|pints|qt|quart|quarts|gal|gallon|gallons|pinch|pinches|dash|dashes|clove|cloves|slice|slices|can|cans|package|packages|pkg|stick|sticks";
     
     // Create regexes once for reuse
@@ -473,23 +473,34 @@
 
     function parseNumStr(numStr) {
         if (!numStr) return 0;
-        numStr = numStr.trim();
-        if (unicodeFractions[numStr]) return unicodeFractions[numStr];
+        numStr = numStr.trim().replace(/⁄/g, '/'); // Normalize fraction slash
 
-        // Replace spaces around slash
-        let cleanNum = numStr.replace(/\s*\/\s*/g, '/');
-
-        if (cleanNum.includes(' ') || cleanNum.includes('-')) {
-            let parts = cleanNum.split(/[\s\-]+/);
-            let whole = parseFloat(parts[0]);
-            let frac = parts[1];
-            if (unicodeFractions[frac]) return whole + unicodeFractions[frac];
-            return whole + parseFraction(frac);
-        } else if (cleanNum.includes('/')) {
-            return parseFraction(cleanNum);
-        } else {
-            return parseFloat(cleanNum);
+        // 1. Handle mixed numbers with unicode fractions: "1 ½" or "1-½"
+        const unicodeMatch = numStr.match(new RegExp(`^(\\d+)[\\s\\-]*(${fractionStr})$`));
+        if (unicodeMatch) {
+            return parseFloat(unicodeMatch[1]) + (unicodeFractions[unicodeMatch[2]] || 0);
         }
+
+        // 2. Handle standalone unicode fractions: "½"
+        if (unicodeFractions[numStr]) {
+            return unicodeFractions[numStr];
+        }
+
+        // 3. Handle mixed numbers with standard slashes: "1 1/2" or "1-1/2"
+        if (numStr.includes('/') && (numStr.includes(' ') || numStr.includes('-'))) {
+            const parts = numStr.split(/[\s\-]+/);
+            if (parts.length === 2) {
+                return parseFloat(parts[0]) + parseFraction(parts[1]);
+            }
+        }
+
+        // 4. Handle standalone standard fractions: "1/2"
+        if (numStr.includes('/')) {
+            return parseFraction(numStr);
+        }
+
+        // 5. Handle decimals and integers: "1.5" or "1"
+        return parseFloat(numStr) || 0;
     }
 
     let currentUnitSystem = 'original'; // 'original', 'metric', 'imperial'
@@ -577,12 +588,6 @@
         'gallons': { to: 'l', ratio: 3.785, type: 'vol', sys: 'metric' },
         'stick': { to: 'g', ratio: 113, type: 'weight', sys: 'metric' },
         'sticks': { to: 'g', ratio: 113, type: 'weight', sys: 'metric' },
-        'tsp': { to: 'ml', ratio: 5, type: 'vol', sys: 'metric' },
-        'teaspoon': { to: 'ml', ratio: 5, type: 'vol', sys: 'metric' },
-        'teaspoons': { to: 'ml', ratio: 5, type: 'vol', sys: 'metric' },
-        'tbsp': { to: 'ml', ratio: 15, type: 'vol', sys: 'metric' },
-        'tablespoon': { to: 'ml', ratio: 15, type: 'vol', sys: 'metric' },
-        'tablespoons': { to: 'ml', ratio: 15, type: 'vol', sys: 'metric' },
 
         // Metric to Imperial
         'g': { to: 'oz', ratio: 0.035274, type: 'weight', sys: 'imperial' },

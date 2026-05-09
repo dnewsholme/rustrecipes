@@ -22,8 +22,8 @@ test.describe('Fraction Conversions', () => {
     // 1/2 cup sugar -> 0.5 * 240 = 120 ml
     expect(content).toContain('120 ml');
     
-    // 2 1/4 tsp -> 2.25 * 5 = 11.25 ml
-    expect(content).toContain('11'); 
+    // 2 1/4 tsp -> stays as tsp
+    expect(content).toContain('2 1/4 tsp');
     
     // 1 ½ cups milk -> 1.5 * 240 = 360 ml
     // Note: the test text might vary depending on how it's matched
@@ -44,6 +44,6 @@ test.describe('Fraction Conversions', () => {
     const instructions = await directionsTab.textContent();
     expect(instructions).toContain('360 ml');
     expect(instructions).toContain('120 ml');
-    expect(instructions).toContain('11 1/4 ml');
+    expect(instructions).toContain('2 1/4 tsp');
   });
 });
