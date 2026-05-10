@@ -737,11 +737,13 @@
             }
         }
 
-        // 2. Determine Total Flour for Baker's Percentage
+        // 2. Determine Total Flour and Water for Baker's Percentage
         let totalFlour = 0;
+        let totalWater = 0;
         if (showBakersPercentage) {
             const flourKeywords = ['flour', 'spelt', 'rye', 'wholemeal', 'whole wheat', 'semolina', 'bread flour', 'all-purpose', 'all purpose'];
             const starterKeywords = ['starter', 'levain', 'leaven'];
+            const waterKeywords = ['water', 'milk', 'cream', 'buttermilk', 'beer', 'cider', 'juice'];
 
             document.querySelectorAll('.ingredient-item').forEach(item => {
                 const amountSpan = item.querySelector('.ingredient-amount');
@@ -749,18 +751,27 @@
                     const base = parseFloat(amountSpan.dataset.base);
                     const unit = (amountSpan.dataset.unit || '').toLowerCase();
                     let grams = base * multiplier;
+                    
+                    // Conversion to grams (approximate for volumes)
                     if (unit === 'kg') grams *= 1000;
                     else if (unit === 'oz' || unit === 'ounce' || unit === 'ounces') grams *= 28.35;
                     else if (unit === 'lb' || unit === 'pound' || unit === 'pounds') grams *= 453.6;
+                    else if (unit === 'ml') grams *= 1.0; // 1ml = 1g for water-like liquids
+                    else if (unit === 'l') grams *= 1000;
+                    else if (unit === 'cup' || unit === 'cups' || unit === 'c') grams *= 240; // Approx weight for water
 
                     const lowerText = item.innerText.toLowerCase();
                     const isStarter = starterKeywords.some(k => lowerText.includes(k));
                     const isFlour = flourKeywords.some(k => lowerText.includes(k)) && !lowerText.includes('flourish');
+                    const isWater = waterKeywords.some(k => lowerText.includes(k));
 
-                    if (isStarter && (unit === 'g' || unit === 'kg' || unit === 'oz' || unit === 'lb')) {
+                    if (isStarter) {
                         totalFlour += grams * 0.5;
-                    } else if (isFlour && (unit === 'g' || unit === 'kg' || unit === 'oz' || unit === 'lb')) {
+                        totalWater += grams * 0.5;
+                    } else if (isFlour) {
                         totalFlour += grams;
+                    } else if (isWater) {
+                        totalWater += grams;
                     }
                 }
             });
@@ -823,6 +834,32 @@
                 span.textContent = displayText;
             }
         });
+
+        // 5. Update Overall Hydration Display
+        let hydrationEl = document.getElementById('overall-hydration');
+        if (showBakersPercentage && totalFlour > 0) {
+            if (!hydrationEl) {
+                const list = document.querySelector('#ingredients-tab ul');
+                if (list) {
+                    hydrationEl = document.createElement('li');
+                    hydrationEl.id = 'overall-hydration';
+                    hydrationEl.style.padding = '1rem 0';
+                    hydrationEl.style.marginTop = '1rem';
+                    hydrationEl.style.borderTop = '2px solid var(--primary-color)';
+                    hydrationEl.style.fontWeight = 'bold';
+                    hydrationEl.style.display = 'flex';
+                    hydrationEl.style.justifyContent = 'space-between';
+                    list.appendChild(hydrationEl);
+                }
+            }
+            if (hydrationEl) {
+                const hydration = (totalWater / totalFlour) * 100;
+                hydrationEl.innerHTML = `<span>Overall Hydration</span><span style="color: var(--primary-color);">${hydration.toFixed(1)}%</span>`;
+                hydrationEl.style.display = 'flex';
+            }
+        } else if (hydrationEl) {
+            hydrationEl.style.display = 'none';
+        }
 
         // 4. Update all Temperature Spans
         const instructionTemps = document.querySelectorAll('.instruction-temp');
