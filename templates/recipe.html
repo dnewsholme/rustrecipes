@@ -741,6 +741,8 @@
         let totalFlour = 0;
         if (showBakersPercentage) {
             const flourKeywords = ['flour', 'spelt', 'rye', 'wholemeal', 'whole wheat', 'semolina', 'bread flour', 'all-purpose', 'all purpose'];
+            const starterKeywords = ['starter', 'levain', 'leaven'];
+
             document.querySelectorAll('.ingredient-item').forEach(item => {
                 const amountSpan = item.querySelector('.ingredient-amount');
                 if (amountSpan) {
@@ -751,8 +753,13 @@
                     else if (unit === 'oz' || unit === 'ounce' || unit === 'ounces') grams *= 28.35;
                     else if (unit === 'lb' || unit === 'pound' || unit === 'pounds') grams *= 453.6;
 
-                    const isFlour = flourKeywords.some(k => item.innerText.toLowerCase().includes(k)) && !item.innerText.toLowerCase().includes('flourish');
-                    if (isFlour && (unit === 'g' || unit === 'kg' || unit === 'oz' || unit === 'lb')) {
+                    const lowerText = item.innerText.toLowerCase();
+                    const isStarter = starterKeywords.some(k => lowerText.includes(k));
+                    const isFlour = flourKeywords.some(k => lowerText.includes(k)) && !lowerText.includes('flourish');
+
+                    if (isStarter && (unit === 'g' || unit === 'kg' || unit === 'oz' || unit === 'lb')) {
+                        totalFlour += grams * 0.5;
+                    } else if (isFlour && (unit === 'g' || unit === 'kg' || unit === 'oz' || unit === 'lb')) {
                         totalFlour += grams;
                     }
                 }
@@ -782,9 +789,12 @@
                     span.style.display = "inline-block";
 
                     const flourKeywords = ['flour', 'spelt', 'rye', 'wholemeal', 'whole wheat', 'semolina', 'bread flour', 'all-purpose', 'all purpose'];
-                    const isFlour = flourKeywords.some(k => span.parentNode.innerText.toLowerCase().includes(k)) && !span.parentNode.innerText.toLowerCase().includes('flourish');
+                    const starterKeywords = ['starter', 'levain', 'leaven'];
+                    const lowerText = span.parentNode.innerText.toLowerCase();
+                    const isStarter = starterKeywords.some(k => lowerText.includes(k));
+                    const isFlour = flourKeywords.some(k => lowerText.includes(k)) && !lowerText.includes('flourish');
 
-                    if (isFlour) {
+                    if (isFlour || isStarter) {
                         span.style.color = 'var(--primary-color)';
                         span.style.fontWeight = 'bold';
                     } else {
@@ -1102,12 +1112,16 @@
         if (!tabBtn) return; // Tab not enabled by server
 
         // Try to detect leavening in ingredients for auto-fill
-        const flourKeywords = ['flour', 'spelt', 'rye', 'wholemeal', 'whole wheat'];
+        const flourKeywords = ['flour', 'spelt', 'rye', 'wholemeal', 'whole wheat', 'semolina', 'bread flour', 'all-purpose', 'all purpose'];
+        const starterKeywords = ['starter', 'levain', 'leaven'];
         let totalFlour = 0;
-        const regex = new RegExp(`^(${numberRegexStr})(?:\\s*(${unitsRegexStr}))?\\b`, 'i');
+        
+        // Use the same regex as the main parser
+        const startRegex = new RegExp(`^(${numberRegexStr})(?:\\s*(${unitsRegexStr}))?\\b`, 'i');
+        const anyUnitRegex = new RegExp(`(${numberRegexStr})\\s*(${unitsRegexStr})\\b`, 'i');
 
         const ingData = originalIngredients.map(text => {
-            let match = text.match(regex);
+            let match = text.match(startRegex) || text.match(anyUnitRegex);
             if (!match) return { grams: 0, isFlour: false, isYeast: false, isStarter: false };
 
             let val = parseNumStr(match[1]);
@@ -1117,29 +1131,37 @@
             else if (unit === 'oz' || unit === 'ounce' || unit === 'ounces') grams = val * 28.35;
             else if (unit === 'lb' || unit === 'pound' || unit === 'pounds') grams = val * 453.6;
 
-            let isFlour = flourKeywords.some(k => text.toLowerCase().includes(k));
-            if (isFlour) totalFlour += grams;
+            const lowerText = text.toLowerCase();
+            let isFlour = flourKeywords.some(k => lowerText.includes(k)) && !lowerText.includes('flourish');
+            let isStarter = starterKeywords.some(k => lowerText.includes(k));
+            let isYeast = /\byeast\b/i.test(text) && !lowerText.includes('nutritional');
 
-            let isYeast = /\byeast\b/i.test(text) && !text.toLowerCase().includes('nutritional');
-            let isStarter = /\b(sourdough starter|levain|starter culture)\b/i.test(text);
+            if (isStarter) {
+                totalFlour += grams * 0.5;
+            } else if (isFlour) {
+                totalFlour += grams;
+            }
 
             return { grams, isFlour, isYeast, isStarter };
         });
 
         let detectedAmount = 0;
+        let detectedType = '';
         ingData.forEach(d => {
             if (d.isYeast || d.isStarter) {
                 if (totalFlour > 0) {
                     detectedAmount = (d.grams / totalFlour) * 100;
+                    detectedType = d.isYeast ? 'yeast' : 'starter';
                 }
             }
         });
 
         if (detectedAmount > 0) {
+            document.getElementById('leaven-type').value = detectedType;
             document.getElementById('leaven-amount').value = detectedAmount.toFixed(1);
             document.getElementById('amount-auto-detected').style.display = 'inline';
+            updateFermentation();
         }
-        updateFermentation();
     });
 </script>
 {% endblock %}
