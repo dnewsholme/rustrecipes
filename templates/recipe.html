@@ -667,7 +667,9 @@
 
             unitRegex.lastIndex = lastIndex;
             while ((match = unitRegex.exec(text)) !== null) {
-                matches.push({ type: 'unit', match, isStart: false });
+                // If we are in an ingredient and haven't found a primary amount yet, 
+                // treat this first match as the primary ingredient amount.
+                matches.push({ type: 'unit', match, isStart: isStartOfIngredient && matches.length === 0 });
             }
             tempRegex.lastIndex = lastIndex;
             while ((match = tempRegex.exec(text)) !== null) {
