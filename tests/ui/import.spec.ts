@@ -14,21 +14,28 @@ test.describe('Recipe Imports', () => {
     await page.click('#add-recipe-dropdown-btn');
     await page.click('text=Import Recipe');
 
-    // Using a Serious Eats recipe as it usually has good LD+JSON
-    const url = 'https://www.seriouseats.com/the-best-roast-potatoes-ever-recipe';
+    // Using King Arthur Baking as it's generally more bot-friendly than Serious Eats
+    const url = 'https://www.kingarthurbaking.com/recipes/classic-scones-recipe';
     await page.fill('#url-input', url);
     await page.click('#import-btn', { timeout: 60000 });
-
+ 
     // Wait for the form to be pre-filled
-    await expect(page.locator('#title')).not.toHaveValue('', { timeout: 60000 });
-    await expect(page.locator('#title')).toHaveValue(/Potatoes/);
-
+    try {
+      await expect(page.locator('#title')).not.toHaveValue('', { timeout: 60000 });
+    } catch (e) {
+      // If it failed, print the body to see if there's an error message (like 403 Forbidden)
+      const body = await page.textContent('body');
+      console.error('Import failed. Page content:', body);
+      throw e;
+    }
+    await expect(page.locator('#title')).toHaveValue(/Scones/i);
+ 
     // Click Save to actually create it
     await page.click('#save-recipe-btn');
 
     // Should redirect to the new recipe page
     await expect(page).toHaveURL(/\/recipe\//, { timeout: 10000 });
-    await expect(page.locator('h1')).toContainText('Potatoes');
+    await expect(page.locator('h1')).toContainText(/Scones/i);
   });
 
   test('can import recipe from YouTube URL', async ({ page }) => {
