@@ -749,6 +749,7 @@ async fn main() {
         .route("/login", get(login_form).post(login_submit))
         .route("/logout", post(logout))
         .route("/api", get(api_guide))
+        .route("/api/", get(api_guide))
         .merge(static_assets);
 
     let app = Router::new()
