@@ -203,10 +203,10 @@
         </div>
         <div style="display: flex; gap: 0.25rem; align-items: center;">
             <span style="font-size: 0.8rem; color: var(--text-secondary); margin-right: 0.5rem;">Temp:</span>
-            <button id="temp-original" class="btn btn-primary temp-btn"
+            <button id="temp-original" class="btn btn-secondary temp-btn"
                 style="padding: 0.25rem 0.5rem; font-size: 0.8rem;"
                 onclick="setTempSystem('original', this)">Original</button>
-            <button id="temp-c" class="btn btn-secondary temp-btn"
+            <button id="temp-c" class="btn btn-primary temp-btn"
                 style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="setTempSystem('c', this)">°C</button>
             <button id="temp-f" class="btn btn-secondary temp-btn"
                 style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="setTempSystem('f', this)">°F</button>
@@ -420,6 +420,10 @@
         const tab = document.getElementById(tabId + '-tab');
         if (tab) tab.classList.add('active');
         if (btn) btn.classList.add('active');
+        
+        if (tabId === 'graph' && typeof updateCombustionChart === 'function') {
+            updateCombustionChart();
+        }
     }
 
     function toggleDescription() {

@@ -64,6 +64,14 @@ struct EditTemplate {
 }
 
 #[derive(Template)]
+#[template(path = "api_guide.html")]
+struct ApiGuideTemplate {
+    app_base: &'static str,
+    app_version: String,
+    is_admin: bool,
+}
+
+#[derive(Template)]
 #[template(path = "login.html")]
 struct LoginTemplate {
     app_base: &'static str,
@@ -298,6 +306,15 @@ async fn index(State(state): State<AppState>, jar: PrivateCookieJar) -> impl Int
     let template = IndexTemplate {
         recipes,
         all_tags,
+        app_base: state.app_base,
+        app_version: APP_VERSION.to_string(),
+        is_admin: is_admin_session(&jar),
+    };
+    Html(template.render().unwrap())
+}
+
+async fn api_guide(State(state): State<AppState>, jar: PrivateCookieJar) -> impl IntoResponse {
+    let template = ApiGuideTemplate {
         app_base: state.app_base,
         app_version: APP_VERSION.to_string(),
         is_admin: is_admin_session(&jar),
@@ -731,6 +748,7 @@ async fn main() {
         .route("/recipe/favorite/{id}", post(toggle_favorite))
         .route("/login", get(login_form).post(login_submit))
         .route("/logout", post(logout))
+        .route("/api", get(api_guide))
         .merge(static_assets);
 
     let app = Router::new()
