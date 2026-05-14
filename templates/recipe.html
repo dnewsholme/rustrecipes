@@ -171,6 +171,47 @@
 </div>
 
 <div class="recipe-content">
+    <div class="unit-scaling-row"
+        style="display: flex; gap: 1rem; margin-top: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; background: var(--bg-color); padding: 0.75rem; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+        <div style="display: flex; gap: 0.25rem; align-items: center;">
+            <span style="font-size: 0.8rem; color: var(--text-secondary); margin-right: 0.5rem;">Units:</span>
+            <button id="unit-original" class="btn btn-primary unit-btn"
+                style="padding: 0.25rem 0.5rem; font-size: 0.8rem;"
+                onclick="setUnitSystem('original', this)">Original</button>
+            <button id="unit-metric" class="btn btn-secondary unit-btn"
+                style="padding: 0.25rem 0.5rem; font-size: 0.8rem;"
+                onclick="setUnitSystem('metric', this)">Metric</button>
+            <button id="unit-imperial" class="btn btn-secondary unit-btn"
+                style="padding: 0.25rem 0.5rem; font-size: 0.8rem;"
+                onclick="setUnitSystem('imperial', this)">Imperial</button>
+            {% if recipe.has_tag("bread") || recipe.has_tag("dough") %}
+            <button id="unit-bakers" class="btn btn-secondary unit-btn"
+                style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="toggleBakersPercentage(this)">Baker's
+                %</button>
+            {% endif %}
+        </div>
+        <div style="display: flex; gap: 0.25rem; align-items: center;">
+            <span style="font-size: 0.8rem; color: var(--text-secondary); margin-right: 0.5rem;">Scale:</span>
+            <button class="btn btn-secondary scale-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;"
+                onclick="scaleIngredients(0.5, this)">0.5x</button>
+            <button class="btn btn-primary scale-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;"
+                onclick="scaleIngredients(1, this)">1x</button>
+            <button class="btn btn-secondary scale-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;"
+                onclick="scaleIngredients(2, this)">2x</button>
+            <button class="btn btn-secondary scale-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;"
+                onclick="scaleIngredients(3, this)">3x</button>
+        </div>
+        <div style="display: flex; gap: 0.25rem; align-items: center;">
+            <span style="font-size: 0.8rem; color: var(--text-secondary); margin-right: 0.5rem;">Temp:</span>
+            <button id="temp-original" class="btn btn-primary temp-btn"
+                style="padding: 0.25rem 0.5rem; font-size: 0.8rem;"
+                onclick="setTempSystem('original', this)">Original</button>
+            <button id="temp-c" class="btn btn-secondary temp-btn"
+                style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="setTempSystem('c', this)">°C</button>
+            <button id="temp-f" class="btn btn-secondary temp-btn"
+                style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="setTempSystem('f', this)">°F</button>
+        </div>
+    </div>
     <div class="recipe-tabs">
         <button class="tab-btn active" onclick="switchTab('ingredients', this)">Ingredients</button>
         <button class="tab-btn" onclick="switchTab('directions', this)">Directions</button>
@@ -190,47 +231,6 @@
     </div>
 
     <div id="ingredients-tab" class="tab-content active">
-        <div class="unit-scaling-row"
-            style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; background: var(--bg-color); padding: 0.75rem; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
-            <div style="display: flex; gap: 0.25rem; align-items: center;">
-                <span style="font-size: 0.8rem; color: var(--text-secondary); margin-right: 0.5rem;">Units:</span>
-                <button id="unit-original" class="btn btn-primary unit-btn"
-                    style="padding: 0.25rem 0.5rem; font-size: 0.8rem;"
-                    onclick="setUnitSystem('original', this)">Original</button>
-                <button id="unit-metric" class="btn btn-secondary unit-btn"
-                    style="padding: 0.25rem 0.5rem; font-size: 0.8rem;"
-                    onclick="setUnitSystem('metric', this)">Metric</button>
-                <button id="unit-imperial" class="btn btn-secondary unit-btn"
-                    style="padding: 0.25rem 0.5rem; font-size: 0.8rem;"
-                    onclick="setUnitSystem('imperial', this)">Imperial</button>
-                {% if recipe.has_tag("bread") || recipe.has_tag("dough") %}
-                <button id="unit-bakers" class="btn btn-secondary unit-btn"
-                    style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="toggleBakersPercentage(this)">Baker's
-                    %</button>
-                {% endif %}
-            </div>
-            <div style="display: flex; gap: 0.25rem; align-items: center;">
-                <span style="font-size: 0.8rem; color: var(--text-secondary); margin-right: 0.5rem;">Scale:</span>
-                <button class="btn btn-secondary scale-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;"
-                    onclick="scaleIngredients(0.5, this)">0.5x</button>
-                <button class="btn btn-primary scale-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;"
-                    onclick="scaleIngredients(1, this)">1x</button>
-                <button class="btn btn-secondary scale-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;"
-                    onclick="scaleIngredients(2, this)">2x</button>
-                <button class="btn btn-secondary scale-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;"
-                    onclick="scaleIngredients(3, this)">3x</button>
-            </div>
-            <div style="display: flex; gap: 0.25rem; align-items: center;">
-                <span style="font-size: 0.8rem; color: var(--text-secondary); margin-right: 0.5rem;">Temp:</span>
-                <button id="temp-original" class="btn btn-primary temp-btn"
-                    style="padding: 0.25rem 0.5rem; font-size: 0.8rem;"
-                    onclick="setTempSystem('original', this)">Original</button>
-                <button id="temp-c" class="btn btn-secondary temp-btn"
-                    style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="setTempSystem('c', this)">°C</button>
-                <button id="temp-f" class="btn btn-secondary temp-btn"
-                    style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="setTempSystem('f', this)">°F</button>
-            </div>
-        </div>
 
         {% if !recipe.ingredients.is_empty() %}
         <div
@@ -414,6 +414,14 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom"></script>
 <script>
+    function switchTab(tabId, btn) {
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        const tab = document.getElementById(tabId + '-tab');
+        if (tab) tab.classList.add('active');
+        if (btn) btn.classList.add('active');
+    }
+
     function toggleDescription() {
         const desc = document.getElementById('recipe-description');
         const btnText = document.getElementById('description-toggle-text');
@@ -423,6 +431,116 @@
         } else {
             desc.classList.add('show');
             btnText.textContent = 'Hide Description';
+        }
+    }
+    
+    window.combustionRawData = null;
+    window.combustionChart = null;
+
+    async function updateCombustionChart() {
+        const canvas = document.getElementById('combustionChart');
+        if (!canvas) return;
+
+        const csvUrl = document.getElementById('combustion_csv_url')?.value;
+        if (!csvUrl) return;
+
+        try {
+            if (!window.combustionRawData) {
+                const response = await fetch(csvUrl);
+                const csvText = await response.text();
+                // Find where the headers start (skip metadata)
+                const lines = csvText.split('\n');
+                const headerLineIndex = lines.findIndex(l => l.startsWith('Timestamp'));
+                if (headerLineIndex === -1) return;
+                
+                const dataText = lines.slice(headerLineIndex).join('\n');
+                const results = Papa.parse(dataText, { header: true, dynamicTyping: true, skipEmptyLines: true });
+                window.combustionRawData = results.data;
+            }
+
+            const labels = window.combustionRawData.map(row => (parseFloat(row['Timestamp']) || 0) / 60); // min
+            
+            const sensors = [
+                { key: 'VirtualCoreTemperature', label: 'Core', color: '#e74c3c' },
+                { key: 'VirtualSurfaceTemperature', label: 'Surface', color: '#f39c12' },
+                { key: 'VirtualAmbientTemperature', label: 'Ambient', color: '#3498db' }
+            ];
+
+            const datasets = sensors.map(s => {
+                const data = window.combustionRawData.map(row => {
+                    let val = parseFloat(row[s.key]);
+                    if (isNaN(val)) return null;
+                    if (currentTempSystem === 'f') {
+                        return (val * 9/5) + 32;
+                    }
+                    return val;
+                });
+                return {
+                    label: s.label,
+                    data: data,
+                    borderColor: s.color,
+                    backgroundColor: s.color + '33',
+                    fill: false,
+                    tension: 0.1,
+                    pointRadius: 0,
+                    borderWidth: 2
+                };
+            });
+
+            const yTitle = `Temperature (°${currentTempSystem === 'f' ? 'F' : 'C'})`;
+
+            if (window.combustionChart) {
+                window.combustionChart.data.labels = labels;
+                window.combustionChart.data.datasets = datasets;
+                window.combustionChart.options.scales.y.title.text = yTitle;
+                window.combustionChart.update('none'); // Update without animation for speed
+            } else {
+                const ctx = canvas.getContext('2d');
+                window.combustionChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: datasets
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: {
+                            mode: 'index',
+                            intersect: false,
+                        },
+                        scales: {
+                            x: {
+                                type: 'linear',
+                                title: { display: true, text: 'Time (min)' },
+                                ticks: {
+                                    callback: function(value) {
+                                        return value.toFixed(0);
+                                    }
+                                }
+                            },
+                            y: {
+                                title: { display: true, text: yTitle }
+                            }
+                        },
+                        plugins: {
+                            zoom: {
+                                zoom: {
+                                    wheel: { enabled: true },
+                                    pinch: { enabled: true },
+                                    mode: 'xy'
+                                },
+                                pan: {
+                                    enabled: true,
+                                    mode: 'xy'
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+        } catch (e) {
+            console.error("Failed to update combustion chart:", e);
         }
     }
 
@@ -452,13 +570,16 @@
     }
 
     const originalIngredients = [];
-    document.querySelectorAll('.ingredient-item').forEach(item => {
-        originalIngredients.push(item.innerText.trim());
+    document.addEventListener('DOMContentLoaded', () => {
+        document.querySelectorAll('.ingredient-item').forEach(item => {
+            originalIngredients.push(item.innerText.trim());
+        });
+        detectLeavening();
     });
 
     const fractionStr = "½|⅓|⅔|¼|¾|⅕|⅖|⅗|⅘|⅙|⅚|⅛|⅜|⅝|⅞";
     const numberRegexStr = `(?:\\d+[\\s\\-]+\\d+\\s*[\\/⁄]\\s*\\d+|\\d+\\s*[\\/⁄]\\s*\\d+|\\d*\\.\\d+|\\d+[\\s\\-]*(?:${fractionStr})|(?:${fractionStr})|\\d+)`;
-    const unitsRegexStr = "cup|cups|tsp|teaspoon|teaspoons|tbsp|tablespoon|tablespoons|oz|ounce|ounces|lb|pound|pounds|g|gram|grams|kg|kilogram|kilograms|ml|milliliter|milliliters|l|liter|liters|pt|pint|pints|qt|quart|quarts|gal|gallon|gallons|pinch|pinches|dash|dashes|clove|cloves|slice|slices|can|cans|package|packages|pkg|stick|sticks";
+    const unitsRegexStr = "cup|cups|c|tsp|teaspoon|teaspoons|tbsp|tablespoon|tablespoons|oz|ounce|ounces|lb|pound|pounds|g|gram|grams|kg|kilogram|kilograms|ml|milliliter|milliliters|l|liter|liters|pt|pint|pints|qt|quart|quarts|gal|gallon|gallons|pinch|pinches|dash|dashes|clove|cloves|slice|slices|can|cans|package|packages|pkg|stick|sticks";
     
     // Create regexes once for reuse
     const unitRegex = new RegExp(`(?:^|\\s|\\()(${numberRegexStr})\\s*(${unitsRegexStr})\\b`, 'gi');
@@ -566,68 +687,11 @@
         applyScalingAndUnits();
     }
 
-    const conversionMap = {
-        // Imperial to Metric
-        'cup': { to: 'ml', ratio: 240, type: 'vol', sys: 'metric' },
-        'cups': { to: 'ml', ratio: 240, type: 'vol', sys: 'metric' },
-        'c': { to: 'ml', ratio: 240, type: 'vol', sys: 'metric' },
-        'oz': { to: 'g', ratio: 28.35, type: 'weight', sys: 'metric' },
-        'ounce': { to: 'g', ratio: 28.35, type: 'weight', sys: 'metric' },
-        'ounces': { to: 'g', ratio: 28.35, type: 'weight', sys: 'metric' },
-        'lb': { to: 'g', ratio: 453.6, type: 'weight', sys: 'metric' },
-        'pound': { to: 'g', ratio: 453.6, type: 'weight', sys: 'metric' },
-        'pounds': { to: 'g', ratio: 453.6, type: 'weight', sys: 'metric' },
-        'pt': { to: 'ml', ratio: 473, type: 'vol', sys: 'metric' },
-        'pint': { to: 'ml', ratio: 473, type: 'vol', sys: 'metric' },
-        'pints': { to: 'ml', ratio: 473, type: 'vol', sys: 'metric' },
-        'qt': { to: 'ml', ratio: 946, type: 'vol', sys: 'metric' },
-        'quart': { to: 'ml', ratio: 946, type: 'vol', sys: 'metric' },
-        'quarts': { to: 'ml', ratio: 946, type: 'vol', sys: 'metric' },
-        'gal': { to: 'l', ratio: 3.785, type: 'vol', sys: 'metric' },
-        'gallon': { to: 'l', ratio: 3.785, type: 'vol', sys: 'metric' },
-        'gallons': { to: 'l', ratio: 3.785, type: 'vol', sys: 'metric' },
-        'stick': { to: 'g', ratio: 113, type: 'weight', sys: 'metric' },
-        'sticks': { to: 'g', ratio: 113, type: 'weight', sys: 'metric' },
 
-        // Metric to Imperial
-        'g': { to: 'oz', ratio: 0.035274, type: 'weight', sys: 'imperial' },
-        'gram': { to: 'oz', ratio: 0.035274, type: 'weight', sys: 'imperial' },
-        'grams': { to: 'oz', ratio: 0.035274, type: 'weight', sys: 'imperial' },
-        'kg': { to: 'lb', ratio: 2.20462, type: 'weight', sys: 'imperial' },
-        'kilogram': { to: 'lb', ratio: 2.20462, type: 'weight', sys: 'imperial' },
-        'kilograms': { to: 'lb', ratio: 2.20462, type: 'weight', sys: 'imperial' },
-        'ml': { to: 'cup', ratio: 0.00422675, type: 'vol', sys: 'imperial' },
-        'milliliter': { to: 'cup', ratio: 0.00422675, type: 'vol', sys: 'imperial' },
-        'milliliters': { to: 'cup', ratio: 0.00422675, type: 'vol', sys: 'imperial' },
-        'l': { to: 'cups', ratio: 4.22675, type: 'vol', sys: 'imperial' },
-        'liter': { to: 'cups', ratio: 4.22675, type: 'vol', sys: 'imperial' },
-        'liters': { to: 'cups', ratio: 4.22675, type: 'vol', sys: 'imperial' },
-    };
 
-    function convertValueAndUnit(val, unit, targetSystem) {
-        if (targetSystem === 'original' || !unit) return { val, unit };
-        const lowerUnit = unit.toLowerCase();
 
-        const rule = conversionMap[lowerUnit];
-        if (rule && rule.sys === targetSystem) {
-            let newVal = val * rule.ratio;
-            let newUnit = rule.to;
-
-            // Auto-scale metric units for readability
-            if (newUnit === 'g' && newVal >= 1000) {
-                newVal = newVal / 1000;
-                newUnit = 'kg';
-            } else if (newUnit === 'ml' && newVal >= 1000) {
-                newVal = newVal / 1000;
-                newUnit = 'l';
-            }
-
-            return { val: newVal, unit: newUnit };
-        }
-        return { val, unit };
-    }
-
-    document.addEventListener('DOMContentLoaded', () => {
+    
+    function wrapAmounts() {
         const recipeContent = document.querySelector('.recipe-content');
         if (!recipeContent) return;
 
@@ -639,9 +703,9 @@
 
             const isStartOfIngredient = node.parentNode.classList.contains('ingredient-item') && node === node.parentNode.firstChild;
             
-            // Reset regexes before testing
             unitRegex.lastIndex = 0;
             tempRegex.lastIndex = 0;
+            startAmountRegex.lastIndex = 0;
 
             if (unitRegex.test(node.nodeValue) || tempRegex.test(node.nodeValue) || (isStartOfIngredient && startAmountRegex.test(node.nodeValue))) {
                 nodesToReplace.push({ node, isStartOfIngredient });
@@ -652,11 +716,13 @@
             const fragment = document.createDocumentFragment();
             const text = textNode.nodeValue;
             let lastIndex = 0;
-
             const matches = [];
             let match;
 
-            // Handle start of ingredient amount specially
+            unitRegex.lastIndex = 0;
+            tempRegex.lastIndex = 0;
+            startAmountRegex.lastIndex = 0;
+
             if (isStartOfIngredient) {
                 match = startAmountRegex.exec(text);
                 if (match) {
@@ -667,8 +733,6 @@
 
             unitRegex.lastIndex = lastIndex;
             while ((match = unitRegex.exec(text)) !== null) {
-                // If we are in an ingredient and haven't found a primary amount yet, 
-                // treat this first match as the primary ingredient amount.
                 matches.push({ type: 'unit', match, isStart: isStartOfIngredient && matches.length === 0 });
             }
             tempRegex.lastIndex = lastIndex;
@@ -681,15 +745,11 @@
             let cursor = 0;
             matches.forEach(({ type, match, isStart }) => {
                 if (match.index < cursor) return;
-
-                if (match.index > cursor) {
-                    fragment.appendChild(document.createTextNode(text.substring(cursor, match.index)));
-                }
+                if (match.index > cursor) fragment.appendChild(document.createTextNode(text.substring(cursor, match.index)));
 
                 const fullMatch = match[0];
                 const numStr = match[1];
                 const unitStr = match[2] || '';
-
                 const leadingChar = isStart ? "" : fullMatch.substring(0, fullMatch.indexOf(numStr));
                 if (leadingChar) fragment.appendChild(document.createTextNode(leadingChar));
 
@@ -707,100 +767,167 @@
                     span.dataset.base = numStr;
                     const u = unitStr.toLowerCase().startsWith('c') ? 'c' : 'f';
                     span.dataset.unit = u;
-                    // Add legacy data attributes for tests
                     span.setAttribute(`data-temp-${u}`, numStr);
                 }
 
                 span.textContent = fullMatch.substring(leadingChar.length);
                 fragment.appendChild(span);
-
                 cursor = match.index + fullMatch.length;
             });
 
-            if (cursor < text.length) {
-                fragment.appendChild(document.createTextNode(text.substring(cursor)));
-            }
-
+            if (cursor < text.length) fragment.appendChild(document.createTextNode(text.substring(cursor)));
             textNode.parentNode.replaceChild(fragment, textNode);
         });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        wrapAmounts();
+        applyScalingAndUnits();
     });
-
-    function applyScalingAndUnits() {
-        const multiplier = currentMultiplier;
-
-        // 1. Update Servings
-        const servingsEl = document.getElementById('servings-count');
-        if (servingsEl) {
-            let baseServings = parseInt(servingsEl.dataset.base);
-            if (!isNaN(baseServings)) {
-                servingsEl.innerText = Math.round(baseServings * multiplier * 10) / 10;
+    
+    async function applyScalingAndUnits() {
+        const url = `/api/v1/recipes/{{ recipe.id }}?scale=${currentMultiplier}&unit=${currentUnitSystem}&temp=${currentTempSystem}`;
+        try {
+            const res = await fetch(url);
+            if (!res.ok) throw new Error('API error');
+            const data = await res.json();
+            
+            const servingsEl = document.getElementById('servings-count');
+            if (servingsEl && data.servings) {
+                servingsEl.innerText = data.servings;
+                servingsEl.dataset.base = data.servings; 
             }
-        }
 
-        // 2. Determine Total Flour and Water for Baker's Percentage
-        let totalFlour = 0;
-        let totalWater = 0;
-        if (showBakersPercentage) {
-            const flourKeywords = ['flour', 'spelt', 'rye', 'wholemeal', 'whole wheat', 'semolina', 'bread flour', 'all-purpose', 'all purpose'];
-            const starterKeywords = ['starter', 'levain', 'leaven'];
-            const waterKeywords = ['water', 'milk', 'cream', 'buttermilk', 'beer', 'cider', 'juice'];
-
-            document.querySelectorAll('.ingredient-item').forEach(item => {
-                const amountSpan = item.querySelector('.ingredient-amount');
-                if (amountSpan) {
-                    const base = parseFloat(amountSpan.dataset.base);
-                    const unit = (amountSpan.dataset.unit || '').toLowerCase();
-                    let grams = base * multiplier;
-                    
-                    // Conversion to grams (approximate for volumes)
-                    if (unit === 'kg') grams *= 1000;
-                    else if (unit === 'oz' || unit === 'ounce' || unit === 'ounces') grams *= 28.35;
-                    else if (unit === 'lb' || unit === 'pound' || unit === 'pounds') grams *= 453.6;
-                    else if (unit === 'ml') grams *= 1.0; // 1ml = 1g for water-like liquids
-                    else if (unit === 'l') grams *= 1000;
-                    else if (unit === 'cup' || unit === 'cups' || unit === 'c') grams *= 240; // Approx weight for water
-
-                    const lowerText = item.innerText.toLowerCase();
-                    const isStarter = starterKeywords.some(k => lowerText.includes(k));
-                    const isFlour = flourKeywords.some(k => lowerText.includes(k)) && !lowerText.includes('flourish');
-                    const isWater = waterKeywords.some(k => lowerText.includes(k));
-
-                    if (isStarter) {
-                        totalFlour += grams * 0.5;
-                        totalWater += grams * 0.5;
-                    } else if (isFlour) {
-                        totalFlour += grams;
-                    } else if (isWater) {
-                        totalWater += grams;
+            if (data.combustion_csv) {
+                const url = data.combustion_csv.startsWith('http') ? data.combustion_csv : `{{ app_base }}/${data.combustion_csv}`;
+                const input = document.getElementById('combustion_csv_url');
+                if (input) {
+                    if (input.value !== url) {
+                        input.value = url;
+                        window.combustionRawData = null; // Clear cache if URL changed
                     }
                 }
-            });
+            }
+
+            if (data.leaven_type && data.leaven_amount) {
+                const leavenType = document.getElementById('leaven-type');
+                const leavenAmount = document.getElementById('leaven-amount');
+                const autoDetected = document.getElementById('amount-auto-detected');
+                if (leavenType && leavenAmount && autoDetected) {
+                    leavenType.value = data.leaven_type;
+                    leavenAmount.value = data.leaven_amount.toFixed(1);
+                    autoDetected.style.display = 'inline';
+                    updateFermentation();
+                }
+            }
+
+            const ingredientsList = document.querySelector('#ingredients-tab ul');
+            if (ingredientsList) {
+                ingredientsList.innerHTML = '';
+                data.ingredients.forEach(ing => {
+                    const li = document.createElement('li');
+                    li.className = 'ingredient-item';
+                    li.style.padding = '0.5rem 0';
+                    li.style.borderBottom = '1px solid var(--border-color)';
+                    li.textContent = ing; 
+                    ingredientsList.appendChild(li);
+                });
+            }
+
+            const instructionsDiv = document.querySelector('#recipe-instructions');
+            if (instructionsDiv && data.html) {
+                instructionsDiv.innerHTML = '<h2>Directions</h2>' + data.html;
+            }
+
+            // Update Overall Hydration
+            const hydrationEl = document.getElementById('overall-hydration');
+            if (hydrationEl) {
+                const valSpan = hydrationEl.querySelector('#overall-hydration-val');
+                if (valSpan) {
+                    if (data.overall_hydration) {
+                        valSpan.textContent = Math.round(data.overall_hydration * 100) + '%';
+                        hydrationEl.style.display = 'block';
+                    } else {
+                        hydrationEl.style.display = 'none';
+                    }
+                }
+            }
+
+            wrapAmounts();
+
+            if (showBakersPercentage) {
+                applyBakersPercentage();
+            } else {
+                const hydrationEl = document.getElementById('overall-hydration');
+                if (hydrationEl) hydrationEl.remove();
+            }
+
+            if (document.getElementById('ferment-temp')) {
+                updateFermentation();
+            }
+            if (typeof updateCombustionChart === 'function') {
+                updateCombustionChart();
+            }
+        } catch (e) {
+            console.error(e);
         }
+    }
 
-        // 3. Update all Amount Spans (Ingredients and Instructions)
-        document.querySelectorAll('.instruction-amount').forEach(span => {
-            const base = parseFloat(span.dataset.base);
-            const originalUnit = span.dataset.unit;
-            const isIngredient = span.classList.contains('ingredient-amount');
+    function applyBakersPercentage() {
+        let totalFlour = 0;
+        let totalWater = 0;
+        const flourKeywords = ['flour', 'spelt', 'rye', 'wholemeal', 'whole wheat', 'semolina', 'bread flour', 'all-purpose', 'all purpose'];
+        const starterKeywords = ['starter', 'levain', 'leaven'];
+        const waterKeywords = ['water', 'milk', 'cream', 'buttermilk', 'beer', 'cider', 'juice'];
 
-            if (!isNaN(base)) {
-                let newValue = base * multiplier;
+        document.querySelectorAll('.ingredient-item').forEach(item => {
+            const amountSpan = item.querySelector('.ingredient-amount');
+            if (amountSpan) {
+                const base = parseFloat(amountSpan.dataset.base);
+                const unit = (amountSpan.dataset.unit || '').toLowerCase();
+                let grams = base;
+                
+                if (unit === 'kg') grams *= 1000;
+                else if (unit === 'oz' || unit === 'ounce' || unit === 'ounces') grams *= 28.35;
+                else if (unit === 'lb' || unit === 'pound' || unit === 'pounds') grams *= 453.6;
+                else if (unit === 'ml' || unit === 'l' || unit === 'cup' || unit === 'cups' || unit === 'c') {
+                    // For hydration, we assume 1ml = 1g for liquids and cups
+                    if (unit === 'l') grams *= 1000;
+                    else if (unit === 'cup' || unit === 'cups' || unit === 'c') grams *= 240;
+                }
 
-                // Handle Baker's Percentage display for ingredients
-                if (isIngredient && showBakersPercentage && totalFlour > 0) {
-                    let grams = newValue;
-                    const unit = originalUnit.toLowerCase();
-                    if (unit === 'kg') grams *= 1000;
-                    else if (unit === 'oz' || unit === 'ounce' || unit === 'ounces') grams *= 28.35;
-                    else if (unit === 'lb' || unit === 'pound' || unit === 'pounds') grams *= 453.6;
+                const lowerText = item.innerText.toLowerCase();
+                const isStarter = starterKeywords.some(k => lowerText.includes(k));
+                const isFlour = flourKeywords.some(k => lowerText.includes(k)) && !lowerText.includes('flourish');
+                const isWater = waterKeywords.some(k => lowerText.includes(k));
+
+                if (isStarter) {
+                    totalFlour += grams * 0.5;
+                    totalWater += grams * 0.5;
+                } else if (isFlour) {
+                    totalFlour += grams;
+                } else if (isWater) {
+                    totalWater += grams;
+                }
+            }
+        });
+
+        if (totalFlour > 0) {
+            document.querySelectorAll('.ingredient-item').forEach(item => {
+                const span = item.querySelector('.ingredient-amount');
+                if (span) {
+                    const base = parseFloat(span.dataset.base);
+                    const originalUnit = (span.dataset.unit || '').toLowerCase();
+                    let grams = base;
+                    if (originalUnit === 'kg') grams *= 1000;
+                    else if (originalUnit === 'oz' || originalUnit === 'ounce' || originalUnit === 'ounces') grams *= 28.35;
+                    else if (originalUnit === 'lb' || originalUnit === 'pound' || originalUnit === 'pounds') grams *= 453.6;
 
                     let percentage = (grams / totalFlour) * 100;
                     span.textContent = percentage.toFixed(1) + "%";
                     span.style.minWidth = "60px";
                     span.style.display = "inline-block";
 
-                    const flourKeywords = ['flour', 'spelt', 'rye', 'wholemeal', 'whole wheat', 'semolina', 'bread flour', 'all-purpose', 'all purpose'];
-                    const starterKeywords = ['starter', 'levain', 'leaven'];
                     const lowerText = span.parentNode.innerText.toLowerCase();
                     const isStarter = starterKeywords.some(k => lowerText.includes(k));
                     const isFlour = flourKeywords.some(k => lowerText.includes(k)) && !lowerText.includes('flourish');
@@ -812,32 +939,10 @@
                         span.style.color = 'inherit';
                         span.style.fontWeight = 'normal';
                     }
-                    return;
                 }
+            });
 
-                // Normal scaling and unit conversion
-                span.style.minWidth = "auto";
-                span.style.display = "inline";
-                span.style.color = 'var(--primary-color)';
-                span.style.fontWeight = 'bold';
-
-                let { val: finalVal, unit: finalUnit } = convertValueAndUnit(newValue, originalUnit, currentUnitSystem);
-                let formattedValue = formatNumber(finalVal);
-                let displayText = formattedValue;
-
-                if (finalUnit) {
-                    displayText += " " + finalUnit;
-                } else if (originalUnit) {
-                    displayText += " " + originalUnit;
-                }
-
-                span.textContent = displayText;
-            }
-        });
-
-        // 5. Update Overall Hydration Display
-        let hydrationEl = document.getElementById('overall-hydration');
-        if (showBakersPercentage && totalFlour > 0) {
+            let hydrationEl = document.getElementById('overall-hydration');
             if (!hydrationEl) {
                 const list = document.querySelector('#ingredients-tab ul');
                 if (list) {
@@ -849,253 +954,31 @@
                     hydrationEl.style.fontWeight = 'bold';
                     hydrationEl.style.display = 'flex';
                     hydrationEl.style.justifyContent = 'space-between';
+                    
+                    const labelSpan = document.createElement('span');
+                    labelSpan.textContent = 'Overall Hydration';
+                    
+                    const valSpan = document.createElement('span');
+                    valSpan.id = 'overall-hydration-val';
+                    valSpan.style.color = 'var(--primary-color)';
+                    
+                    hydrationEl.appendChild(labelSpan);
+                    hydrationEl.appendChild(valSpan);
                     list.appendChild(hydrationEl);
                 }
             }
             if (hydrationEl) {
-                const hydration = (totalWater / totalFlour) * 100;
-                hydrationEl.innerHTML = `<span>Overall Hydration</span><span style="color: var(--primary-color);">${hydration.toFixed(1)}%</span>`;
-                hydrationEl.style.display = 'flex';
+                const valSpan = hydrationEl.querySelector('#overall-hydration-val');
+                if (valSpan) {
+                    valSpan.textContent = Math.round((totalWater / totalFlour) * 100) + '%';
+                }
             }
-        } else if (hydrationEl) {
-            hydrationEl.style.display = 'none';
-        }
-
-        // 4. Update all Temperature Spans
-        const instructionTemps = document.querySelectorAll('.instruction-temp');
-        instructionTemps.forEach(span => {
-            const base = span.dataset.base;
-            const baseUnit = span.dataset.unit;
-
-            if (base) {
-                const parts = base.split(/[\-–—]/).map(p => parseFloat(p.trim()));
-                let finalUnit = baseUnit;
-
-                const convertedParts = parts.map(val => {
-                    if (currentTempSystem === 'original') return val;
-                    if (baseUnit === 'f' && currentTempSystem === 'c') {
-                        return (val - 32) * 5 / 9;
-                    } else if (baseUnit === 'c' && currentTempSystem === 'f') {
-                        return (val * 9 / 5) + 32;
-                    }
-                    return val;
-                });
-
-                if (currentTempSystem !== 'original') {
-                    finalUnit = currentTempSystem;
-                }
-
-                span.textContent = convertedParts.map(p => Math.round(p)).join('-') + "°" + finalUnit.toUpperCase();
-            }
-        });
-    }
-
-    function parseFraction(frac) {
-        if (!frac) return 0;
-        let parts = frac.split('/');
-        if (parts.length === 2) {
-            let n = parseFloat(parts[0].trim());
-            let d = parseFloat(parts[1].trim());
-            if (d !== 0 && !isNaN(n) && !isNaN(d)) return n / d;
-        }
-        return 0;
-    }
-
-    function formatNumber(num) {
-        if (Number.isInteger(num)) return num.toString();
-        const fractionalPart = num - Math.floor(num);
-        const whole = Math.floor(num) > 0 ? Math.floor(num) + " " : "";
-        if (Math.abs(fractionalPart - 0.5) < 0.01) return whole + "1/2";
-        if (Math.abs(fractionalPart - 0.25) < 0.01) return whole + "1/4";
-        if (Math.abs(fractionalPart - 0.75) < 0.01) return whole + "3/4";
-        if (Math.abs(fractionalPart - 0.33) < 0.02) return whole + "1/3";
-        if (Math.abs(fractionalPart - 0.66) < 0.02) return whole + "2/3";
-        return Math.round(num * 100) / 100;
-    }
-
-    window.combustionChart = null;
-    window.combustionRawData = null;
-
-    function updateCombustionChart() {
-        if (!window.combustionChart || !window.combustionRawData) return;
-
-        const isFahrenheit = currentTempSystem === 'f';
-        const unit = isFahrenheit ? '°F' : '°C';
-
-        window.combustionChart.options.scales.y.title.text = `Temperature (${unit})`;
-
-        window.combustionChart.data.datasets.forEach(dataset => {
-            const col = dataset.columnId;
-            dataset.data = window.combustionRawData.map(row => {
-                let val = parseFloat(row[col]);
-                if (isNaN(val)) return null;
-                if (isFahrenheit) {
-                    return (val * 9 / 5) + 32;
-                }
-                return val;
-            });
-        });
-
-        window.combustionChart.update();
-    }
-
-    const csvUrlInput = document.getElementById('combustion_csv_url');
-    if (csvUrlInput && window.Papa && window.Chart) {
-        fetch(csvUrlInput.value)
-            .then(res => res.text())
-            .then(csv => {
-                let lines = csv.split('\n');
-                let startIdx = 0;
-                for (let i = 0; i < lines.length; i++) {
-                    if (lines[i].startsWith('Timestamp')) {
-                        startIdx = i;
-                        break;
-                    }
-                }
-                let cleanCsv = lines.slice(startIdx).join('\n');
-
-                Papa.parse(cleanCsv, {
-                    header: true,
-                    skipEmptyLines: true,
-                    complete: function (results) {
-                        window.combustionRawData = results.data;
-                        const labels = window.combustionRawData.map(row => {
-                            let sec = parseFloat(row.Timestamp || row.Time || '0');
-                            return (sec / 60).toFixed(2);
-                        });
-
-                        const datasets = [];
-                        const colors = [
-                            '#ff6384', '#36a2eb', '#cc65fe', '#ffce56',
-                            '#4bc0c0', '#9966ff', '#ff9f40', '#c9cbcf',
-                            '#d35400', '#27ae60', '#8e44ad'
-                        ];
-
-                        const targetColumns = ['T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8', 'VirtualCoreTemperature', 'VirtualSurfaceTemperature', 'VirtualAmbientTemperature'];
-                        const hiddenByDefault = ['T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8'];
-                        const niceLabels = {
-                            'VirtualCoreTemperature': 'Core',
-                            'VirtualSurfaceTemperature': 'Surface',
-                            'VirtualAmbientTemperature': 'Ambient'
-                        };
-
-                        let colorIdx = 0;
-                        targetColumns.forEach(col => {
-                            if (window.combustionRawData.length > 0 && window.combustionRawData[0][col] !== undefined) {
-                                datasets.push({
-                                    label: niceLabels[col] || col,
-                                    columnId: col,
-                                    data: [], // Filled by updateCombustionChart
-                                    borderColor: colors[colorIdx % colors.length],
-                                    fill: false,
-                                    tension: 0.1,
-                                    hidden: hiddenByDefault.includes(col)
-                                });
-                                colorIdx++;
-                            }
-                        });
-
-                        const ctx = document.getElementById('combustionChart').getContext('2d');
-                        window.combustionChart = new Chart(ctx, {
-                            type: 'line',
-                            data: {
-                                labels: labels,
-                                datasets: datasets
-                            },
-                            options: {
-                                responsive: true,
-                                maintainAspectRatio: false,
-                                interaction: {
-                                    mode: 'index',
-                                    intersect: false,
-                                },
-                                scales: {
-                                    x: {
-                                        title: {
-                                            display: true,
-                                            text: 'Time (min)'
-                                        },
-                                        ticks: {
-                                            maxTicksLimit: 10
-                                        }
-                                    },
-                                    y: {
-                                        title: {
-                                            display: true,
-                                            text: 'Temperature (°C)'
-                                        }
-                                    }
-                                },
-                                elements: {
-                                    point: {
-                                        radius: 0
-                                    }
-                                },
-                                plugins: {
-                                    zoom: {
-                                        zoom: {
-                                            wheel: {
-                                                enabled: true,
-                                            },
-                                            pinch: {
-                                                enabled: true
-                                            },
-                                            mode: 'xy',
-                                        },
-                                        pan: {
-                                            enabled: true,
-                                            mode: 'xy',
-                                        }
-                                    }
-                                }
-                            }
-                        });
-                        updateCombustionChart();
-                    }
-                });
-            });
-    }
-
-    function switchTab(tabId, btn) {
-        // Update buttons
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-
-        // Update content
-        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-        const tabContent = document.getElementById(tabId + '-tab');
-        if (tabContent) {
-            tabContent.classList.add('active');
-        }
-
-        // Force chart resize if switching to graph tab
-        if (tabId === 'graph' && window.combustionChart) {
-            window.combustionChart.resize();
-        }
-
-        // Scroll to top of content
-        if (window.innerWidth <= 768) {
-            window.scrollTo({ top: document.querySelector('.recipe-content').offsetTop - 100, behavior: 'smooth' });
         }
     }
 
-    function toggleMobileImage() {
-        const img = document.getElementById('recipe-hero-image');
-        const btn = document.getElementById('mobile-image-toggle');
-        const span = btn.querySelector('span');
-
-        if (img.classList.contains('force-show')) {
-            img.classList.remove('force-show');
-            span.textContent = 'Show Photo';
-        } else {
-            img.classList.add('force-show');
-            span.textContent = 'Hide Photo';
-        }
-    }
-
-    function updateFermentation() {
+    async function updateFermentation() {
         const type = document.getElementById('leaven-type').value;
-        let temp = parseFloat(document.getElementById('ferment-temp').value);
+        const temp = parseFloat(document.getElementById('ferment-temp').value);
         const amount = parseFloat(document.getElementById('leaven-amount').value);
 
         let displayTemp = temp;
@@ -1120,85 +1003,19 @@
             return;
         }
 
-        let time = 0;
-        if (type === 'yeast') {
-            // Very basic yeast model: Time doubles every ~10 degrees drop
-            // Base: 1% yeast at 24C takes ~2 hours bulk
-            const baseTime = 2.0;
-            const tempFactor = Math.pow(2, (24 - temp) / 7);
-            const amountFactor = 1.0 / amount;
-            time = baseTime * tempFactor * amountFactor;
-        } else {
-            // Sourdough model: 20% starter at 24C takes ~5 hours bulk
-            const baseTime = 5.0;
-            const tempFactor = Math.pow(2, (24 - temp) / 6); // Sourdough is more temp sensitive
-            const amountFactor = 20.0 / amount;
-            time = baseTime * tempFactor * amountFactor;
-        }
+        try {
+            const response = await fetch(`/api/v1/ferment?type=${type}&amount=${amount}&temp=${temp}`);
+            const data = await response.json();
+            const time = data.estimated_hours;
 
-        if (time > 48) {
-            document.getElementById('ferment-time-result').innerText = "48+";
-        } else {
-            document.getElementById('ferment-time-result').innerText = time.toFixed(1);
+            if (time >= 48) {
+                document.getElementById('ferment-time-result').innerText = "48+";
+            } else {
+                document.getElementById('ferment-time-result').innerText = time.toFixed(1);
+            }
+        } catch (e) {
+            console.error("Fermentation API failed:", e);
         }
     }
-
-    // Detect Yeast/Starter and enable tab
-    document.addEventListener('DOMContentLoaded', () => {
-        const tabBtn = document.getElementById('fermentation-tab-btn');
-        if (!tabBtn) return; // Tab not enabled by server
-
-        // Try to detect leavening in ingredients for auto-fill
-        const flourKeywords = ['flour', 'spelt', 'rye', 'wholemeal', 'whole wheat', 'semolina', 'bread flour', 'all-purpose', 'all purpose'];
-        const starterKeywords = ['starter', 'levain', 'leaven'];
-        let totalFlour = 0;
-        
-        // Use the same regex as the main parser
-        const startRegex = new RegExp(`^(${numberRegexStr})(?:\\s*(${unitsRegexStr}))?\\b`, 'i');
-        const anyUnitRegex = new RegExp(`(${numberRegexStr})\\s*(${unitsRegexStr})\\b`, 'i');
-
-        const ingData = originalIngredients.map(text => {
-            let match = text.match(startRegex) || text.match(anyUnitRegex);
-            if (!match) return { grams: 0, isFlour: false, isYeast: false, isStarter: false };
-
-            let val = parseNumStr(match[1]);
-            let unit = (match[2] || '').toLowerCase();
-            let grams = val;
-            if (unit === 'kg') grams = val * 1000;
-            else if (unit === 'oz' || unit === 'ounce' || unit === 'ounces') grams = val * 28.35;
-            else if (unit === 'lb' || unit === 'pound' || unit === 'pounds') grams = val * 453.6;
-
-            const lowerText = text.toLowerCase();
-            let isFlour = flourKeywords.some(k => lowerText.includes(k)) && !lowerText.includes('flourish');
-            let isStarter = starterKeywords.some(k => lowerText.includes(k));
-            let isYeast = /\byeast\b/i.test(text) && !lowerText.includes('nutritional');
-
-            if (isStarter) {
-                totalFlour += grams * 0.5;
-            } else if (isFlour) {
-                totalFlour += grams;
-            }
-
-            return { grams, isFlour, isYeast, isStarter };
-        });
-
-        let detectedAmount = 0;
-        let detectedType = '';
-        ingData.forEach(d => {
-            if (d.isYeast || d.isStarter) {
-                if (totalFlour > 0) {
-                    detectedAmount = (d.grams / totalFlour) * 100;
-                    detectedType = d.isYeast ? 'yeast' : 'starter';
-                }
-            }
-        });
-
-        if (detectedAmount > 0) {
-            document.getElementById('leaven-type').value = detectedType;
-            document.getElementById('leaven-amount').value = detectedAmount.toFixed(1);
-            document.getElementById('amount-auto-detected').style.display = 'inline';
-            updateFermentation();
-        }
-    });
 </script>
 {% endblock %}

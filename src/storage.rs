@@ -1,4 +1,5 @@
 use crate::models::Recipe;
+use serde::Serialize;
 // use tracing::error;
 
 use image::{GenericImageView, ImageFormat};
@@ -68,11 +69,42 @@ pub async fn read_recipe(id: &str) -> Option<Recipe> {
     None
 }
 
+#[derive(Serialize)]
+struct RecipeFrontmatter<'a> {
+    title: &'a str,
+    description: &'a Option<String>,
+    image: &'a Option<String>,
+    source_url: &'a Option<String>,
+    tags: &'a Vec<String>,
+    servings: &'a Option<u32>,
+    prep_time: &'a Option<String>,
+    cook_time: &'a Option<String>,
+    ingredients: &'a Vec<String>,
+    combustion_csv: &'a Option<String>,
+    video_url: &'a Option<String>,
+    favorite: bool,
+}
+
 pub async fn save_recipe(recipe: &Recipe) -> Result<(), std::io::Error> {
     let path = get_recipes_dir().join(format!("{}.md", recipe.id));
 
+    let fm = RecipeFrontmatter {
+        title: &recipe.title,
+        description: &recipe.description,
+        image: &recipe.image,
+        source_url: &recipe.source_url,
+        tags: &recipe.tags,
+        servings: &recipe.servings,
+        prep_time: &recipe.prep_time,
+        cook_time: &recipe.cook_time,
+        ingredients: &recipe.ingredients,
+        combustion_csv: &recipe.combustion_csv,
+        video_url: &recipe.video_url,
+        favorite: recipe.favorite,
+    };
+
     // Create frontmatter
-    let frontmatter = serde_yaml::to_string(&recipe)
+    let frontmatter = serde_yaml::to_string(&fm)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
     let content = format!("---\n{}---\n{}", frontmatter, recipe.markdown);
 

@@ -42,6 +42,8 @@ ENV PORT=3000
 ENV CI=true
 ENV ADMIN_PASSWORD=admin
 ENV ADMIN_PASSWORD_HASH='$2b$12$xU63w1/.HZtlvUU1CFjzeejLtcHV0AcP7QUrVyCgsSQ2suC2rs3pK'
+ENV API_TOKEN=test-token
+ENV GEMINI_API_KEY=test-api-key
 ENV USE_BINARY=true
 ENV BINARY_PATH=./target/release/recipemanager
 

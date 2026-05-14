@@ -1,9 +1,12 @@
+mod api;
+mod conversions;
 mod importer;
 mod models;
 mod storage;
 
 use askama::Template;
 use axum::{
+
     Form, Router,
     extract::Request,
     extract::{DefaultBodyLimit, FromRef, Multipart, Path, State},
@@ -734,6 +737,7 @@ async fn main() {
     let app = Router::new()
         .merge(public_routes)
         .merge(protected_routes)
+        .nest("/api/v1", api::router(state.clone()))
         .layer(TraceLayer::new_for_http())
         .layer(DefaultBodyLimit::max(1024 * 1024 * 250)) // 250 MB limit
         .with_state(state);

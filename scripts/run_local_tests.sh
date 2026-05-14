@@ -12,6 +12,7 @@ fi
 # Configuration
 export ADMIN_PASSWORD=${ADMIN_PASSWORD:-"admin"}
 export SESSION_SECRET=${SESSION_SECRET:-"dev_secret_key_for_testing_only"}
+export API_TOKEN=${API_TOKEN:-"test-token"}
 # APP_BASE should be the subpath prefix (e.g. "" or "/recipes"), NOT the full URL
 export APP_BASE=${APP_BASE:-""}
 export ALLOW_YOUTUBE_TESTS=true
@@ -33,6 +34,7 @@ docker run --rm \
     -e SESSION_SECRET="$SESSION_SECRET" \
     -e APP_BASE="$APP_BASE" \
     -e GEMINI_API_KEY="$GEMINI_API_KEY" \
+    -e API_TOKEN="$API_TOKEN" \
     -e ALLOW_YOUTUBE_TESTS="$ALLOW_YOUTUBE_TESTS" \
     -v "$(pwd)/playwright-report:/app/playwright-report" \
     -v "$(pwd)/test-results:/app/test-results" \

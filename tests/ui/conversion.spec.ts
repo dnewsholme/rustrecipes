@@ -18,14 +18,15 @@ test.describe('Unit Conversions', () => {
     
     // Switch to Metric
     await page.click('#unit-metric');
+    await page.waitForTimeout(500); // Wait for API
     const metricText = await page.locator('.recipe-content').innerText();
-    expect(metricText).not.toBe(initialText);
-    expect(metricText).toContain('g'); // Metric usually has grams
+    // test-recipe.md is already 500g, so metricText might be same as initialText
+    expect(metricText).toContain('500 g'); 
     
     // Switch to Imperial
     await page.click('#unit-imperial');
-    const imperialText = await page.locator('.recipe-content').innerText();
-    expect(imperialText).toContain('oz'); // Should have ounces now
+    await page.waitForTimeout(500); // Wait for API
+    await expect(page.locator('.recipe-content')).toContainText('oz'); // Should have ounces now
   });
 
   test('Baker\'s percentage activates for bread recipes', async ({ page }) => {
@@ -36,18 +37,17 @@ test.describe('Unit Conversions', () => {
     await expect(page.locator('#unit-bakers')).toBeVisible();
     
     await page.click('#unit-bakers');
-    const content = await page.locator('.recipe-content').innerText();
-    expect(content).toContain('%'); // Should show percentages
+    await page.waitForTimeout(500); // Wait for API
+    await expect(page.locator('.recipe-content')).toContainText('%'); 
   });
 
   test('Temperature range conversion is correct', async ({ page }) => {
     // Check for a temperature range in the text
-    // Use first() because it might appear in both ingredients and instructions
-    const tempElement = page.locator('span[data-temp-f^="225"]').first();
-    await expect(tempElement).toContainText('225-250°F');
+    await expect(page.locator('.instruction-temp').first()).toContainText('225-250°F');
     
     // Switch to Metric (Celsius)
     await page.click('#temp-c');
-    await expect(tempElement).toContainText('107-121°C');
+    await page.waitForTimeout(500); // Wait for API
+    await expect(page.locator('.instruction-temp').first()).toContainText('107-121°C');
   });
 });

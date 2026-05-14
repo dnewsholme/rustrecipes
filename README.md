@@ -66,11 +66,29 @@ A lightning-fast, highly-customizable recipe manager built in Rust. It's designe
   - **Meat Temp Reference**: A dedicated reference page for internal meat temperatures and doneness levels, covering everything from rare steak to low & slow BBQ brisket.
   - **USDA Log 7 Calculator**: Interactive calculator for poultry safety. Achieve perfectly juicy chicken at lower temperatures by calculating the required hold time for safe Salmonella lethality.
 - **Secure Admin Login**: Protect your recipes from unauthorized edits or imports. Set an `ADMIN_PASSWORD_HASH` environment variable to restrict modifying actions to yourself while keeping the site read-only for guests.
+- **Developer-Friendly API**: Comprehensive REST API (v1) for programmatic recipe management, enabling future mobile app integrations or custom automation workflows.
 - **Streamlined UI & Aesthetics**:
   - **Minimalist Header**: Clean, icon-only navigation bar that provides more screen real estate for your content.
-  - **Performance Optimized**: Automated image compression and resizing on import to ensure fast page loads even with high-res photos.
-  - **Corrected Unit Conversion**: Precise handling of temperature ranges (e.g., 225–250°F) and various dash types during C/F conversion.
-- **Beautiful Dark/Light Mode**: Premium aesthetic featuring a custom Kamado BBQ logo and vibrant orange accents.
+
+---
+
+## 🔌 API Documentation
+
+The application includes a RESTful API (v1) that allows for programmatic access to your recipes, making it easy to build mobile apps or integrations.
+
+**Base URL**: `/api/v1`
+
+| Endpoint | Method | Description |
+| :--- | :--- | :--- |
+| `/recipes` | `GET` | List all recipes. |
+| `/recipes` | `POST` | Create a new recipe (Requires `API_TOKEN`). |
+| `/recipes/{id}` | `GET` | Get a specific recipe with optional `unit`, `temp`, and `scale` conversion parameters. |
+| `/recipes/{id}` | `PUT` | Update an existing recipe (Requires `API_TOKEN`). |
+| `/recipes/{id}` | `DELETE` | Delete a recipe (Requires `API_TOKEN`). |
+| `/ferment` | `GET` | Calculate estimated fermentation time based on `type`, `amount`, and `temp`. |
+
+**Authentication**:
+For mutable operations (`POST`, `PUT`, `DELETE`), you must provide an `API_TOKEN` in the `Authorization` header as a Bearer token. Set this token using the `API_TOKEN` environment variable.
 
 ---
 
@@ -98,6 +116,7 @@ Copy the output (e.g., `$2y$12$...`) and use it as the value for `ADMIN_PASSWORD
 
 **Environment Variables**:
 - `ADMIN_PASSWORD_HASH`: Required for secure login. See the section above to generate your hash. If omitted, the default temporary password is "admin".
+- `API_TOKEN`: (Required for API write access) A secure token for authenticating API requests.
 - `SESSION_SECRET`: (Optional but recommended) A long random string used to cryptographically sign session cookies. If omitted, sessions will reset every time the server restarts.
 - `GEMINI_API_KEY`: Required if you want to use the AI Photo Import or Video URL Import features. You can get a free key from [Google AI Studio](https://aistudio.google.com/app/apikey).
 - `APP_BASE`: (Optional) Set this if you are hosting the app behind a reverse proxy on a subpath (e.g. `APP_BASE="/recipes"`).
@@ -113,6 +132,7 @@ cd recipemanager
 
 # Run the server locally
 export ADMIN_PASSWORD_HASH='<your_generated_hash>'
+export API_TOKEN='your_api_token_here'
 export SESSION_SECRET='your_random_secret_string'
 export GEMINI_API_KEY="your_api_key_here"
 cargo run
@@ -133,6 +153,7 @@ docker run -d \
   --name recipemanager \
   -p 3000:3000 \
   -e ADMIN_PASSWORD_HASH='<your_generated_hash>' \
+  -e API_TOKEN='your_api_token_here' \
   -e SESSION_SECRET='your_random_secret_string' \
   -e GEMINI_API_KEY="your_api_key_here" \
   -v /path/to/your/local/data:/app/data \

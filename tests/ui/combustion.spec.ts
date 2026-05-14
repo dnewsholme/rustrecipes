@@ -59,9 +59,11 @@ test.describe('Combustion Data', () => {
 
     // Verify initial axis labels (defaults to Celsius)
     // Note: We check the Chart.js instance directly since text in canvas isn't in DOM
+    await page.waitForFunction(() => (window as any).combustionChart?.options?.scales?.x?.title?.text !== undefined, { timeout: 10000 });
     let xAxisTitle = await page.evaluate(() => (window as any).combustionChart.options.scales.x.title.text);
     expect(xAxisTitle).toBe('Time (min)');
 
+    await page.waitForFunction(() => (window as any).combustionChart?.options?.scales?.y?.title?.text !== undefined, { timeout: 10000 });
     let yAxisTitle = await page.evaluate(() => (window as any).combustionChart.options.scales.y.title.text);
     expect(yAxisTitle).toBe('Temperature (°C)');
 

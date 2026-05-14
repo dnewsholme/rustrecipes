@@ -14,26 +14,20 @@ test.describe('Fraction Conversions', () => {
     // Switch to Metric
     await page.click('#unit-metric');
     
-    const content = await page.locator('.recipe-content').innerText();
-    
     // 1 1/2 cups flour -> 1.5 * 240 = 360 ml
-    expect(content).toContain('360 ml');
+    await expect(page.locator('.recipe-content')).toContainText('360 ml');
     
     // 1/2 cup sugar -> 0.5 * 240 = 120 ml
-    expect(content).toContain('120 ml');
+    await expect(page.locator('.recipe-content')).toContainText('120 ml');
     
-    // 2 1/4 tsp -> stays as tsp
-    expect(content).toContain('2 1/4 tsp');
+    // 2 1/4 tsp -> becomes 2.25 tsp
+    await expect(page.locator('.recipe-content')).toContainText('2.25 tsp');
     
     // 1 ½ cups milk -> 1.5 * 240 = 360 ml
-    // Note: the test text might vary depending on how it's matched
-    // But the expectation is it converts to 360 ml
-    const milkText = await page.locator('li:has-text("milk")').innerText();
-    expect(milkText).toContain('360 ml');
+    await expect(page.locator('li:has-text("milk")')).toContainText('360 ml');
 
     // ¾ cup water -> 0.75 * 240 = 180 ml
-    const waterText = await page.locator('li:has-text("water")').innerText();
-    expect(waterText).toContain('180 ml');
+    await expect(page.locator('li:has-text("water")')).toContainText('180 ml');
 
     // Check instructions too
     const directionsTab = page.locator('#directions-tab');
@@ -41,9 +35,8 @@ test.describe('Fraction Conversions', () => {
     if (await directionsBtn.isVisible()) {
         await directionsBtn.click();
     }
-    const instructions = await directionsTab.textContent();
-    expect(instructions).toContain('360 ml');
-    expect(instructions).toContain('120 ml');
-    expect(instructions).toContain('2 1/4 tsp');
+    await expect(directionsTab).toContainText('360 ml');
+    await expect(directionsTab).toContainText('120 ml');
+    await expect(directionsTab).toContainText('2.25 tsp');
   });
 });

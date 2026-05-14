@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Recipe {
-    #[serde(skip)] // Don't serialize id into frontmatter
+    #[serde(default)]
     pub id: String,
     pub title: String,
     pub description: Option<String>,
@@ -16,7 +16,7 @@ pub struct Recipe {
     pub cook_time: Option<String>,
     #[serde(default)]
     pub ingredients: Vec<String>,
-    #[serde(skip)]
+    #[serde(default)]
     pub markdown: String,
     #[serde(skip)]
     pub html: Option<String>,
