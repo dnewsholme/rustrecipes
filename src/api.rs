@@ -1,11 +1,12 @@
-use crate::{models::Recipe, storage, AppState};
+use crate::{AppState, models::Recipe, storage};
 use axum::{
+    Router,
+    extract::Request,
     extract::{Path, State},
     http::{HeaderMap, StatusCode},
     middleware::Next,
     response::{IntoResponse, Json},
     routing::{get, post},
-    Router, extract::Request,
 };
 use serde::{Deserialize, Serialize};
 use tracing::{error, warn};
@@ -13,10 +14,16 @@ use tracing::{error, warn};
 pub fn router(state: AppState) -> Router<AppState> {
     Router::new()
         .route("/recipes", get(list_recipes).post(create_recipe))
-        .route("/recipes/{id}", get(get_recipe).put(update_recipe).delete(delete_recipe))
+        .route(
+            "/recipes/{id}",
+            get(get_recipe).put(update_recipe).delete(delete_recipe),
+        )
         .route("/ferment", get(calculate_fermentation))
         .route("/import", post(import_recipe))
-        .layer(axum::middleware::from_fn_with_state(state.clone(), require_api_token))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            require_api_token,
+        ))
 }
 
 async fn require_api_token(
@@ -37,12 +44,13 @@ async fn require_api_token(
         return Err(StatusCode::UNAUTHORIZED);
     }
 
-    if let Some(auth_header) = headers.get(axum::http::header::AUTHORIZATION) {
-        if let Ok(auth_str) = auth_header.to_str() {
-            if auth_str.starts_with("Bearer ") && &auth_str[7..] == token {
-                return Ok(next.run(req).await);
-            }
-        }
+    if headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|h| h.to_str().ok())
+        .filter(|s| s.starts_with("Bearer ") && s[7..] == token)
+        .is_some()
+    {
+        return Ok(next.run(req).await);
     }
 
     Err(StatusCode::UNAUTHORIZED)
@@ -65,14 +73,17 @@ struct RecipeSummary {
 
 async fn list_recipes() -> impl IntoResponse {
     let recipes = storage::list_recipes().await;
-    let summaries = recipes.into_iter().map(|r| RecipeSummary {
-        id: r.id,
-        title: r.title,
-        image: r.image,
-        tags: r.tags,
-        prep_time: r.prep_time,
-        cook_time: r.cook_time,
-    }).collect();
+    let summaries = recipes
+        .into_iter()
+        .map(|r| RecipeSummary {
+            id: r.id,
+            title: r.title,
+            image: r.image,
+            tags: r.tags,
+            prep_time: r.prep_time,
+            cook_time: r.cook_time,
+        })
+        .collect();
 
     Json(RecipeListResponse { recipes: summaries })
 }
@@ -168,7 +179,9 @@ struct FermentResult {
     estimated_hours: f64,
 }
 
-async fn calculate_fermentation(axum::extract::Query(query): axum::extract::Query<FermentQuery>) -> Json<FermentResult> {
+async fn calculate_fermentation(
+    axum::extract::Query(query): axum::extract::Query<FermentQuery>,
+) -> Json<FermentResult> {
     let base_time;
     let temp_factor;
     let amount_factor;
@@ -180,23 +193,30 @@ async fn calculate_fermentation(axum::extract::Query(query): axum::extract::Quer
     } else {
         base_time = 5.0;
         temp_factor = f64::powf(2.0, (24.0 - query.temp) / 6.0);
-        amount_factor = 20.0 / (if query.amount == 0.0 { 0.1 } else { query.amount });
+        amount_factor = 20.0
+            / (if query.amount == 0.0 {
+                0.1
+            } else {
+                query.amount
+            });
     }
 
     let mut estimated_hours = base_time * temp_factor * amount_factor;
-    if estimated_hours > 48.0 { estimated_hours = 48.0; }
-    
+    if estimated_hours > 48.0 {
+        estimated_hours = 48.0;
+    }
+
     Json(FermentResult { estimated_hours })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::http::{Request, StatusCode};
-    use tower::ServiceExt;
     use crate::models::Recipe;
     use axum::body::Body;
+    use axum::http::{Request, StatusCode};
     use http_body_util::BodyExt;
+    use tower::ServiceExt;
 
     fn test_state() -> AppState {
         AppState {
@@ -235,7 +255,7 @@ mod tests {
 
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        
+
         let body = response.into_body().collect().await.unwrap().to_bytes();
         let list: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert!(list.get("recipes").is_some());
@@ -245,10 +265,12 @@ mod tests {
     async fn test_recipe_lifecycle() {
         // Ensure data/recipes exists
         let _ = std::fs::create_dir_all("data/recipes");
-        
+
         let state = test_state();
         // Set API_TOKEN for mutable methods
-        unsafe { std::env::set_var("API_TOKEN", "test-token"); }
+        unsafe {
+            std::env::set_var("API_TOKEN", "test-token");
+        }
         let app = router(state.clone()).with_state(state);
 
         let test_id = "api-test-recipe";
@@ -323,6 +345,8 @@ mod tests {
         assert_eq!(response.status(), StatusCode::NO_CONTENT);
 
         // Cleanup env
-        unsafe { std::env::remove_var("API_TOKEN"); }
+        unsafe {
+            std::env::remove_var("API_TOKEN");
+        }
     }
 }

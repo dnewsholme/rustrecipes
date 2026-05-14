@@ -6,7 +6,6 @@ mod storage;
 
 use askama::Template;
 use axum::{
-
     Form, Router,
     extract::Request,
     extract::{DefaultBodyLimit, FromRef, Multipart, Path, State},

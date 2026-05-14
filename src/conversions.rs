@@ -9,20 +9,16 @@ lazy_static! {
         r"(?:\d+[\s\-]+\d+\s*[\\/⁄]\s*\d+|\d+\s*[\\/⁄]\s*\d+|\d*\.\d+|\d+[\s\-]*(?:{})|(?:{})|\d+)",
         *FRACTION_STR, *FRACTION_STR
     );
-    static ref UNITS_REGEX_STR: &'static str =
-        "cup|cups|c|tsp|teaspoon|teaspoons|tbsp|tablespoon|tablespoons|oz|ounce|ounces|lb|pound|pounds|g|gram|grams|kg|kilogram|kilograms|ml|milliliter|milliliters|l|liter|liters|pt|pint|pints|qt|quart|quarts|gal|gallon|gallons|pinch|pinches|dash|dashes|clove|cloves|slice|slices|can|cans|package|packages|pkg|stick|sticks";
-
+    static ref UNITS_REGEX_STR: &'static str = "cup|cups|c|tsp|teaspoon|teaspoons|tbsp|tablespoon|tablespoons|oz|ounce|ounces|lb|pound|pounds|g|gram|grams|kg|kilogram|kilograms|ml|milliliter|milliliters|l|liter|liters|pt|pint|pints|qt|quart|quarts|gal|gallon|gallons|pinch|pinches|dash|dashes|clove|cloves|slice|slices|can|cans|package|packages|pkg|stick|sticks";
     static ref UNIT_REGEX: Regex = Regex::new(&format!(
         r"(?i)(^|\s|\()({})\s*({})\b",
         *NUMBER_REGEX_STR, *UNITS_REGEX_STR
     ))
     .unwrap();
-
     static ref TEMP_REGEX: Regex = Regex::new(
         r"(?i)(^|\s|\()(\d+(?:\s*[\-–—]\s*\d+)?)\s*(?:°|degrees?\s+)?(c|f|celsius|fahrenheit)\b"
     )
     .unwrap();
-
     static ref START_AMOUNT_REGEX: Regex = Regex::new(&format!(
         r"(?i)^({})(?:\s*({}))?\b",
         *NUMBER_REGEX_STR, *UNITS_REGEX_STR
@@ -80,14 +76,26 @@ fn parse_num_str(num_str: &str) -> f64 {
     let num_str = num_str.trim().replace('⁄', "/");
 
     let unicode_fractions = HashMap::from([
-        ('½', 0.5), ('⅓', 0.333), ('⅔', 0.666), ('¼', 0.25), ('¾', 0.75),
-        ('⅕', 0.2), ('⅖', 0.4), ('⅗', 0.6), ('⅘', 0.8), ('⅙', 0.166),
-        ('⅚', 0.833), ('⅛', 0.125), ('⅜', 0.375), ('⅝', 0.625), ('⅞', 0.875)
+        ('½', 0.5),
+        ('⅓', 0.333),
+        ('⅔', 0.666),
+        ('¼', 0.25),
+        ('¾', 0.75),
+        ('⅕', 0.2),
+        ('⅖', 0.4),
+        ('⅗', 0.6),
+        ('⅘', 0.8),
+        ('⅙', 0.166),
+        ('⅚', 0.833),
+        ('⅛', 0.125),
+        ('⅜', 0.375),
+        ('⅝', 0.625),
+        ('⅞', 0.875),
     ]);
 
     let mut chars = num_str.chars();
     let last_char = chars.next_back().unwrap_or(' ');
-    
+
     if let Some(&frac_val) = unicode_fractions.get(&last_char) {
         let rest = num_str[..num_str.len() - last_char.len_utf8()].trim();
         if rest.is_empty() {
@@ -103,11 +111,14 @@ fn parse_num_str(num_str: &str) -> f64 {
     }
 
     if num_str.contains('/') && (num_str.contains(' ') || num_str.contains('-')) {
-        let parts: Vec<&str> = num_str.split(&[' ', '-'][..]).filter(|s| !s.is_empty()).collect();
-        if parts.len() == 2 {
-            if let Ok(n) = parts[0].parse::<f64>() {
-                return n + parse_fraction(parts[1]);
-            }
+        let parts: Vec<&str> = num_str
+            .split(&[' ', '-'][..])
+            .filter(|s| !s.is_empty())
+            .collect();
+        if parts.len() == 2
+            && let Ok(n) = parts[0].parse::<f64>()
+        {
+            return n + parse_fraction(parts[1]);
         }
     }
 
@@ -117,7 +128,6 @@ fn parse_num_str(num_str: &str) -> f64 {
 
     num_str.parse().unwrap_or(0.0)
 }
-
 
 #[derive(serde::Serialize, Debug)]
 pub struct ConvertedRecipe {
@@ -147,11 +157,15 @@ fn format_number(num: f64) -> String {
     }
 }
 
-pub fn convert_recipe(mut recipe: Recipe, unit: Option<&str>, temp: Option<&str>, scale: Option<f64>) -> ConvertedRecipe {
+pub fn convert_recipe(
+    mut recipe: Recipe,
+    unit: Option<&str>,
+    temp: Option<&str>,
+    scale: Option<f64>,
+) -> ConvertedRecipe {
     let scale = scale.unwrap_or(1.0);
     let unit = unit.unwrap_or("original");
     let temp = temp.unwrap_or("original");
-
 
     // Scale servings
     if let Some(s) = recipe.servings {
@@ -159,9 +173,27 @@ pub fn convert_recipe(mut recipe: Recipe, unit: Option<&str>, temp: Option<&str>
         recipe.servings = Some(new_s);
     }
 
-    let flour_keywords = ["flour", "spelt", "rye", "wholemeal", "whole wheat", "semolina", "bread flour", "all-purpose", "all purpose"];
+    let flour_keywords = [
+        "flour",
+        "spelt",
+        "rye",
+        "wholemeal",
+        "whole wheat",
+        "semolina",
+        "bread flour",
+        "all-purpose",
+        "all purpose",
+    ];
     let starter_keywords = ["starter", "levain", "leaven"];
-    let water_keywords = ["water", "milk", "cream", "buttermilk", "beer", "cider", "juice"];
+    let water_keywords = [
+        "water",
+        "milk",
+        "cream",
+        "buttermilk",
+        "beer",
+        "cider",
+        "juice",
+    ];
 
     let mut total_flour = 0.0;
     let mut total_water = 0.0;
@@ -174,14 +206,19 @@ pub fn convert_recipe(mut recipe: Recipe, unit: Option<&str>, temp: Option<&str>
         let mut replacements = Vec::new();
         let mut ingredient_accounted = false;
 
-        if is_ingredient {
-            if let Some(cap) = START_AMOUNT_REGEX.captures(text) {
-                if let Some(m) = cap.get(0) {
-                    let num_str = cap.get(1).map_or("", |m| m.as_str());
-                    let unit_str = cap.get(2).map_or("", |m| m.as_str());
-                    replacements.push((m.start(), m.end(), num_str.to_string(), unit_str.to_string(), true));
-                }
-            }
+        if is_ingredient
+            && let Some(cap) = START_AMOUNT_REGEX.captures(text)
+            && let Some(m) = cap.get(0)
+        {
+            let num_str = cap.get(1).map_or("", |m| m.as_str());
+            let unit_str = cap.get(2).map_or("", |m| m.as_str());
+            replacements.push((
+                m.start(),
+                m.end(),
+                num_str.to_string(),
+                unit_str.to_string(),
+                true,
+            ));
         }
 
         for cap in UNIT_REGEX.captures_iter(text) {
@@ -189,13 +226,22 @@ pub fn convert_recipe(mut recipe: Recipe, unit: Option<&str>, temp: Option<&str>
             let leading = cap.get(1).map_or("", |m| m.as_str());
             let num_str = cap.get(2).map_or("", |m| m.as_str());
             let unit_str = cap.get(3).map_or("", |m| m.as_str());
-            
+
             // Avoid duplicate replacements if it matches start amount
-            if is_ingredient && !replacements.is_empty() && replacements[0].0 == m.start() + leading.len() {
+            if is_ingredient
+                && !replacements.is_empty()
+                && replacements[0].0 == m.start() + leading.len()
+            {
                 continue;
             }
-            
-            replacements.push((m.start() + leading.len(), m.end(), num_str.to_string(), unit_str.to_string(), false));
+
+            replacements.push((
+                m.start() + leading.len(),
+                m.end(),
+                num_str.to_string(),
+                unit_str.to_string(),
+                false,
+            ));
         }
 
         for cap in TEMP_REGEX.captures_iter(text) {
@@ -203,8 +249,14 @@ pub fn convert_recipe(mut recipe: Recipe, unit: Option<&str>, temp: Option<&str>
             let leading = cap.get(1).map_or("", |m| m.as_str());
             let num_str = cap.get(2).map_or("", |m| m.as_str());
             let unit_str = cap.get(3).map_or("", |m| m.as_str());
-            
-            replacements.push((m.start() + leading.len(), m.end(), num_str.to_string(), unit_str.to_string(), false));
+
+            replacements.push((
+                m.start() + leading.len(),
+                m.end(),
+                num_str.to_string(),
+                unit_str.to_string(),
+                false,
+            ));
         }
 
         replacements.sort_by_key(|r| r.0);
@@ -229,13 +281,17 @@ pub fn convert_recipe(mut recipe: Recipe, unit: Option<&str>, temp: Option<&str>
 
             // Is temp?
             let lower_unit = unit_str.to_lowercase();
-            let is_temp = lower_unit == "c" || lower_unit == "f" || lower_unit == "celsius" || lower_unit == "fahrenheit";
+            let is_temp = lower_unit == "c"
+                || lower_unit == "f"
+                || lower_unit == "celsius"
+                || lower_unit == "fahrenheit";
             let _is_temp_degree = is_temp && text[start..end].contains("°");
 
             if is_temp {
                 if temp != "original" {
                     let is_c = unit_str.to_lowercase().starts_with('c');
-                    let parts: Vec<f64> = num_str.split(&['-', '–', '—'][..])
+                    let parts: Vec<f64> = num_str
+                        .split(&['-', '–', '—'][..])
                         .map(|p| p.trim().parse::<f64>().unwrap_or(0.0))
                         .collect();
 
@@ -249,8 +305,12 @@ pub fn convert_recipe(mut recipe: Recipe, unit: Option<&str>, temp: Option<&str>
                         }
                         converted_parts.push(cp.round() as i32);
                     }
-                    
-                    let new_val = converted_parts.iter().map(|p| p.to_string()).collect::<Vec<_>>().join("-");
+
+                    let new_val = converted_parts
+                        .iter()
+                        .map(|p| p.to_string())
+                        .collect::<Vec<_>>()
+                        .join("-");
                     let new_unit = if temp == "c" { "C" } else { "F" };
                     final_result.push_str(&format!("{}°{}", new_val, new_unit));
                 } else {
@@ -264,19 +324,19 @@ pub fn convert_recipe(mut recipe: Recipe, unit: Option<&str>, temp: Option<&str>
 
                 if unit != "original" && !unit_str.is_empty() {
                     let lower_unit = unit_str.to_lowercase();
-                    if let Some(rule) = CONVERSION_MAP.get(lower_unit.as_str()) {
-                        if rule.sys == unit {
-                            final_val *= rule.ratio;
-                            final_unit = rule.to.to_string();
+                    if let Some(rule) = CONVERSION_MAP.get(lower_unit.as_str())
+                        && rule.sys == unit
+                    {
+                        final_val *= rule.ratio;
+                        final_unit = rule.to.to_string();
 
-                            // Auto scale
-                            if final_unit == "g" && final_val >= 1000.0 {
-                                final_val /= 1000.0;
-                                final_unit = "kg".to_string();
-                            } else if final_unit == "ml" && final_val >= 1000.0 {
-                                final_val /= 1000.0;
-                                final_unit = "l".to_string();
-                            }
+                        // Auto scale
+                        if final_unit == "g" && final_val >= 1000.0 {
+                            final_val /= 1000.0;
+                            final_unit = "kg".to_string();
+                        } else if final_unit == "ml" && final_val >= 1000.0 {
+                            final_val /= 1000.0;
+                            final_unit = "l".to_string();
                         }
                     }
                 }
@@ -285,19 +345,27 @@ pub fn convert_recipe(mut recipe: Recipe, unit: Option<&str>, temp: Option<&str>
                     let lower_text = text.to_lowercase();
                     let mut grams = scaled_val;
                     let u = unit_str.to_lowercase();
-                    if u == "kg" { grams *= 1000.0; }
-                    else if u == "oz" || u == "ounce" || u == "ounces" { grams *= 28.35; }
-                    else if u == "lb" || u == "pound" || u == "pounds" { grams *= 453.6; }
-                    else if u == "ml" || u == "l" || u == "cup" || u == "cups" || u == "c" {
-                        if u == "l" { grams *= 1000.0; }
-                        else if u == "cup" || u == "cups" || u == "c" { grams *= 240.0; }
+                    if u == "kg" {
+                        grams *= 1000.0;
+                    } else if u == "oz" || u == "ounce" || u == "ounces" {
+                        grams *= 28.35;
+                    } else if u == "lb" || u == "pound" || u == "pounds" {
+                        grams *= 453.6;
+                    } else if u == "ml" || u == "l" || u == "cup" || u == "cups" || u == "c" {
+                        if u == "l" {
+                            grams *= 1000.0;
+                        } else if u == "cup" || u == "cups" || u == "c" {
+                            grams *= 240.0;
+                        }
                     }
 
                     let is_starter = starter_keywords.iter().any(|k| lower_text.contains(k));
-                    let is_flour = flour_keywords.iter().any(|k| lower_text.contains(k)) && !lower_text.contains("flourish");
+                    let is_flour = flour_keywords.iter().any(|k| lower_text.contains(k))
+                        && !lower_text.contains("flourish");
                     let is_water = water_keywords.iter().any(|k| lower_text.contains(k));
 
-                    let is_yeast = lower_text.contains("yeast") && !lower_text.contains("nutritional");
+                    let is_yeast =
+                        lower_text.contains("yeast") && !lower_text.contains("nutritional");
 
                     if is_starter {
                         total_flour += grams * 0.5;
@@ -317,7 +385,7 @@ pub fn convert_recipe(mut recipe: Recipe, unit: Option<&str>, temp: Option<&str>
                 }
 
                 if final_unit.is_empty() {
-                    final_result.push_str(&format!("{}", format_number(final_val)));
+                    final_result.push_str(&format_number(final_val));
                 } else {
                     final_result.push_str(&format!("{} {}", format_number(final_val), final_unit));
                 }
@@ -330,7 +398,11 @@ pub fn convert_recipe(mut recipe: Recipe, unit: Option<&str>, temp: Option<&str>
         final_result
     };
 
-    recipe.ingredients = recipe.ingredients.iter().map(|i| replace_text(i, true)).collect();
+    recipe.ingredients = recipe
+        .ingredients
+        .iter()
+        .map(|i| replace_text(i, true))
+        .collect();
     recipe.markdown = replace_text(&recipe.markdown, false);
 
     // Re-render HTML
@@ -346,9 +418,19 @@ pub fn convert_recipe(mut recipe: Recipe, unit: Option<&str>, temp: Option<&str>
         markdown: recipe.markdown,
         html,
         servings: recipe.servings,
-        overall_hydration: if total_flour > 0.0 { Some(total_water / total_flour) } else { None },
+        overall_hydration: if total_flour > 0.0 {
+            Some(total_water / total_flour)
+        } else {
+            None
+        },
         combustion_csv: recipe.combustion_csv,
-        leaven_type: if detected_starter > 0.0 { Some("starter".to_string()) } else if detected_yeast > 0.0 { Some("yeast".to_string()) } else { None },
+        leaven_type: if detected_starter > 0.0 {
+            Some("starter".to_string())
+        } else if detected_yeast > 0.0 {
+            Some("yeast".to_string())
+        } else {
+            None
+        },
         leaven_amount: if total_flour > 0.0 {
             if detected_starter > 0.0 {
                 Some((detected_starter / total_flour) * 100.0)
@@ -403,10 +485,12 @@ mod tests {
         // Scale by 2
         let scaled = convert_recipe(r.clone(), None, None, Some(2.0));
         assert_eq!(scaled.servings, Some(8));
-        assert!(scaled.ingredients[0].contains("2 cups") || scaled.ingredients[0].contains("2 cup")); 
+        assert!(
+            scaled.ingredients[0].contains("2 cups") || scaled.ingredients[0].contains("2 cup")
+        );
         // 2 cups water (480g) / 1 cup flour (240g) = 200% hydration
         assert_eq!(scaled.overall_hydration, Some(2.0));
-        
+
         // Metric conversion
         let metric = convert_recipe(r.clone(), Some("metric"), Some("c"), Some(1.0));
         assert!(metric.ingredients[0].contains("240 ml")); // 1 cup -> 240 ml
