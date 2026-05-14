@@ -19,6 +19,8 @@ pub fn router(state: AppState) -> Router<AppState> {
             get(get_recipe).put(update_recipe).delete(delete_recipe),
         )
         .route("/ferment", get(calculate_fermentation))
+        .route("/temps", get(get_cooking_temps))
+        .route("/log7", get(calculate_log7))
         .route("/import", post(import_recipe))
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
@@ -69,6 +71,31 @@ struct RecipeSummary {
     tags: Vec<String>,
     prep_time: Option<String>,
     cook_time: Option<String>,
+}
+
+#[derive(Serialize)]
+struct CookingTemp {
+    label: String,
+    temp_c: f64,
+    temp_c_max: Option<f64>,
+}
+
+#[derive(Serialize)]
+struct CookingTempGroup {
+    category: String,
+    items: Vec<CookingTemp>,
+}
+
+#[derive(Serialize)]
+struct Log7Response {
+    temp_c: f64,
+    seconds: f64,
+    display_time: String,
+}
+
+#[derive(Deserialize)]
+struct Log7Query {
+    temp: f64,
 }
 
 async fn list_recipes() -> impl IntoResponse {
@@ -207,6 +234,121 @@ async fn calculate_fermentation(
     }
 
     Json(FermentResult { estimated_hours })
+}
+
+async fn get_cooking_temps() -> impl IntoResponse {
+    let temps = vec![
+        CookingTempGroup {
+            category: "Beef, Lamb, Veal, Pork".to_string(),
+            items: vec![
+                CookingTemp {
+                    label: "Rare".to_string(),
+                    temp_c: 52.0,
+                    temp_c_max: None,
+                },
+                CookingTemp {
+                    label: "Med Rare".to_string(),
+                    temp_c: 57.0,
+                    temp_c_max: None,
+                },
+                CookingTemp {
+                    label: "Medium".to_string(),
+                    temp_c: 63.0,
+                    temp_c_max: None,
+                },
+                CookingTemp {
+                    label: "Well Done".to_string(),
+                    temp_c: 71.0,
+                    temp_c_max: None,
+                },
+            ],
+        },
+        CookingTempGroup {
+            category: "Poultry & Ground".to_string(),
+            items: vec![
+                CookingTemp {
+                    label: "Chicken / Turkey".to_string(),
+                    temp_c: 74.0,
+                    temp_c_max: None,
+                },
+                CookingTemp {
+                    label: "Ground / Sausage".to_string(),
+                    temp_c: 71.0,
+                    temp_c_max: None,
+                },
+                CookingTemp {
+                    label: "Fish".to_string(),
+                    temp_c: 63.0,
+                    temp_c_max: None,
+                },
+            ],
+        },
+        CookingTempGroup {
+            category: "BBQ Low & Slow".to_string(),
+            items: vec![
+                CookingTemp {
+                    label: "Brisket (Sliced)".to_string(),
+                    temp_c: 93.0,
+                    temp_c_max: Some(96.0),
+                },
+                CookingTemp {
+                    label: "Pulled Pork".to_string(),
+                    temp_c: 95.0,
+                    temp_c_max: Some(98.0),
+                },
+            ],
+        },
+    ];
+
+    Json(temps)
+}
+
+async fn calculate_log7(
+    axum::extract::Query(query): axum::extract::Query<Log7Query>,
+) -> impl IntoResponse {
+    let temp_c = query.temp;
+    let log7_table = [
+        (57.8, 4104.0),
+        (60.0, 1650.0),
+        (62.8, 552.0),
+        (65.6, 162.0),
+        (68.3, 48.0),
+        (71.1, 14.0),
+        (73.9, 0.0),
+    ];
+
+    let mut seconds = 0.0;
+    if temp_c >= 73.9 {
+        seconds = 0.0;
+    } else if temp_c < 57.8 {
+        seconds = 9999.0;
+    } else {
+        for i in 0..log7_table.len() - 1 {
+            let (t1, s1) = log7_table[i];
+            let (t2, s2) = log7_table[i + 1];
+            if temp_c >= t1 && temp_c <= t2 {
+                let ratio = (temp_c - t1) / (t2 - t1);
+                seconds = s1 + ratio * (s2 - s1);
+                break;
+            }
+        }
+    }
+
+    let display_time = if seconds == 0.0 {
+        "Instant".to_string()
+    } else if seconds > 3600.0 {
+        "> 1 Hour".to_string()
+    } else if seconds >= 60.0 {
+        format!("{:.1} Min", seconds / 60.0)
+    } else {
+        format!("{:.0} Sec", seconds)
+    };
+
+    Json(Log7Response {
+        temp_c,
+        seconds,
+        display_time,
+    })
 }
 
 #[cfg(test)]
