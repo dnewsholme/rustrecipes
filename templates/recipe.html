@@ -445,6 +445,19 @@
             btnText.textContent = 'Hide Description';
         }
     }
+
+    function toggleMobileImage() {
+        const img = document.getElementById('recipe-hero-image');
+        const btn = document.getElementById('mobile-image-toggle');
+        const span = btn.querySelector('span');
+        if (img.classList.contains('force-show')) {
+            img.classList.remove('force-show');
+            span.textContent = 'Show Photo';
+        } else {
+            img.classList.add('force-show');
+            span.textContent = 'Hide Photo';
+        }
+    }
     
     window.combustionRawData = null;
     window.combustionChart = null;

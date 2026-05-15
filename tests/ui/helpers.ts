@@ -32,6 +32,7 @@ export async function createRecipeFromFixture(page: Page, fixturePath: string) {
     .split('\n').map(s => s.replace(/-\s*/, '').trim()).filter(s => s).join(',');
   const prep = (frontmatter.match(/prep_time:\s*(.*)/)?.[1] || '').trim();
   const cook = (frontmatter.match(/cook_time:\s*(.*)/)?.[1] || '').trim();
+  const image = (frontmatter.match(/image:\s*(.*)/)?.[1] || '').trim();
   
   // Extract ingredients and instructions
   const body = content.replace(/^\s*---[\s\S]*?---\s*/, '').trim();
@@ -46,6 +47,8 @@ export async function createRecipeFromFixture(page: Page, fixturePath: string) {
   await page.fill('#title', title);
   await page.fill('#tags', tags);
   await page.fill('#ingredients', ingredients);
+  
+  if (image) await page.fill('#existing_image', image);
   
   // Handle EasyMDE
   const markdownEl = page.locator('#markdown');
