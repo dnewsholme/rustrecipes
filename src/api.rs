@@ -71,6 +71,7 @@ struct RecipeSummary {
     tags: Vec<String>,
     prep_time: Option<String>,
     cook_time: Option<String>,
+    hydration: Option<f64>,
 }
 
 #[derive(Serialize)]
@@ -102,13 +103,23 @@ async fn list_recipes() -> impl IntoResponse {
     let recipes = storage::list_recipes().await;
     let summaries = recipes
         .into_iter()
-        .map(|r| RecipeSummary {
-            id: r.id,
-            title: r.title,
-            image: r.image,
-            tags: r.tags,
-            prep_time: r.prep_time,
-            cook_time: r.cook_time,
+        .map(|r| {
+            let totals = crate::conversions::calculate_totals(&r.ingredients, 1.0);
+            let hydration = if totals.total_flour > 0.0 {
+                Some(totals.total_water / totals.total_flour)
+            } else {
+                None
+            };
+
+            RecipeSummary {
+                id: r.id,
+                title: r.title,
+                image: r.image,
+                tags: r.tags,
+                prep_time: r.prep_time,
+                cook_time: r.cook_time,
+                hydration,
+            }
         })
         .collect();
 

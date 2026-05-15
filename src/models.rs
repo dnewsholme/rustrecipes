@@ -94,6 +94,15 @@ impl Recipe {
             .map(|s| !s.trim().is_empty())
             .unwrap_or(false)
     }
+
+    pub fn hydration(&self) -> Option<f64> {
+        let totals = crate::conversions::calculate_totals(&self.ingredients, 1.0);
+        if totals.total_flour > 0.0 {
+            Some(totals.total_water / totals.total_flour)
+        } else {
+            None
+        }
+    }
 }
 
 // Minimal representations for extracting LD+JSON Recipe data

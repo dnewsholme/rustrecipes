@@ -35,6 +35,12 @@ test.describe('Baker\'s Percentage with Sourdough Starter', () => {
     await expect(starterPercent).toContainText('18.2%');
     await expect(waterPercent).toContainText('54.5%');
 
+    // Check overall hydration
+    // Total flour = 550g. Total water = 300 + 50 = 350g.
+    // 350 / 550 = 63.6% -> 64%
+    const hydration = page.locator('#overall-hydration-val');
+    await expect(hydration).toContainText('64%');
+
     // Switch to Fermentation Tab
     const tabBtn = page.locator('#fermentation-tab-btn');
     await expect(tabBtn).toBeVisible();

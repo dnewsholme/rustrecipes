@@ -160,39 +160,18 @@ pub struct ConvertedRecipe {
     pub combustion_csv: Option<String>,
     pub leaven_type: Option<String>,
     pub leaven_amount: Option<f64>,
+    pub total_flour: f64,
+    pub total_water: f64,
 }
 
-fn format_number(num: f64) -> String {
-    if num.fract() == 0.0 {
-        format!("{:.0}", num)
-    } else {
-        let s = format!("{:.2}", num);
-        let s = s.trim_end_matches('0');
-        if s.ends_with('.') {
-            s.trim_end_matches('.').to_string()
-        } else {
-            s.to_string()
-        }
-    }
+pub struct RecipeTotals {
+    pub total_flour: f64,
+    pub total_water: f64,
+    pub detected_yeast: f64,
+    pub detected_starter: f64,
 }
 
-pub fn convert_recipe(
-    mut recipe: Recipe,
-    unit: Option<&str>,
-    temp: Option<&str>,
-    scale: Option<f64>,
-    bakers: bool,
-) -> ConvertedRecipe {
-    let scale = scale.unwrap_or(1.0);
-    let unit = unit.unwrap_or("original");
-    let temp = temp.unwrap_or("original");
-
-    // Scale servings
-    if let Some(s) = recipe.servings {
-        let new_s = (s as f64 * scale).round() as u32;
-        recipe.servings = Some(new_s);
-    }
-
+pub fn calculate_totals(ingredients: &[String], scale: f64) -> RecipeTotals {
     let flour_keywords = [
         "flour",
         "spelt",
@@ -215,12 +194,14 @@ pub fn convert_recipe(
         "juice",
     ];
 
-    let mut total_flour = 0.0;
-    let mut total_water = 0.0;
-    let mut detected_yeast = 0.0;
-    let mut detected_starter = 0.0;
+    let mut totals = RecipeTotals {
+        total_flour: 0.0,
+        total_water: 0.0,
+        detected_yeast: 0.0,
+        detected_starter: 0.0,
+    };
 
-    for ingredient in &recipe.ingredients {
+    for ingredient in ingredients {
         let lower_text = ingredient.to_lowercase();
         let mut replacements = Vec::new();
         if let Some(cap) = START_AMOUNT_REGEX.captures(ingredient)
@@ -258,18 +239,57 @@ pub fn convert_recipe(
             let is_yeast = lower_text.contains("yeast") && !lower_text.contains("nutritional");
 
             if is_starter {
-                total_flour += grams * 0.5;
-                total_water += grams * 0.5;
-                detected_starter += grams;
+                totals.total_flour += grams * 0.5;
+                totals.total_water += grams * 0.5;
+                totals.detected_starter += grams;
             } else if is_yeast {
-                detected_yeast += grams;
+                totals.detected_yeast += grams;
             } else if is_flour {
-                total_flour += grams;
+                totals.total_flour += grams;
             } else if is_water {
-                total_water += grams;
+                totals.total_water += grams;
             }
         }
     }
+    totals
+}
+
+fn format_number(num: f64) -> String {
+    if num.fract() == 0.0 {
+        format!("{:.0}", num)
+    } else {
+        let s = format!("{:.2}", num);
+        let s = s.trim_end_matches('0');
+        if s.ends_with('.') {
+            s.trim_end_matches('.').to_string()
+        } else {
+            s.to_string()
+        }
+    }
+}
+
+pub fn convert_recipe(
+    mut recipe: Recipe,
+    unit: Option<&str>,
+    temp: Option<&str>,
+    scale: Option<f64>,
+    bakers: bool,
+) -> ConvertedRecipe {
+    let scale = scale.unwrap_or(1.0);
+    let unit = unit.unwrap_or("original");
+    let temp = temp.unwrap_or("original");
+
+    // Scale servings
+    if let Some(s) = recipe.servings {
+        let new_s = (s as f64 * scale).round() as u32;
+        recipe.servings = Some(new_s);
+    }
+
+    let totals = calculate_totals(&recipe.ingredients, scale);
+    let total_flour = totals.total_flour;
+    let total_water = totals.total_water;
+    let detected_yeast = totals.detected_yeast;
+    let detected_starter = totals.detected_starter;
 
     let replace_text = |text: &str, is_ingredient: bool| -> String {
         let mut final_result = String::new();
@@ -441,6 +461,8 @@ pub fn convert_recipe(
         } else {
             None
         },
+        total_flour,
+        total_water,
     }
 }
 
@@ -524,5 +546,6 @@ mod tests {
         let bakers = convert_recipe(r.clone(), None, None, None, true);
         assert!(bakers.ingredients[0].contains("100.0%"));
         assert!(bakers.ingredients[1].contains("60.0%"));
+        assert_eq!(bakers.overall_hydration, Some(0.6));
     }
 }

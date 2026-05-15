@@ -30,5 +30,9 @@ test.describe('Baker\'s Percentage with Reversed Format', () => {
     await expect(waterPercent).toContainText('60.0%');
     await expect(saltPercent).toContainText('2.0%');
     await expect(yeastPercent).toContainText('1.0%');
+
+    // Check overall hydration
+    const hydration = page.locator('#overall-hydration-val');
+    await expect(hydration).toContainText('60%');
   });
 });

@@ -80,9 +80,9 @@ The application includes a RESTful API (v1) that allows for programmatic access 
 
 | Endpoint | Method | Description |
 | :--- | :--- | :--- |
-| `/recipes` | `GET` | List all recipes. |
+| `/recipes` | `GET` | List all recipes (includes hydration summaries). |
 | `/recipes` | `POST` | Create a new recipe (Requires `API_TOKEN`). |
-| `/recipes/{id}` | `GET` | Get a specific recipe with optional `unit`, `temp`, `scale`, and `bakers` conversion parameters. |
+| `/recipes/{id}` | `GET` | Get a specific recipe with unit/scale conversion and automatic hydration calculation. |
 | `/recipes/{id}` | `PUT` | Update an existing recipe (Requires `API_TOKEN`). |
 | `/recipes/{id}` | `DELETE` | Delete a recipe (Requires `API_TOKEN`). |
 | `/temps` | `GET` | Get a list of recommended internal meat temperatures. |
