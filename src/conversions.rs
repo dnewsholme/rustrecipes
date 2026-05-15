@@ -494,5 +494,10 @@ mod tests {
         let metric = convert_recipe(r.clone(), Some("metric"), Some("c"), Some(1.0), false);
         assert!(metric.ingredients[0].contains("240 ml")); // 1 cup -> 240 ml
         assert!(metric.markdown.contains("177°C")); // 350 F -> 177 C
+
+        // Baker's Percentage
+        let bakers = convert_recipe(r.clone(), None, None, None, true);
+        assert!(bakers.ingredients[0].contains("100.0%")); // Flour is 100%
+        assert!(bakers.ingredients[1].contains("200.0%")); // 2 cups water (480g) / 240g flour = 200%
     }
 }

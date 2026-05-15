@@ -82,13 +82,19 @@ The application includes a RESTful API (v1) that allows for programmatic access 
 | :--- | :--- | :--- |
 | `/recipes` | `GET` | List all recipes. |
 | `/recipes` | `POST` | Create a new recipe (Requires `API_TOKEN`). |
-| `/recipes/{id}` | `GET` | Get a specific recipe with optional `unit`, `temp`, and `scale` conversion parameters. |
+| `/recipes/{id}` | `GET` | Get a specific recipe with optional `unit`, `temp`, `scale`, and `bakers` conversion parameters. |
 | `/recipes/{id}` | `PUT` | Update an existing recipe (Requires `API_TOKEN`). |
 | `/recipes/{id}` | `DELETE` | Delete a recipe (Requires `API_TOKEN`). |
+| `/temps` | `GET` | Get a list of recommended internal meat temperatures. |
+| `/log7` | `GET` | Calculate USDA Log 7 hold time for safe poultry lethality based on `temp`. |
 | `/ferment` | `GET` | Calculate estimated fermentation time based on `type`, `amount`, and `temp`. |
+| `/import` | `POST` | Import a recipe from a URL using AI processing (Requires `API_TOKEN`). |
+
+### 📖 Interactive API Guide
+The application features a built-in interactive API guide accessible at `/api`. It provides detailed documentation for every endpoint and an interactive "Try it out" playground that allows you to test the API directly from your browser.
 
 **Authentication**:
-For mutable operations (`POST`, `PUT`, `DELETE`), you must provide an `API_TOKEN` in the `Authorization` header as a Bearer token. Set this token using the `API_TOKEN` environment variable.
+For mutable operations (`POST`, `PUT`, `DELETE`, `IMPORT`), you must provide an `API_TOKEN` in the `Authorization` header as a Bearer token. Set this token using the `API_TOKEN` environment variable.
 
 ---
 

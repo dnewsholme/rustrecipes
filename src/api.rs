@@ -493,4 +493,35 @@ mod tests {
             std::env::remove_var("API_TOKEN");
         }
     }
+
+    #[tokio::test]
+    async fn test_temps_and_log7() {
+        let state = test_state();
+        let app = router(state.clone()).with_state(state);
+
+        // Test /temps
+        let req = Request::builder()
+            .method("GET")
+            .uri("/temps")
+            .body(Body::empty())
+            .unwrap();
+        let response = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let temps: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert!(temps.as_array().unwrap().len() > 0);
+
+        // Test /log7
+        let req = Request::builder()
+            .method("GET")
+            .uri("/log7?temp=65.0")
+            .body(Body::empty())
+            .unwrap();
+        let response = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let log7: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(log7["temp_c"], 65.0);
+        assert!(log7["display_time"].as_str().unwrap().contains("Min"));
+    }
 }

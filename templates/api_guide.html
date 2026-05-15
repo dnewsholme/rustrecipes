@@ -84,6 +84,13 @@
                                 <option value="imperial">Imperial</option>
                             </select>
                         </div>
+                        <div>
+                            <label style="display: block; font-size: 0.75rem; margin-bottom: 0.25rem;">Baker's %</label>
+                            <select class="form-control param-bakers" style="width: 100%; font-size: 0.85rem;">
+                                <option value="false">No</option>
+                                <option value="true">Yes</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
                 <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
@@ -93,6 +100,7 @@
                             <li style="margin-bottom: 0.4rem;"><code>unit</code>: Target unit system</li>
                             <li style="margin-bottom: 0.4rem;"><code>temp</code>: Target temperature system</li>
                             <li style="margin-bottom: 0.4rem;"><code>scale</code>: Multiplier (default: 1.0)</li>
+                            <li style="margin-bottom: 0.4rem;"><code>bakers</code>: Boolean to return Baker's Percentages</li>
                         </ul>
                     </div>
                     <button class="btn btn-primary" onclick="tryIt('GET', '/recipes/{id}', this)">Try it out</button>
@@ -255,6 +263,9 @@
 
         const unitInput = card.querySelector('.param-unit');
         if (unitInput) params.append('unit', unitInput.value);
+        
+        const bakersInput = card.querySelector('.param-bakers');
+        if (bakersInput) params.append('bakers', bakersInput.value);
 
         const typeInput = card.querySelector('.param-type');
         if (typeInput) params.append('type', typeInput.value);
