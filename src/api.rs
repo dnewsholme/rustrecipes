@@ -120,6 +120,7 @@ struct GetRecipeQuery {
     unit: Option<String>,
     temp: Option<String>,
     scale: Option<f64>,
+    bakers: Option<bool>,
 }
 
 async fn get_recipe(
@@ -133,6 +134,7 @@ async fn get_recipe(
                 query.unit.as_deref(),
                 query.temp.as_deref(),
                 query.scale,
+                query.bakers.unwrap_or(false),
             );
             Json(converted).into_response()
         }

@@ -790,7 +790,7 @@
     });
     
     async function applyScalingAndUnits() {
-        const url = `{{ app_base }}/api/v1/recipes/{{ recipe.id }}?scale=${currentMultiplier}&unit=${currentUnitSystem}&temp=${currentTempSystem}`;
+        const url = `{{ app_base }}/api/v1/recipes/{{ recipe.id }}?scale=${currentMultiplier}&unit=${currentUnitSystem}&temp=${currentTempSystem}&bakers=${showBakersPercentage}`;
         try {
             const res = await fetch(url);
             if (!res.ok) throw new Error('API error');
@@ -859,13 +859,6 @@
 
             wrapAmounts();
 
-            if (showBakersPercentage) {
-                applyBakersPercentage();
-            } else {
-                const hydrationEl = document.getElementById('overall-hydration');
-                if (hydrationEl) hydrationEl.remove();
-            }
-
             if (document.getElementById('ferment-temp')) {
                 updateFermentation();
             }
@@ -874,109 +867,6 @@
             }
         } catch (e) {
             console.error(e);
-        }
-    }
-
-    function applyBakersPercentage() {
-        let totalFlour = 0;
-        let totalWater = 0;
-        const flourKeywords = ['flour', 'spelt', 'rye', 'wholemeal', 'whole wheat', 'semolina', 'bread flour', 'all-purpose', 'all purpose'];
-        const starterKeywords = ['starter', 'levain', 'leaven'];
-        const waterKeywords = ['water', 'milk', 'cream', 'buttermilk', 'beer', 'cider', 'juice'];
-
-        document.querySelectorAll('.ingredient-item').forEach(item => {
-            const amountSpan = item.querySelector('.ingredient-amount');
-            if (amountSpan) {
-                const base = parseFloat(amountSpan.dataset.base);
-                const unit = (amountSpan.dataset.unit || '').toLowerCase();
-                let grams = base;
-                
-                if (unit === 'kg') grams *= 1000;
-                else if (unit === 'oz' || unit === 'ounce' || unit === 'ounces') grams *= 28.35;
-                else if (unit === 'lb' || unit === 'pound' || unit === 'pounds') grams *= 453.6;
-                else if (unit === 'ml' || unit === 'l' || unit === 'cup' || unit === 'cups' || unit === 'c') {
-                    // For hydration, we assume 1ml = 1g for liquids and cups
-                    if (unit === 'l') grams *= 1000;
-                    else if (unit === 'cup' || unit === 'cups' || unit === 'c') grams *= 240;
-                }
-
-                const lowerText = item.innerText.toLowerCase();
-                const isStarter = starterKeywords.some(k => lowerText.includes(k));
-                const isFlour = flourKeywords.some(k => lowerText.includes(k)) && !lowerText.includes('flourish');
-                const isWater = waterKeywords.some(k => lowerText.includes(k));
-
-                if (isStarter) {
-                    totalFlour += grams * 0.5;
-                    totalWater += grams * 0.5;
-                } else if (isFlour) {
-                    totalFlour += grams;
-                } else if (isWater) {
-                    totalWater += grams;
-                }
-            }
-        });
-
-        if (totalFlour > 0) {
-            document.querySelectorAll('.ingredient-item').forEach(item => {
-                const span = item.querySelector('.ingredient-amount');
-                if (span) {
-                    const base = parseFloat(span.dataset.base);
-                    const originalUnit = (span.dataset.unit || '').toLowerCase();
-                    let grams = base;
-                    if (originalUnit === 'kg') grams *= 1000;
-                    else if (originalUnit === 'oz' || originalUnit === 'ounce' || originalUnit === 'ounces') grams *= 28.35;
-                    else if (originalUnit === 'lb' || originalUnit === 'pound' || originalUnit === 'pounds') grams *= 453.6;
-
-                    let percentage = (grams / totalFlour) * 100;
-                    span.textContent = percentage.toFixed(1) + "%";
-                    span.style.minWidth = "60px";
-                    span.style.display = "inline-block";
-
-                    const lowerText = span.parentNode.innerText.toLowerCase();
-                    const isStarter = starterKeywords.some(k => lowerText.includes(k));
-                    const isFlour = flourKeywords.some(k => lowerText.includes(k)) && !lowerText.includes('flourish');
-
-                    if (isFlour || isStarter) {
-                        span.style.color = 'var(--primary-color)';
-                        span.style.fontWeight = 'bold';
-                    } else {
-                        span.style.color = 'inherit';
-                        span.style.fontWeight = 'normal';
-                    }
-                }
-            });
-
-            let hydrationEl = document.getElementById('overall-hydration');
-            if (!hydrationEl) {
-                const list = document.querySelector('#ingredients-tab ul');
-                if (list) {
-                    hydrationEl = document.createElement('li');
-                    hydrationEl.id = 'overall-hydration';
-                    hydrationEl.style.padding = '1rem 0';
-                    hydrationEl.style.marginTop = '1rem';
-                    hydrationEl.style.borderTop = '2px solid var(--primary-color)';
-                    hydrationEl.style.fontWeight = 'bold';
-                    hydrationEl.style.display = 'flex';
-                    hydrationEl.style.justifyContent = 'space-between';
-                    
-                    const labelSpan = document.createElement('span');
-                    labelSpan.textContent = 'Overall Hydration';
-                    
-                    const valSpan = document.createElement('span');
-                    valSpan.id = 'overall-hydration-val';
-                    valSpan.style.color = 'var(--primary-color)';
-                    
-                    hydrationEl.appendChild(labelSpan);
-                    hydrationEl.appendChild(valSpan);
-                    list.appendChild(hydrationEl);
-                }
-            }
-            if (hydrationEl) {
-                const valSpan = hydrationEl.querySelector('#overall-hydration-val');
-                if (valSpan) {
-                    valSpan.textContent = Math.round((totalWater / totalFlour) * 100) + '%';
-                }
-            }
         }
     }
 

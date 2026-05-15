@@ -129,6 +129,25 @@ fn parse_num_str(num_str: &str) -> f64 {
     num_str.parse().unwrap_or(0.0)
 }
 
+fn get_grams(amount: f64, unit: &str) -> f64 {
+    let u = unit.to_lowercase();
+    let mut grams = amount;
+    if u == "kg" {
+        grams *= 1000.0;
+    } else if u == "oz" || u == "ounce" || u == "ounces" {
+        grams *= 28.35;
+    } else if u == "lb" || u == "pound" || u == "pounds" {
+        grams *= 453.6;
+    } else if u == "ml" || u == "l" || u == "cup" || u == "cups" || u == "c" {
+        if u == "l" {
+            grams *= 1000.0;
+        } else if u == "cup" || u == "cups" || u == "c" {
+            grams *= 240.0;
+        }
+    }
+    grams
+}
+
 #[derive(serde::Serialize, Debug)]
 pub struct ConvertedRecipe {
     pub id: String,
@@ -162,6 +181,7 @@ pub fn convert_recipe(
     unit: Option<&str>,
     temp: Option<&str>,
     scale: Option<f64>,
+    bakers: bool,
 ) -> ConvertedRecipe {
     let scale = scale.unwrap_or(1.0);
     let unit = unit.unwrap_or("original");
@@ -200,23 +220,71 @@ pub fn convert_recipe(
     let mut detected_yeast = 0.0;
     let mut detected_starter = 0.0;
 
-    let mut replace_text = |text: &str, is_ingredient: bool| -> String {
+    for ingredient in &recipe.ingredients {
+        let lower_text = ingredient.to_lowercase();
+        let mut replacements = Vec::new();
+        if let Some(cap) = START_AMOUNT_REGEX.captures(ingredient)
+            && let Some(m) = cap.get(0)
+        {
+            replacements.push((
+                m.start(),
+                m.end(),
+                cap[1].to_string(),
+                cap.get(2).map_or("", |m| m.as_str()).to_string(),
+            ));
+        }
+        for cap in UNIT_REGEX.captures_iter(ingredient) {
+            let m = cap.get(0).unwrap();
+            let leading = cap.get(1).map_or("", |m| m.as_str());
+            if !replacements.is_empty() && replacements[0].0 == m.start() + leading.len() {
+                continue;
+            }
+            replacements.push((
+                m.start() + leading.len(),
+                m.end(),
+                cap[2].to_string(),
+                cap[3].to_string(),
+            ));
+        }
+
+        for (_, _, num_str, unit_str) in replacements {
+            let amount = parse_num_str(&num_str) * scale;
+            let grams = get_grams(amount, &unit_str);
+
+            let is_starter = starter_keywords.iter().any(|k| lower_text.contains(k));
+            let is_flour = flour_keywords.iter().any(|k| lower_text.contains(k))
+                && !lower_text.contains("flourish");
+            let is_water = water_keywords.iter().any(|k| lower_text.contains(k));
+            let is_yeast = lower_text.contains("yeast") && !lower_text.contains("nutritional");
+
+            if is_starter {
+                total_flour += grams * 0.5;
+                total_water += grams * 0.5;
+                detected_starter += grams;
+            } else if is_yeast {
+                detected_yeast += grams;
+            } else if is_flour {
+                total_flour += grams;
+            } else if is_water {
+                total_water += grams;
+            }
+        }
+    }
+
+    let replace_text = |text: &str, is_ingredient: bool| -> String {
         let mut final_result = String::new();
         let mut last_index = 0;
         let mut replacements = Vec::new();
-        let mut ingredient_accounted = false;
 
         if is_ingredient
             && let Some(cap) = START_AMOUNT_REGEX.captures(text)
             && let Some(m) = cap.get(0)
         {
-            let num_str = cap.get(1).map_or("", |m| m.as_str());
-            let unit_str = cap.get(2).map_or("", |m| m.as_str());
             replacements.push((
                 m.start(),
                 m.end(),
-                num_str.to_string(),
-                unit_str.to_string(),
+                cap[1].to_string(),
+                cap.get(2).map_or("", |m| m.as_str()).to_string(),
                 true,
             ));
         }
@@ -224,10 +292,6 @@ pub fn convert_recipe(
         for cap in UNIT_REGEX.captures_iter(text) {
             let m = cap.get(0).unwrap();
             let leading = cap.get(1).map_or("", |m| m.as_str());
-            let num_str = cap.get(2).map_or("", |m| m.as_str());
-            let unit_str = cap.get(3).map_or("", |m| m.as_str());
-
-            // Avoid duplicate replacements if it matches start amount
             if is_ingredient
                 && !replacements.is_empty()
                 && replacements[0].0 == m.start() + leading.len()
@@ -238,8 +302,8 @@ pub fn convert_recipe(
             replacements.push((
                 m.start() + leading.len(),
                 m.end(),
-                num_str.to_string(),
-                unit_str.to_string(),
+                cap[2].to_string(),
+                cap[3].to_string(),
                 false,
             ));
         }
@@ -247,21 +311,17 @@ pub fn convert_recipe(
         for cap in TEMP_REGEX.captures_iter(text) {
             let m = cap.get(0).unwrap();
             let leading = cap.get(1).map_or("", |m| m.as_str());
-            let num_str = cap.get(2).map_or("", |m| m.as_str());
-            let unit_str = cap.get(3).map_or("", |m| m.as_str());
 
             replacements.push((
                 m.start() + leading.len(),
                 m.end(),
-                num_str.to_string(),
-                unit_str.to_string(),
+                cap[2].to_string(),
+                cap[3].to_string(),
                 false,
             ));
         }
 
         replacements.sort_by_key(|r| r.0);
-
-        // Deduplicate overlapping
         let mut filtered_replacements = Vec::new();
         let mut current_end = 0;
         for r in replacements {
@@ -279,13 +339,11 @@ pub fn convert_recipe(
 
             final_result.push_str(&text[last_index..start]);
 
-            // Is temp?
             let lower_unit = unit_str.to_lowercase();
             let is_temp = lower_unit == "c"
                 || lower_unit == "f"
                 || lower_unit == "celsius"
                 || lower_unit == "fahrenheit";
-            let _is_temp_degree = is_temp && text[start..end].contains("°");
 
             if is_temp {
                 if temp != "original" {
@@ -298,99 +356,41 @@ pub fn convert_recipe(
                     let mut converted_parts = Vec::new();
                     for p in parts {
                         let mut cp = p;
-                        if is_c && temp == "f" {
-                            cp = (p * 9.0 / 5.0) + 32.0;
-                        } else if !is_c && temp == "c" {
+                        if temp == "c" && !is_c {
                             cp = (p - 32.0) * 5.0 / 9.0;
+                        } else if temp == "f" && is_c {
+                            cp = (p * 9.0 / 5.0) + 32.0;
                         }
-                        converted_parts.push(cp.round() as i32);
+                        converted_parts.push(format!("{:.0}", cp.round()));
                     }
-
-                    let new_val = converted_parts
-                        .iter()
-                        .map(|p| p.to_string())
-                        .collect::<Vec<_>>()
-                        .join("-");
-                    let new_unit = if temp == "c" { "C" } else { "F" };
-                    final_result.push_str(&format!("{}°{}", new_val, new_unit));
+                    final_result.push_str(&converted_parts.join("-"));
+                    final_result.push_str(if temp == "c" { "°C" } else { "°F" });
                 } else {
                     final_result.push_str(&text[start..end]);
                 }
             } else {
-                let base_val = parse_num_str(num_str);
-                let scaled_val = base_val * scale;
-                let mut final_val = scaled_val;
+                let amount = parse_num_str(num_str) * scale;
+                let mut final_val = amount;
                 let mut final_unit = unit_str.to_string();
 
-                if unit != "original" && !unit_str.is_empty() {
-                    let lower_unit = unit_str.to_lowercase();
-                    if let Some(rule) = CONVERSION_MAP.get(lower_unit.as_str())
-                        && rule.sys == unit
-                    {
-                        final_val *= rule.ratio;
-                        final_unit = rule.to.to_string();
-
-                        // Auto scale
-                        if final_unit == "g" && final_val >= 1000.0 {
-                            final_val /= 1000.0;
-                            final_unit = "kg".to_string();
-                        } else if final_unit == "ml" && final_val >= 1000.0 {
-                            final_val /= 1000.0;
-                            final_unit = "l".to_string();
-                        }
-                    }
+                if unit != "original"
+                    && let Some(rule) = CONVERSION_MAP.get(lower_unit.as_str())
+                    && rule.sys == unit
+                {
+                    final_val = amount * rule.ratio;
+                    final_unit = rule.to.to_string();
                 }
 
-                if is_ingredient && !ingredient_accounted {
-                    let lower_text = text.to_lowercase();
-                    let mut grams = scaled_val;
-                    let u = unit_str.to_lowercase();
-                    if u == "kg" {
-                        grams *= 1000.0;
-                    } else if u == "oz" || u == "ounce" || u == "ounces" {
-                        grams *= 28.35;
-                    } else if u == "lb" || u == "pound" || u == "pounds" {
-                        grams *= 453.6;
-                    } else if u == "ml" || u == "l" || u == "cup" || u == "cups" || u == "c" {
-                        if u == "l" {
-                            grams *= 1000.0;
-                        } else if u == "cup" || u == "cups" || u == "c" {
-                            grams *= 240.0;
-                        }
-                    }
-
-                    let is_starter = starter_keywords.iter().any(|k| lower_text.contains(k));
-                    let is_flour = flour_keywords.iter().any(|k| lower_text.contains(k))
-                        && !lower_text.contains("flourish");
-                    let is_water = water_keywords.iter().any(|k| lower_text.contains(k));
-
-                    let is_yeast =
-                        lower_text.contains("yeast") && !lower_text.contains("nutritional");
-
-                    if is_starter {
-                        total_flour += grams * 0.5;
-                        total_water += grams * 0.5;
-                        detected_starter += grams;
-                        ingredient_accounted = true;
-                    } else if is_yeast {
-                        detected_yeast += grams;
-                        ingredient_accounted = true;
-                    } else if is_flour {
-                        total_flour += grams;
-                        ingredient_accounted = true;
-                    } else if is_water {
-                        total_water += grams;
-                        ingredient_accounted = true;
-                    }
-                }
-
-                if final_unit.is_empty() {
+                if bakers && is_ingredient && total_flour > 0.0 {
+                    let grams = get_grams(amount, unit_str);
+                    let percentage = (grams / total_flour) * 100.0;
+                    final_result.push_str(&format!("{:.1}%", percentage));
+                } else if final_unit.is_empty() {
                     final_result.push_str(&format_number(final_val));
                 } else {
                     final_result.push_str(&format!("{} {}", format_number(final_val), final_unit));
                 }
             }
-
             last_index = end;
         }
 
@@ -405,7 +405,6 @@ pub fn convert_recipe(
         .collect();
     recipe.markdown = replace_text(&recipe.markdown, false);
 
-    // Re-render HTML
     let parser = pulldown_cmark::Parser::new(&recipe.markdown);
     let mut html_output = String::new();
     pulldown_cmark::html::push_html(&mut html_output, parser);
@@ -483,7 +482,7 @@ mod tests {
         };
 
         // Scale by 2
-        let scaled = convert_recipe(r.clone(), None, None, Some(2.0));
+        let scaled = convert_recipe(r.clone(), None, None, Some(2.0), false);
         assert_eq!(scaled.servings, Some(8));
         assert!(
             scaled.ingredients[0].contains("2 cups") || scaled.ingredients[0].contains("2 cup")
@@ -492,7 +491,7 @@ mod tests {
         assert_eq!(scaled.overall_hydration, Some(2.0));
 
         // Metric conversion
-        let metric = convert_recipe(r.clone(), Some("metric"), Some("c"), Some(1.0));
+        let metric = convert_recipe(r.clone(), Some("metric"), Some("c"), Some(1.0), false);
         assert!(metric.ingredients[0].contains("240 ml")); // 1 cup -> 240 ml
         assert!(metric.markdown.contains("177°C")); // 350 F -> 177 C
     }
