@@ -790,7 +790,7 @@
     });
     
     async function applyScalingAndUnits() {
-        const url = `/api/v1/recipes/{{ recipe.id }}?scale=${currentMultiplier}&unit=${currentUnitSystem}&temp=${currentTempSystem}`;
+        const url = `{{ app_base }}/api/v1/recipes/{{ recipe.id }}?scale=${currentMultiplier}&unit=${currentUnitSystem}&temp=${currentTempSystem}`;
         try {
             const res = await fetch(url);
             if (!res.ok) throw new Error('API error');
@@ -1008,7 +1008,7 @@
         }
 
         try {
-            const response = await fetch(`/api/v1/ferment?type=${type}&amount=${amount}&temp=${temp}`);
+            const response = await fetch(`{{ app_base }}/api/v1/ferment?type=${type}&amount=${amount}&temp=${temp}`);
             const data = await response.json();
             const time = data.estimated_hours;
 
