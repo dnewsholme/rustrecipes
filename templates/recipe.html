@@ -583,12 +583,12 @@
 
     const fractionStr = "½|⅓|⅔|¼|¾|⅕|⅖|⅗|⅘|⅙|⅚|⅛|⅜|⅝|⅞";
     const numberRegexStr = `(?:\\d+[\\s\\-]+\\d+\\s*[\\/⁄]\\s*\\d+|\\d+\\s*[\\/⁄]\\s*\\d+|\\d*\\.\\d+|\\d+[\\s\\-]*(?:${fractionStr})|(?:${fractionStr})|\\d+)`;
-    const unitsRegexStr = "cup|cups|c|tsp|teaspoon|teaspoons|tbsp|tablespoon|tablespoons|oz|ounce|ounces|lb|pound|pounds|g|gram|grams|kg|kilogram|kilograms|ml|milliliter|milliliters|l|liter|liters|pt|pint|pints|qt|quart|quarts|gal|gallon|gallons|pinch|pinches|dash|dashes|clove|cloves|slice|slices|can|cans|package|packages|pkg|stick|sticks";
+    const unitsRegexStr = "%|cup|cups|c|tsp|teaspoon|teaspoons|tbsp|tablespoon|tablespoons|oz|ounce|ounces|lb|pound|pounds|g|gram|grams|kg|kilogram|kilograms|ml|milliliter|milliliters|l|liter|liters|pt|pint|pints|qt|quart|quarts|gal|gallon|gallons|pinch|pinches|dash|dashes|clove|cloves|slice|slices|can|cans|package|packages|pkg|stick|sticks";
     
     // Create regexes once for reuse
-    const unitRegex = new RegExp(`(?:^|\\s|\\()(${numberRegexStr})\\s*(${unitsRegexStr})\\b`, 'gi');
-    const tempRegex = new RegExp(`(?:^|\\s|\\()(\\d+(?:\\s*[\\-–—]\\s*\\d+)?)\\s*(?:°|degrees?\\s+)?(c|f|celsius|fahrenheit)\\b`, 'gi');
-    const startAmountRegex = new RegExp(`^(${numberRegexStr})(?:\\s*(${unitsRegexStr}))?\\b`, 'i');
+    const unitRegex = new RegExp(`(?:^|\\s|\\()(${numberRegexStr})\\s*(${unitsRegexStr})(?![a-z0-9])`, 'gi');
+    const tempRegex = new RegExp(`(?:^|\\s|\\()(\\d+(?:\\s*[\\-–—]\\s*\\d+)?)\\s*(?:°|degrees?\\s+)?(c|f|celsius|fahrenheit)(?![a-z0-9])`, 'gi');
+    const startAmountRegex = new RegExp(`^(${numberRegexStr})\\s*(${unitsRegexStr})?(?![a-z0-9])`, 'i');
 
     const unicodeFractions = {
         '½': 0.5, '⅓': 0.333, '⅔': 0.666, '¼': 0.25, '¾': 0.75,
@@ -790,6 +790,9 @@
     });
     
     async function applyScalingAndUnits() {
+        const ingredientsList = document.querySelector('#ingredients-tab ul');
+        if (ingredientsList) ingredientsList.innerHTML = '<li style="padding: 1rem; text-align: center; color: var(--text-secondary);">Updating...</li>';
+
         const url = `{{ app_base }}/api/v1/recipes/{{ recipe.id }}?scale=${currentMultiplier}&unit=${currentUnitSystem}&temp=${currentTempSystem}&bakers=${showBakersPercentage}`;
         try {
             const res = await fetch(url);

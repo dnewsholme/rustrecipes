@@ -500,4 +500,32 @@ mod tests {
         assert!(bakers.ingredients[0].contains("100.0%")); // Flour is 100%
         assert!(bakers.ingredients[1].contains("200.0%")); // 2 cups water (480g) / 240g flour = 200%
     }
+
+    #[test]
+    fn test_convert_recipe_reversed() {
+        let r = Recipe {
+            id: "2".into(),
+            title: "Reversed".into(),
+            description: None,
+            image: None,
+            source_url: None,
+            tags: vec![],
+            servings: Some(1),
+            prep_time: None,
+            cook_time: None,
+            ingredients: vec![
+                "Bread Flour 500g".into(),
+                "Water 300g".into(),
+            ],
+            markdown: "".into(),
+            html: None,
+            combustion_csv: None,
+            video_url: None,
+            favorite: false,
+        };
+
+        let bakers = convert_recipe(r.clone(), None, None, None, true);
+        assert!(bakers.ingredients[0].contains("100.0%"));
+        assert!(bakers.ingredients[1].contains("60.0%"));
+    }
 }
