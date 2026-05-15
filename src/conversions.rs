@@ -513,10 +513,7 @@ mod tests {
             servings: Some(1),
             prep_time: None,
             cook_time: None,
-            ingredients: vec![
-                "Bread Flour 500g".into(),
-                "Water 300g".into(),
-            ],
+            ingredients: vec!["Bread Flour 500g".into(), "Water 300g".into()],
             markdown: "".into(),
             html: None,
             combustion_csv: None,
