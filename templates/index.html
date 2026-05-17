@@ -966,9 +966,30 @@
     #meal-planner-section {
         transition: padding 0.25s ease, margin-bottom 0.25s ease;
     }
+    #meal-planner-section h2 {
+        transition: font-size 0.25s ease;
+    }
+    #meal-planner-section h2 svg,
+    #meal-planner-section #toggle-meal-planner-collapse svg {
+        transition: width 0.25s ease, height 0.25s ease;
+    }
     #meal-planner-section.collapsed {
-        padding: 0.75rem 1.5rem !important;
-        margin-bottom: 1rem !important;
+        padding: 0.4rem 1.25rem !important;
+        margin-bottom: 0.75rem !important;
+    }
+    #meal-planner-section.collapsed > div:first-child {
+        margin-bottom: 0 !important;
+    }
+    #meal-planner-section.collapsed h2 {
+        font-size: 1.2rem !important;
+    }
+    #meal-planner-section.collapsed h2 svg {
+        width: 20px !important;
+        height: 20px !important;
+    }
+    #meal-planner-section.collapsed #toggle-meal-planner-collapse svg {
+        width: 16px !important;
+        height: 16px !important;
     }
     #meal-planner-section.collapsed #clear-meals-btn {
         display: none !important;
