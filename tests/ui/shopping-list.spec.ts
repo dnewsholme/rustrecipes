@@ -42,8 +42,22 @@ test.describe('Shopping List', () => {
     expect(listText.length).toBeGreaterThan(0);
     expect(listText.some(t => t.toLowerCase().includes('flour'))).toBeTruthy();
     
+    // Test Strikethrough
+    await page.evaluate(() => {
+        const span = document.querySelector('#shopping-list-ul li.shopping-item span');
+        span && span.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await expect(page.locator('#shopping-list-ul li.shopping-item').first()).toHaveClass(/purchased/, { timeout: 2000 });
+    
+    await page.evaluate(() => {
+        const span = document.querySelector('#shopping-list-ul li.shopping-item span');
+        span && span.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await expect(page.locator('#shopping-list-ul li.shopping-item').first()).not.toHaveClass(/purchased/, { timeout: 2000 });
+
     // Close modal
-    await page.locator('#shopping-list-modal .btn-secondary').click();
+    const closeBtn = page.locator('#shopping-list-modal .btn-secondary').filter({ hasText: 'Close' });
+    await closeBtn.click();
     await expect(modal).not.toBeVisible();
   });
 });

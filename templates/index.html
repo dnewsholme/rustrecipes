@@ -5,6 +5,70 @@
 {% block header_actions %}
 {% endblock %}
 
+{% block head %}
+<style>
+    /* Styling for shopping list modal */
+    .shopping-item {
+        padding: 0.75rem;
+        border-bottom: 1px solid var(--border-color);
+        cursor: pointer;
+        user-select: none;
+        transition: background-color 0.2s, opacity 0.2s;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .shopping-item:hover {
+        background-color: var(--surface-hover);
+    }
+    .shopping-item.purchased {
+        text-decoration: line-through;
+        opacity: 0.6;
+        color: var(--text-secondary);
+    }
+
+    /* Print styles */
+    @media print {
+        body * {
+            visibility: hidden;
+        }
+        #shopping-list-modal, #shopping-list-modal * {
+            visibility: visible;
+        }
+        #shopping-list-modal {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: white !important;
+            box-shadow: none !important;
+            padding: 0 !important;
+        }
+        #shopping-list-modal .no-print {
+            display: none !important;
+        }
+        #shopping-list-content {
+            border: none !important;
+            background: white !important;
+            padding: 0 !important;
+            overflow: visible !important;
+        }
+        .shopping-item {
+            border-bottom: 1px solid #ddd;
+            color: black;
+        }
+    }
+
+    /* Selected recipe glow */
+    .recipe-card.selected-glow {
+        box-shadow: 0 0 20px rgba(255, 140, 0, 0.6) !important;
+        border-color: darkorange !important;
+        transform: translateY(-2px);
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 {% if is_admin %}
 <section id="importer-section" class="importer-section" style="display: none;">
@@ -310,20 +374,24 @@
         </select>
     </div>
 
-    <button class="btn btn-primary" onclick="generateShoppingList()" style="padding: 0.5rem 1rem;">Generate List</button>
+    <button class="btn btn-primary" onclick="generateShoppingList()" style="padding: 0.5rem 1rem;">Generate Shopping List</button>
 </div>
 
 <div id="shopping-list-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 2000; align-items: center; justify-content: center; padding: 1rem; backdrop-filter: blur(2px);">
     <div style="background: var(--surface-color); padding: 2rem; border-radius: var(--radius-lg); width: 100%; max-width: 600px; max-height: 80vh; display: flex; flex-direction: column; gap: 1rem; box-shadow: var(--shadow-lg); border: 1px solid var(--border-color);">
         <div style="display: flex; justify-content: space-between; align-items: center;">
             <h2 style="margin: 0;">Shopping List</h2>
-            <button onclick="closeShoppingList()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-secondary);">&times;</button>
+            <button onclick="closeShoppingList()" class="no-print" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-secondary);">&times;</button>
         </div>
         <div id="shopping-list-content" style="overflow-y: auto; flex-grow: 1; padding: 1rem; background: var(--bg-color); border-radius: var(--radius-md); border: 1px solid var(--border-color);">
             <ul style="list-style-type: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.5rem;" id="shopping-list-ul">
             </ul>
         </div>
-        <div style="display: flex; justify-content: flex-end; gap: 1rem; margin-top: 1rem;">
+        <div class="no-print" style="display: flex; justify-content: space-between; gap: 1rem; margin-top: 1rem;">
+            <div>
+                <button class="btn btn-primary" onclick="copyShoppingList()" style="margin-right: 0.5rem;">Copy</button>
+                <button class="btn btn-secondary" onclick="printShoppingList()">Print</button>
+            </div>
             <button class="btn btn-secondary" onclick="closeShoppingList()">Close</button>
         </div>
     </div>
@@ -500,13 +568,25 @@
     }
 
     function handleRecipeSelection() {
-        const selected = document.querySelectorAll('.recipe-select-checkbox:checked');
+        const checkboxes = document.querySelectorAll('.recipe-select-checkbox');
+        let selectedCount = 0;
+        
+        checkboxes.forEach(cb => {
+            const card = cb.closest('.recipe-card');
+            if (cb.checked) {
+                card.classList.add('selected-glow');
+                selectedCount++;
+            } else {
+                card.classList.remove('selected-glow');
+            }
+        });
+
         const bar = document.getElementById('shopping-list-bar');
         const countSpan = document.getElementById('selected-recipes-count');
         
-        if (selected.length > 0) {
+        if (selectedCount > 0) {
             bar.style.display = 'flex';
-            countSpan.textContent = `${selected.length} recipe${selected.length > 1 ? 's' : ''} selected`;
+            countSpan.textContent = `${selectedCount} recipe${selectedCount > 1 ? 's' : ''} selected`;
         } else {
             bar.style.display = 'none';
         }
@@ -545,11 +625,36 @@
                 } else {
                     data.ingredients.forEach(ing => {
                         const li = document.createElement('li');
-                        li.style.padding = '0.5rem';
-                        li.style.borderBottom = '1px solid var(--border-color)';
-                        li.textContent = ing;
+                        li.className = 'shopping-item';
+                        
+                        // Add a checkbox icon for better UX
+                        const icon = document.createElement('span');
+                        icon.innerHTML = '&#9744;'; // Empty checkbox
+                        icon.style.fontSize = '1.2rem';
+                        icon.style.marginRight = '0.5rem';
+                        icon.className = 'check-icon';
+                        
+                        const textSpan = document.createElement('span');
+                        textSpan.textContent = ing;
+                        
+                        li.appendChild(icon);
+                        li.appendChild(textSpan);
                         ul.appendChild(li);
                     });
+                    
+                    ul.onclick = function(e) {
+                        const li = e.target.closest('li.shopping-item');
+                        if (!li) return;
+                        li.classList.toggle('purchased');
+                        const icon = li.querySelector('.check-icon');
+                        if (li.classList.contains('purchased')) {
+                            icon.innerHTML = '&#9745;'; // Checked box
+                            icon.style.color = '#27ae60';
+                        } else {
+                            icon.innerHTML = '&#9744;';
+                            icon.style.color = '';
+                        }
+                    };
                 }
                 
                 document.getElementById('shopping-list-modal').style.display = 'flex';
@@ -567,6 +672,24 @@
 
     function closeShoppingList() {
         document.getElementById('shopping-list-modal').style.display = 'none';
+    }
+
+    async function copyShoppingList() {
+        const items = document.querySelectorAll('#shopping-list-ul li span:last-child');
+        const text = Array.from(items).map(span => span.textContent).join('\n');
+        try {
+            await navigator.clipboard.writeText(text);
+            const btn = document.querySelector('#shopping-list-modal .btn-primary');
+            const originalText = btn.textContent;
+            btn.textContent = 'Copied!';
+            setTimeout(() => { btn.textContent = originalText; }, 2000);
+        } catch (err) {
+            alert('Failed to copy to clipboard.');
+        }
+    }
+
+    function printShoppingList() {
+        window.print();
     }
 
     searchInput?.addEventListener('input', filterRecipes);

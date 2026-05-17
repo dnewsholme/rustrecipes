@@ -9,7 +9,7 @@ lazy_static! {
         r"(?:\d+[\s\-]+\d+\s*[\\/⁄]\s*\d+|\d+\s*[\\/⁄]\s*\d+|\d*\.\d+|\d+[\s\-]*(?:{})|(?:{})|\d+)",
         *FRACTION_STR, *FRACTION_STR
     );
-    static ref UNITS_REGEX_STR: &'static str = "cup|cups|c|tsp|teaspoon|teaspoons|tbsp|tablespoon|tablespoons|oz|ounce|ounces|lb|pound|pounds|g|gram|grams|kg|kilogram|kilograms|ml|milliliter|milliliters|l|liter|liters|pt|pint|pints|qt|quart|quarts|gal|gallon|gallons|pinch|pinches|dash|dashes|clove|cloves|slice|slices|can|cans|package|packages|pkg|stick|sticks";
+    static ref UNITS_REGEX_STR: &'static str = "cup|cups|c|tsp|teaspoon|teaspoons|tbsp|tablespoon|tablespoons|oz|ounce|ounces|lb|lbs|pound|pounds|g|gram|grams|kg|kilogram|kilograms|ml|milliliter|milliliters|l|liter|liters|pt|pint|pints|qt|quart|quarts|gal|gallon|gallons|pinch|pinches|dash|dashes|clove|cloves|slice|slices|can|cans|package|packages|pkg|stick|sticks";
     static ref UNIT_REGEX: Regex = Regex::new(&format!(
         r"(?i)(^|\s|\()({})\s*({})\b",
         *NUMBER_REGEX_STR, *UNITS_REGEX_STR
@@ -44,7 +44,7 @@ lazy_static! {
         };
         add(&["cup", "cups", "c"], "ml", 240.0, "metric");
         add(&["oz", "ounce", "ounces"], "g", 28.35, "metric");
-        add(&["lb", "pound", "pounds"], "g", 453.6, "metric");
+        add(&["lb", "lbs", "pound", "pounds"], "g", 453.6, "metric");
         add(&["pt", "pint", "pints"], "ml", 473.0, "metric");
         add(&["qt", "quart", "quarts"], "ml", 946.0, "metric");
         add(&["gal", "gallon", "gallons"], "l", 3.785, "metric");
@@ -136,7 +136,7 @@ fn get_grams(amount: f64, unit: &str) -> f64 {
         grams *= 1000.0;
     } else if u == "oz" || u == "ounce" || u == "ounces" {
         grams *= 28.35;
-    } else if u == "lb" || u == "pound" || u == "pounds" {
+    } else if u == "lb" || u == "lbs" || u == "pound" || u == "pounds" {
         grams *= 453.6;
     } else if u == "ml" || u == "l" || u == "cup" || u == "cups" || u == "c" {
         if u == "l" {
