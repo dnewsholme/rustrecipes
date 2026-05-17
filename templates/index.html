@@ -900,32 +900,41 @@
     }
 
     function toggleMealPlannerCollapse() {
+        const section = document.getElementById('meal-planner-section');
         const content = document.getElementById('meal-planner-content');
         const chevron = document.getElementById('meal-planner-chevron');
-        if (!content || !chevron) return;
-        const isCollapsed = content.style.display === 'none';
+        if (!section || !content || !chevron) return;
+        
+        const isCollapsed = section.classList.contains('collapsed');
         
         if (isCollapsed) {
             content.style.display = 'block';
+            section.classList.remove('collapsed');
             chevron.style.transform = 'rotate(0deg)';
             localStorage.setItem('mealPlannerCollapsed', 'false');
         } else {
             content.style.display = 'none';
+            section.classList.add('collapsed');
             chevron.style.transform = 'rotate(-90deg)';
             localStorage.setItem('mealPlannerCollapsed', 'true');
         }
     }
 
     function initMealPlannerCollapse() {
+        const section = document.getElementById('meal-planner-section');
         const content = document.getElementById('meal-planner-content');
         const chevron = document.getElementById('meal-planner-chevron');
-        if (!content || !chevron) return;
-        const collapsed = localStorage.getItem('mealPlannerCollapsed') === 'true';
-        if (collapsed) {
+        if (!section || !content || !chevron) return;
+        
+        // Collapse by default unless explicitly expanded (i.e., 'false')
+        const isExplicitlyExpanded = localStorage.getItem('mealPlannerCollapsed') === 'false';
+        if (!isExplicitlyExpanded) {
             content.style.display = 'none';
+            section.classList.add('collapsed');
             chevron.style.transform = 'rotate(-90deg)';
         } else {
             content.style.display = 'block';
+            section.classList.remove('collapsed');
             chevron.style.transform = 'rotate(0deg)';
         }
     }
@@ -954,6 +963,17 @@
     {% endif %}
 </script>
 <style>
+    #meal-planner-section {
+        transition: padding 0.25s ease, margin-bottom 0.25s ease;
+    }
+    #meal-planner-section.collapsed {
+        padding: 0.75rem 1.5rem !important;
+        margin-bottom: 1rem !important;
+    }
+    #meal-planner-section.collapsed #clear-meals-btn {
+        display: none !important;
+    }
+
     @keyframes spin {
         100% {
             transform: rotate(360deg);

@@ -7,6 +7,13 @@ test.describe('Meal Planner', () => {
     await createRecipeFromFixture(page, 'tests/fixtures/test-recipe.md');
     await page.goto('/');
     
+    // Expand meal planner if collapsed so we can clear it cleanly for isolation
+    const content = page.locator('#meal-planner-content');
+    const toggleBtn = page.locator('#toggle-meal-planner-collapse');
+    if (await toggleBtn.isVisible() && await content.isHidden()) {
+      await toggleBtn.click();
+    }
+
     // Clear any existing planned meals to ensure isolated state
     const clearBtn = page.locator('#clear-meals-btn');
     if (await clearBtn.isVisible()) {
@@ -15,6 +22,19 @@ test.describe('Meal Planner', () => {
         await clearBtn.click();
       }
     }
+  });
+
+  test('should be collapsed by default on clean load', async ({ page }) => {
+    // Clear localStorage to simulate fresh clean load
+    await page.evaluate(() => localStorage.clear());
+    await page.reload();
+
+    const content = page.locator('#meal-planner-content');
+    const clearBtn = page.locator('#clear-meals-btn');
+
+    // Should be collapsed by default
+    await expect(content).not.toBeVisible();
+    await expect(clearBtn).not.toBeVisible();
   });
 
   test('should add recipes, handle custom manual entries, and toggle collapsible layout', async ({ page }) => {
@@ -46,6 +66,13 @@ test.describe('Meal Planner', () => {
     // Verify action bar is now hidden (checkbox is cleared)
     await expect(bar).not.toBeVisible();
 
+    // Ensure we expand the meal planner first to see the list if it collapsed itself
+    const content = page.locator('#meal-planner-content');
+    const toggleBtn = page.locator('#toggle-meal-planner-collapse');
+    if (await content.isHidden()) {
+      await toggleBtn.click();
+    }
+
     // Verify Meal Planner section contains our recipe
     const mealList = page.locator('#meal-planner-list');
     await expect(mealList).toBeVisible();
@@ -67,32 +94,31 @@ test.describe('Meal Planner', () => {
     await plannedItems.nth(1).click();
     await expect(plannedItems.nth(1)).toHaveClass(/ticked/, { timeout: 3000 });
 
-    // Reload page to verify persistence
+    // Reload page to verify persistence (should preserve the explicitly expanded state)
     await page.reload();
+    await expect(content).toBeVisible();
     await expect(plannedItems).toHaveCount(2);
     await expect(plannedItems.nth(1)).toHaveClass(/ticked/, { timeout: 3000 });
 
     // Test Collapse/Expand
-    const content = page.locator('#meal-planner-content');
-    const toggleBtn = page.locator('#toggle-meal-planner-collapse');
+    const clearBtn = page.locator('#clear-meals-btn');
     
-    // Initially expanded
-    await expect(content).toBeVisible();
-
     // Click collapse
     await toggleBtn.click();
     await expect(content).not.toBeVisible();
+    await expect(clearBtn).not.toBeVisible();
 
     // Reload to verify collapse state persistence in localStorage
     await page.reload();
     await expect(content).not.toBeVisible();
+    await expect(clearBtn).not.toBeVisible();
 
     // Expand again
     await toggleBtn.click();
     await expect(content).toBeVisible();
+    await expect(clearBtn).toBeVisible();
 
     // Click Clear Planner
-    const clearBtn = page.locator('#clear-meals-btn');
     await clearBtn.click();
 
     // Verify list is cleared
