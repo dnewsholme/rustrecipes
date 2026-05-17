@@ -449,7 +449,9 @@ async fn get_meal_plan(
     let meals = storage::read_meal_plan().await;
     let mut items = Vec::new();
     for meal in meals {
-        let title = if let Some(recipe) = storage::read_recipe(&meal.recipe_id).await {
+        let title = if meal.recipe_id.starts_with("manual:") {
+            meal.recipe_id.trim_start_matches("manual:").to_string()
+        } else if let Some(recipe) = storage::read_recipe(&meal.recipe_id).await {
             recipe.title
         } else {
             meal.recipe_id.clone()
