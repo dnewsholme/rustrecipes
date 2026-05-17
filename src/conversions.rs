@@ -548,4 +548,103 @@ mod tests {
         assert!(bakers.ingredients[1].contains("60.0%"));
         assert_eq!(bakers.overall_hydration, Some(0.6));
     }
+
+    #[test]
+    fn test_shopping_list() {
+        let r1 = Recipe {
+            id: "1".into(),
+            title: "Test 1".into(),
+            description: None,
+            image: None,
+            source_url: None,
+            tags: vec![],
+            servings: Some(2),
+            prep_time: None,
+            cook_time: None,
+            ingredients: vec!["1 cup flour".into(), "100 g sugar".into()],
+            markdown: "".into(),
+            html: None,
+            combustion_csv: None,
+            video_url: None,
+            favorite: false,
+        };
+
+        let r2 = Recipe {
+            id: "2".into(),
+            title: "Test 2".into(),
+            description: None,
+            image: None,
+            source_url: None,
+            tags: vec![],
+            servings: Some(4),
+            prep_time: None,
+            cook_time: None,
+            ingredients: vec![
+                "2 cups flour".into(),
+                "100 g sugar".into(),
+                "1 apple".into(),
+            ],
+            markdown: "".into(),
+            html: None,
+            combustion_csv: None,
+            video_url: None,
+            favorite: false,
+        };
+
+        let res = crate::conversions::generate_combined_shopping_list(vec![r1, r2], 4, "metric");
+        assert_eq!(res.len(), 3);
+        // 1 cup (240ml) * 2 = 480ml. 2 cups (480ml) * 1 = 480ml. Total = 960ml flour.
+        // 100g * 2 = 200g. 100g * 1 = 100g. Total = 300g sugar.
+        // 1 apple * 1 = 1 apple.
+        assert!(res.contains(&"960 ml flour".to_string()));
+        assert!(res.contains(&"300 g sugar".to_string()));
+        assert!(res.contains(&"1 apple".to_string()));
+    }
+}
+
+pub fn generate_combined_shopping_list(
+    recipes: Vec<Recipe>,
+    portions: u32,
+    unit_system: &str,
+) -> Vec<String> {
+    let mut combined: HashMap<(String, String), f64> = HashMap::new();
+    let mut uncombined: Vec<String> = Vec::new();
+
+    for recipe in recipes {
+        let scale = portions as f64 / recipe.servings.unwrap_or(1) as f64;
+        let converted = convert_recipe(recipe, Some(unit_system), None, Some(scale), false);
+
+        for ingredient in converted.ingredients {
+            if let Some(cap) = START_AMOUNT_REGEX.captures(&ingredient) {
+                let num_str = cap.get(1).map_or("", |m| m.as_str());
+                let unit_str = cap.get(2).map_or("", |m| m.as_str());
+                let amount = parse_num_str(num_str);
+
+                let m = cap.get(0).unwrap();
+                let remainder = ingredient[m.end()..].trim();
+                let name_key = remainder.to_lowercase();
+                let unit_key = unit_str.to_lowercase();
+
+                let key = (name_key.clone(), unit_key.clone());
+                *combined.entry(key).or_insert(0.0) += amount;
+            } else {
+                uncombined.push(ingredient);
+            }
+        }
+    }
+
+    let mut result = Vec::new();
+    for ((name, unit), amount) in combined {
+        let formatted_amount = format_number(amount);
+        if unit.is_empty() {
+            result.push(format!("{} {}", formatted_amount, name));
+        } else {
+            result.push(format!("{} {} {}", formatted_amount, unit, name));
+        }
+    }
+
+    result.sort();
+    result.extend(uncombined);
+
+    result
 }

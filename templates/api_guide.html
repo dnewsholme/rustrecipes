@@ -216,6 +216,32 @@
                 </div>
             </div>
         </div>
+
+        <!-- POST /shopping-list -->
+        <div class="endpoint-card" style="margin-bottom: 2rem; border: 1px solid var(--border-color); border-radius: var(--radius-lg); overflow: hidden;">
+            <div style="background: var(--surface-hover); padding: 1rem 1.5rem; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; gap: 1rem;">
+                <span style="background: #e67e22; color: white; padding: 0.2rem 0.6rem; border-radius: 4px; font-size: 0.8rem; font-weight: 700;">POST</span>
+                <code style="font-weight: 700; font-size: 1.1rem;">/shopping-list</code>
+            </div>
+            <div style="padding: 1.5rem;">
+                <p style="margin-bottom: 1rem;">Generate a scaled, combined shopping list from multiple recipes.</p>
+                <div style="margin-bottom: 1.5rem; background: var(--surface-color); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+                    <label style="display: block; font-size: 0.75rem; margin-bottom: 0.25rem;">JSON Body</label>
+                    <textarea class="form-control param-body" style="width: 100%; font-family: monospace; font-size: 0.85rem; min-height: 120px;">{
+  "recipe_ids": ["recipe-1-id", "recipe-2-id"],
+  "portions": 4,
+  "unit_system": "metric"
+}</textarea>
+                </div>
+                <div style="text-align: right;">
+                    <button class="btn btn-primary" onclick="tryIt('POST', '/shopping-list', this)">Try it out</button>
+                </div>
+                <div class="result-area" style="display: none; margin-top: 1.5rem;">
+                    <h4 style="font-size: 0.8rem; text-transform: uppercase; margin-bottom: 0.5rem;">Response</h4>
+                    <pre class="response-pre" style="background: var(--surface-color); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); font-size: 0.85rem; max-height: 300px; overflow: auto;"></pre>
+                </div>
+            </div>
+        </div>
     </section>
 </div>
 

@@ -22,6 +22,7 @@ pub fn router(state: AppState) -> Router<AppState> {
         .route("/temps", get(get_cooking_temps))
         .route("/log7", get(calculate_log7))
         .route("/import", post(import_recipe))
+        .route("/shopping-list", post(generate_shopping_list))
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
             require_api_token,
@@ -34,9 +35,10 @@ async fn require_api_token(
     req: Request,
     next: Next,
 ) -> Result<axum::response::Response, StatusCode> {
-    // Only require auth for mutable methods
+    // Only require auth for mutable methods, except for shopping-list generation
     let method = req.method();
-    if method == axum::http::Method::GET {
+    let path = req.uri().path();
+    if method == axum::http::Method::GET || path == "/shopping-list" {
         return Ok(next.run(req).await);
     }
 
@@ -161,6 +163,39 @@ async fn create_recipe(Json(recipe): Json<Recipe>) -> impl IntoResponse {
             (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response()
         }
     }
+}
+
+#[derive(Deserialize)]
+struct ShoppingListRequest {
+    recipe_ids: Vec<String>,
+    portions: u32,
+    unit_system: String,
+}
+
+#[derive(Serialize)]
+struct ShoppingListResponse {
+    ingredients: Vec<String>,
+}
+
+async fn generate_shopping_list(Json(payload): Json<ShoppingListRequest>) -> impl IntoResponse {
+    let mut recipes = Vec::new();
+    for id in &payload.recipe_ids {
+        if let Some(r) = storage::read_recipe(id).await {
+            recipes.push(r);
+        }
+    }
+
+    if recipes.is_empty() {
+        return (StatusCode::BAD_REQUEST, "No valid recipes found").into_response();
+    }
+
+    let ingredients = crate::conversions::generate_combined_shopping_list(
+        recipes,
+        payload.portions,
+        &payload.unit_system,
+    );
+
+    Json(ShoppingListResponse { ingredients }).into_response()
 }
 
 async fn update_recipe(

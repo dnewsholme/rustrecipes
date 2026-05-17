@@ -67,6 +67,10 @@ A lightning-fast, highly-customizable recipe manager built in Rust. It's designe
   - **USDA Log 7 Calculator**: Interactive calculator for poultry safety. Achieve perfectly juicy chicken at lower temperatures by calculating the required hold time for safe Salmonella lethality.
 - **Secure Admin Login**: Protect your recipes from unauthorized edits or imports. Set an `ADMIN_PASSWORD_HASH` environment variable to restrict modifying actions to yourself while keeping the site read-only for guests.
 - **Developer-Friendly API**: Comprehensive REST API (v1) for programmatic recipe management, enabling future mobile app integrations or custom automation workflows.
+- **Multi-Select Shopping List**:
+  - Select multiple recipes from the home page.
+  - Automatically scale all selected recipes to your desired number of portions.
+  - Combine and convert all ingredients into a unified list (Metric or Imperial).
 - **Streamlined UI & Aesthetics**:
   - **Minimalist Header**: Clean, icon-only navigation bar that provides more screen real estate for your content.
 
@@ -89,6 +93,7 @@ The application includes a RESTful API (v1) that allows for programmatic access 
 | `/log7` | `GET` | Calculate USDA Log 7 hold time for safe poultry lethality based on `temp`. |
 | `/ferment` | `GET` | Calculate estimated fermentation time based on `type`, `amount`, and `temp`. |
 | `/import` | `POST` | Import a recipe from a URL using AI processing (Requires `API_TOKEN`). |
+| `/shopping-list` | `POST` | Generate a combined, scaled shopping list from multiple recipes. |
 
 ### 📖 Interactive API Guide
 The application features a built-in interactive API guide accessible at `/api`. It provides detailed documentation for every endpoint and an interactive "Try it out" playground that allows you to test the API directly from your browser.
