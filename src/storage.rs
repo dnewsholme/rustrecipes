@@ -116,6 +116,30 @@ pub async fn delete_recipe(id: &str) -> Result<(), std::io::Error> {
     fs::remove_file(path)
 }
 
+const MEAL_PLAN_FILE: &str = "data/meal_plan.json";
+
+pub async fn read_meal_plan() -> Vec<crate::models::PlannedMeal> {
+    let path = std::path::Path::new(MEAL_PLAN_FILE);
+    if !path.exists() {
+        return Vec::new();
+    }
+
+    match fs::read_to_string(path) {
+        Ok(content) => serde_json::from_str(&content).unwrap_or_else(|_| Vec::new()),
+        Err(_) => Vec::new(),
+    }
+}
+
+pub async fn save_meal_plan(meals: &[crate::models::PlannedMeal]) -> Result<(), std::io::Error> {
+    let path = std::path::Path::new(MEAL_PLAN_FILE);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let content = serde_json::to_string(meals)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+    fs::write(path, content)
+}
+
 pub fn process_image(data: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let img = image::load_from_memory(data)?;
 

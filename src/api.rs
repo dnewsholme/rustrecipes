@@ -23,6 +23,13 @@ pub fn router(state: AppState) -> Router<AppState> {
         .route("/log7", get(calculate_log7))
         .route("/import", post(import_recipe))
         .route("/shopping-list", post(generate_shopping_list))
+        .route(
+            "/meal-plan",
+            get(get_meal_plan)
+                .post(add_to_meal_plan)
+                .delete(clear_meal_plan),
+        )
+        .route("/meal-plan/toggle", post(toggle_meal_plan))
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
             require_api_token,
@@ -35,10 +42,13 @@ async fn require_api_token(
     req: Request,
     next: Next,
 ) -> Result<axum::response::Response, StatusCode> {
-    // Only require auth for mutable methods, except for shopping-list generation
+    // Only require auth for mutable methods, except for shopping-list and meal-plan
     let method = req.method();
     let path = req.uri().path();
-    if method == axum::http::Method::GET || path == "/shopping-list" {
+    if method == axum::http::Method::GET
+        || path == "/shopping-list"
+        || path.starts_with("/meal-plan")
+    {
         return Ok(next.run(req).await);
     }
 
@@ -397,6 +407,130 @@ async fn calculate_log7(
         seconds,
         display_time,
     })
+}
+
+#[derive(Serialize)]
+struct MealPlanResponse {
+    meals: Vec<PlannedMealItem>,
+}
+
+#[derive(Serialize)]
+struct PlannedMealItem {
+    recipe_id: String,
+    title: String,
+    checked: bool,
+}
+
+#[derive(Deserialize)]
+struct AddMealPlanRequest {
+    recipe_ids: Vec<String>,
+}
+
+#[derive(Deserialize)]
+struct ToggleMealRequest {
+    recipe_id: String,
+}
+
+fn is_admin_session(jar: &axum_extra::extract::cookie::PrivateCookieJar) -> bool {
+    if let Some(c) = jar.get("admin_session") {
+        c.value() == "true"
+    } else {
+        false
+    }
+}
+
+async fn get_meal_plan(
+    jar: axum_extra::extract::cookie::PrivateCookieJar,
+) -> Result<impl IntoResponse, StatusCode> {
+    if !is_admin_session(&jar) {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+
+    let meals = storage::read_meal_plan().await;
+    let mut items = Vec::new();
+    for meal in meals {
+        let title = if let Some(recipe) = storage::read_recipe(&meal.recipe_id).await {
+            recipe.title
+        } else {
+            meal.recipe_id.clone()
+        };
+
+        items.push(PlannedMealItem {
+            recipe_id: meal.recipe_id,
+            title,
+            checked: meal.checked,
+        });
+    }
+
+    Ok(Json(MealPlanResponse { meals: items }))
+}
+
+async fn add_to_meal_plan(
+    jar: axum_extra::extract::cookie::PrivateCookieJar,
+    Json(payload): Json<AddMealPlanRequest>,
+) -> Result<impl IntoResponse, StatusCode> {
+    if !is_admin_session(&jar) {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+
+    let mut meals = storage::read_meal_plan().await;
+    for id in payload.recipe_ids {
+        if !meals.iter().any(|m| m.recipe_id == id) {
+            meals.push(crate::models::PlannedMeal {
+                recipe_id: id,
+                checked: false,
+            });
+        }
+    }
+
+    if storage::save_meal_plan(&meals).await.is_err() {
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    Ok(StatusCode::OK)
+}
+
+async fn toggle_meal_plan(
+    jar: axum_extra::extract::cookie::PrivateCookieJar,
+    Json(payload): Json<ToggleMealRequest>,
+) -> Result<impl IntoResponse, StatusCode> {
+    if !is_admin_session(&jar) {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+
+    let mut meals = storage::read_meal_plan().await;
+    let mut found = false;
+    for meal in &mut meals {
+        if meal.recipe_id == payload.recipe_id {
+            meal.checked = !meal.checked;
+            found = true;
+            break;
+        }
+    }
+
+    if !found {
+        return Err(StatusCode::NOT_FOUND);
+    }
+
+    if storage::save_meal_plan(&meals).await.is_err() {
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    Ok(StatusCode::OK)
+}
+
+async fn clear_meal_plan(
+    jar: axum_extra::extract::cookie::PrivateCookieJar,
+) -> Result<impl IntoResponse, StatusCode> {
+    if !is_admin_session(&jar) {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+
+    if storage::save_meal_plan(&[]).await.is_err() {
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    Ok(StatusCode::OK)
 }
 
 #[cfg(test)]

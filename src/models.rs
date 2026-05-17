@@ -141,3 +141,9 @@ pub struct PaprikaRecipe {
     pub prep_time: Option<String>,
     pub cook_time: Option<String>,
 }
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PlannedMeal {
+    pub recipe_id: String,
+    pub checked: bool,
+}
