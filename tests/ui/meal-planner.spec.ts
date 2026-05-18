@@ -3,6 +3,9 @@ import { login, createRecipeFromFixture } from './helpers';
 
 test.describe('Meal Planner', () => {
   test.beforeEach(async ({ page }) => {
+    page.on('console', msg => console.log('PAGE LOG:', msg.text()));
+    page.on('pageerror', err => console.error('PAGE ERROR:', err.message));
+
     await login(page);
     await createRecipeFromFixture(page, 'tests/fixtures/test-recipe.md');
     await page.goto('/');
@@ -37,7 +40,7 @@ test.describe('Meal Planner', () => {
     await expect(clearBtn).not.toBeVisible();
   });
 
-  test('should add recipes, handle custom manual entries, and toggle collapsible layout', async ({ page }) => {
+  test('should add recipes, handle custom manual entries, direct links, and toggle collapsible layout', async ({ page }) => {
     // Select the recipes dynamically to match whichever is first
     const checkboxes = page.locator('.recipe-select-checkbox');
     await checkboxes.first().waitFor();
@@ -81,6 +84,11 @@ test.describe('Meal Planner', () => {
     await expect(plannedItems).toHaveCount(1);
     await expect(plannedItems.first()).toContainText(recipeTitle);
 
+    // Verify that the recipe item has a recipe link pointing to the recipe page
+    const recipeLink = plannedItems.first().locator('a.meal-recipe-link');
+    await expect(recipeLink).toBeVisible();
+    await expect(recipeLink).toHaveAttribute('href', new RegExp(`/recipe/.*`));
+
     // Test adding manual free-form entry
     const manualInput = page.locator('#manual-meal-input');
     await manualInput.fill('Burger Night');
@@ -89,6 +97,10 @@ test.describe('Meal Planner', () => {
     // Verify manual entry is added
     await expect(plannedItems).toHaveCount(2);
     await expect(plannedItems.nth(1)).toContainText('Burger Night');
+
+    // Verify manual entry does NOT have a recipe link
+    const manualLink = plannedItems.nth(1).locator('a.meal-recipe-link');
+    await expect(manualLink).not.toBeVisible();
 
     // Toggle check state of manual entry
     await plannedItems.nth(1).click();
@@ -99,6 +111,13 @@ test.describe('Meal Planner', () => {
     await expect(content).toBeVisible();
     await expect(plannedItems).toHaveCount(2);
     await expect(plannedItems.nth(1)).toHaveClass(/ticked/, { timeout: 3000 });
+
+    // Click on the recipe link and verify it navigates to the correct page
+    await plannedItems.first().locator('a.meal-recipe-link').click();
+    await expect(page).toHaveURL(new RegExp(`/recipe/.*`));
+
+    // Go back to home to finish cleanup
+    await page.goto('/');
 
     // Test Collapse/Expand
     const clearBtn = page.locator('#clear-meals-btn');
