@@ -96,7 +96,7 @@
             </nav>
         </div>
     </header>
-    <div id="timer-panel" style="display: none; position: fixed; top: 80px; right: 20px; width: 300px; background: var(--surface-color); border: 1px solid var(--border-color); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); z-index: 1000; padding: 1.5rem;">
+    <div id="timer-panel" style="display: none; position: fixed; top: 80px; right: 20px; width: 300px; background: var(--surface-color); border: 1px solid var(--border-color); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); z-index: 6000; padding: 1.5rem;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem;">
             <h3 style="margin: 0; font-size: 1.1rem; font-weight: 700;">Cooking Timer</h3>
             <button onclick="toggleTimerPanel()" style="background: none; border: none; cursor: pointer; color: var(--text-secondary); padding: 0.25rem; display: flex; align-items: center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
@@ -125,7 +125,7 @@
             <div id="suggestion-list" style="display: flex; gap: 0.5rem; flex-wrap: wrap;"></div>
         </div>
     </div>
-    <div id="temps-panel" style="display: none; position: fixed; top: 80px; right: 20px; width: 380px; max-width: calc(100vw - 40px); max-height: 80vh; overflow-y: auto; background: var(--surface-color); border: 1px solid var(--border-color); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); z-index: 1000; padding: 1.5rem;">
+    <div id="temps-panel" style="display: none; position: fixed; top: 80px; right: 20px; width: 380px; max-width: calc(100vw - 40px); max-height: 80vh; overflow-y: auto; background: var(--surface-color); border: 1px solid var(--border-color); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); z-index: 6000; padding: 1.5rem;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem;">
             <h3 style="margin: 0; font-size: 1.1rem; font-weight: 700;">Cooking Temps</h3>
             <div class="unit-toggle" style="background: var(--surface-hover); padding: 0.15rem; border-radius: var(--radius-md); display: flex; gap: 0.15rem;">
