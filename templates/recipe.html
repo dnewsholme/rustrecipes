@@ -36,6 +36,92 @@
     .favorite-btn:not(.is-admin) {
         cursor: default !important;
     }
+
+    @media (max-width: 1024px) {
+        .cook-mode-grid {
+            grid-template-columns: 1fr !important;
+            padding: 1rem !important;
+        }
+        #cook-mode-overlay {
+            padding: 0 !important;
+        }
+        .cook-mode-grid > div:first-child {
+            position: relative !important;
+            height: auto !important;
+            top: 0 !important;
+            margin-bottom: 2rem;
+        }
+    }
+
+    .cook-ingredient-row {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.75rem 0.5rem;
+        border-bottom: 1px solid var(--border-color);
+        cursor: pointer;
+        transition: opacity 0.2s ease, text-decoration 0.2s ease;
+    }
+    
+    .cook-ingredient-row.completed {
+        opacity: 0.4;
+        text-decoration: line-through;
+    }
+    
+    .cook-ingredient-checkbox {
+        width: 20px;
+        height: 20px;
+        border: 2px solid var(--border-color);
+        border-radius: var(--radius-sm);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease;
+        flex-shrink: 0;
+    }
+    
+    .cook-ingredient-row.completed .cook-ingredient-checkbox {
+        background: var(--primary-color);
+        border-color: var(--primary-color);
+        color: white;
+    }
+    
+    .cook-step-card {
+        background: var(--surface-color);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-lg);
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: flex;
+        gap: 1rem;
+        align-items: flex-start;
+    }
+    
+    .cook-step-card.completed {
+        opacity: 0.4;
+        background: var(--surface-hover);
+        border-color: var(--border-color);
+    }
+    
+    .cook-step-num {
+        background: var(--primary-color);
+        color: white;
+        border-radius: 50%;
+        width: 28px;
+        height: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        flex-shrink: 0;
+        transition: all 0.2s ease;
+    }
+    
+    .cook-step-card.completed .cook-step-num {
+        background: var(--text-secondary);
+    }
 </style>
 <div id="recipe-data" style="display: none;" 
     data-prep="{% match recipe.prep_time %}{% when Some with (t) %}{{ t }}{% when None %}{% endmatch %}"
@@ -220,6 +306,12 @@
             <button id="temp-f" class="btn btn-secondary temp-btn"
                 style="padding: 0.25rem 0.5rem; font-size: 0.8rem;" onclick="setTempSystem('f', this)">°F</button>
         </div>
+        <button id="start-cook-mode-btn" class="btn" style="padding: 0.25rem 0.75rem; font-size: 0.8rem; display: flex; align-items: center; gap: 0.25rem; background: var(--accent-color); color: white; border: none; font-weight: 600; cursor: pointer; margin-left: auto; border-radius: var(--radius-sm);" onclick="enterCookMode()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+            <span>Cook Mode</span>
+        </button>
     </div>
     <div id="overall-hydration" style="display: none; margin-bottom: 1rem; padding: 0.5rem 1rem; background: var(--surface-hover); border-radius: var(--radius-sm); border: 1px solid var(--border-color); font-size: 0.85rem; color: var(--text-secondary);">
         <div style="display: flex; align-items: center; gap: 0.5rem;">
@@ -423,6 +515,61 @@
     </div>
     {% when None %}
     {% endmatch %}
+</div>
+
+<div id="cook-mode-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: var(--bg-color); z-index: 5000; overflow-y: auto; box-sizing: border-box;">
+    <!-- Top Bar -->
+    <div style="position: sticky; top: 0; background: var(--surface-color); border-bottom: 1px solid var(--border-color); padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; z-index: 10; box-shadow: var(--shadow-sm);">
+        <div style="display: flex; align-items: center; gap: 1rem; overflow: hidden; margin-right: 1rem;">
+            <div style="font-size: 1.5rem; font-weight: bold; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ recipe.title }}</div>
+            <span style="background: var(--accent-color); color: white; padding: 0.2rem 0.5rem; border-radius: var(--radius-sm); font-size: 0.75rem; font-weight: bold; text-transform: uppercase; letter-spacing: 0.05em; flex-shrink: 0;">Cook Mode</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 1rem; flex-shrink: 0;">
+            <div id="wake-lock-status" style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.85rem;">
+                <svg id="wake-lock-status-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="5"></circle>
+                    <line x1="12" y1="1" x2="12" y2="3"></line>
+                    <line x1="12" y1="21" x2="12" y2="23"></line>
+                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                    <line x1="1" y1="12" x2="3" y2="12"></line>
+                    <line x1="21" y1="12" x2="23" y2="12"></line>
+                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                    <line x1="18.36" y1="4.22" x2="19.78" y2="5.64"></line>
+                </svg>
+                <span id="wake-lock-status-text" style="color: var(--text-secondary); font-weight: 500;">Keep-Awake Inactive</span>
+            </div>
+            
+            <button class="btn btn-secondary" onclick="document.getElementById('timer-toggle-btn').click()" style="padding: 0.5rem 1rem; display: flex; align-items: center; gap: 0.35rem; font-size: 0.85rem;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                </svg>
+                <span>Timer</span>
+            </button>
+            
+            <button class="btn btn-danger" onclick="exitCookMode()" style="padding: 0.5rem 1rem; font-weight: 600; font-size: 0.85rem;">Exit</button>
+        </div>
+    </div>
+    
+    <!-- Columns Grid -->
+    <div class="cook-mode-grid" style="display: grid; grid-template-columns: 1fr 2fr; gap: 2rem; padding: 2rem; max-width: 1400px; margin: 0 auto; box-sizing: border-box;">
+        <!-- Left Column: Ingredients -->
+        <div style="background: var(--surface-color); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 1.5rem; height: calc(100vh - 160px); overflow-y: auto; position: sticky; top: 100px;">
+            <h2 style="margin-top: 0; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--border-color); font-size: 1.3rem;">Ingredients Checklist</h2>
+            <ul id="cook-ingredients-list" style="list-style-type: none; padding: 0; margin: 0;">
+                <!-- Dynamically populated -->
+            </ul>
+        </div>
+        
+        <!-- Right Column: Directions -->
+        <div>
+            <h2 style="margin-top: 0; margin-bottom: 1rem; font-size: 1.3rem;">Directions</h2>
+            <div id="cook-steps-list">
+                <!-- Dynamically populated -->
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}
 
@@ -960,6 +1107,184 @@
         } catch (e) {
             console.error("Fermentation API failed:", e);
         }
+    }
+
+    let cookWakeLock = null;
+
+    async function requestCookWakeLock() {
+        if ('wakeLock' in navigator) {
+            try {
+                cookWakeLock = await navigator.wakeLock.request('screen');
+                updateCookWakeLockStatus(true);
+                cookWakeLock.addEventListener('release', () => {
+                    updateCookWakeLockStatus(false);
+                });
+            } catch (err) {
+                console.warn('Wake Lock request failed:', err.message);
+                updateCookWakeLockStatus(false, err.message);
+            }
+        } else {
+            updateCookWakeLockStatus(false, 'Unsupported');
+        }
+    }
+
+    function releaseCookWakeLock() {
+        if (cookWakeLock !== null) {
+            cookWakeLock.release();
+            cookWakeLock = null;
+        }
+    }
+
+    function updateCookWakeLockStatus(active, errorMsg = "") {
+        const text = document.getElementById('wake-lock-status-text');
+        const icon = document.getElementById('wake-lock-status-icon');
+        if (!text || !icon) return;
+        
+        if (active) {
+            text.textContent = 'Keep-Awake Active';
+            text.style.color = 'var(--primary-color)';
+            icon.style.color = 'var(--primary-color)';
+        } else {
+            if (errorMsg === 'Unsupported') {
+                text.textContent = 'Keep-Awake Unsupported';
+            } else {
+                text.textContent = 'Keep-Awake Inactive';
+            }
+            text.style.color = 'var(--text-secondary)';
+            icon.style.color = 'var(--text-secondary)';
+        }
+    }
+
+    document.addEventListener('visibilitychange', async () => {
+        const overlay = document.getElementById('cook-mode-overlay');
+        if (overlay && overlay.style.display === 'block') {
+            if (document.visibilityState === 'visible') {
+                await requestCookWakeLock();
+            } else {
+                releaseCookWakeLock();
+            }
+        }
+    });
+
+    function enterCookMode() {
+        const overlay = document.getElementById('cook-mode-overlay');
+        if (!overlay) return;
+
+        // 1. Populate ingredients checklist
+        const cookIngsList = document.getElementById('cook-ingredients-list');
+        if (cookIngsList) {
+            cookIngsList.innerHTML = '';
+            document.querySelectorAll('#ingredients-tab ul li.ingredient-item').forEach((item) => {
+                const text = item.textContent.trim();
+                const li = document.createElement('li');
+                li.className = 'cook-ingredient-row';
+                li.onclick = () => li.classList.toggle('completed');
+                
+                const checkbox = document.createElement('div');
+                checkbox.className = 'cook-ingredient-checkbox';
+                checkbox.innerHTML = `
+                    <svg class="check-mark" style="display: none;" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                `;
+                
+                // Add class observer/listener to toggle checkbox visual checkmark
+                const observer = new MutationObserver(() => {
+                    const check = checkbox.querySelector('.check-mark');
+                    if (li.classList.contains('completed')) {
+                        check.style.display = 'block';
+                    } else {
+                        check.style.display = 'none';
+                    }
+                });
+                observer.observe(li, { attributes: true, attributeFilter: ['class'] });
+
+                const span = document.createElement('span');
+                span.textContent = text;
+                span.style.fontSize = '1.1rem';
+                span.style.fontWeight = '500';
+                
+                li.appendChild(checkbox);
+                li.appendChild(span);
+                cookIngsList.appendChild(li);
+            });
+        }
+
+        // 2. Populate steps list
+        const cookStepsList = document.getElementById('cook-steps-list');
+        if (cookStepsList) {
+            cookStepsList.innerHTML = '';
+            
+            // Extract from standard directions
+            const instructionsDiv = document.querySelector('#recipe-instructions');
+            if (instructionsDiv) {
+                let steps = Array.from(instructionsDiv.querySelectorAll('li')).map(li => li.innerHTML);
+                if (steps.length === 0) {
+                    steps = Array.from(instructionsDiv.querySelectorAll('p')).map(p => p.innerHTML);
+                }
+                
+                if (steps.length > 0) {
+                    steps.forEach((stepHtml, index) => {
+                        const card = document.createElement('div');
+                        card.className = 'cook-step-card';
+                        card.onclick = () => card.classList.toggle('completed');
+                        
+                        const num = document.createElement('span');
+                        num.className = 'cook-step-num';
+                        num.innerHTML = `
+                            <span class="step-idx" style="font-size: 0.9rem;">${index + 1}</span>
+                            <svg class="step-check" style="display: none;" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                        `;
+                        
+                        const observer = new MutationObserver(() => {
+                            const stepIdx = num.querySelector('.step-idx');
+                            const stepCheck = num.querySelector('.step-check');
+                            if (card.classList.contains('completed')) {
+                                stepIdx.style.display = 'none';
+                                stepCheck.style.display = 'block';
+                            } else {
+                                stepIdx.style.display = 'block';
+                                stepCheck.style.display = 'none';
+                            }
+                        });
+                        observer.observe(card, { attributes: true, attributeFilter: ['class'] });
+
+                        const content = document.createElement('div');
+                        content.style.fontSize = '1.15rem';
+                        content.style.lineHeight = '1.6';
+                        content.style.color = 'var(--text-primary)';
+                        content.style.flexGrow = '1';
+                        content.innerHTML = stepHtml;
+                        
+                        card.appendChild(num);
+                        card.appendChild(content);
+                        cookStepsList.appendChild(card);
+                    });
+                } else {
+                    cookStepsList.innerHTML = '<div style="color: var(--text-secondary); text-align: center; padding: 2rem;">No directions found.</div>';
+                }
+            }
+        }
+
+        // Show overlay and hide standard body scroll
+        overlay.style.display = 'block';
+        document.body.style.overflow = 'hidden';
+        
+        // Request wake lock
+        requestCookWakeLock();
+    }
+
+    function exitCookMode() {
+        const overlay = document.getElementById('cook-mode-overlay');
+        if (!overlay) return;
+
+        overlay.style.display = 'none';
+        document.body.style.overflow = '';
+        
+        // Release wake lock
+        releaseCookWakeLock();
     }
 </script>
 {% endblock %}
