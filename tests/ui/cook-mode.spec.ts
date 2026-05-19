@@ -11,10 +11,7 @@ test.describe('Cook Mode', () => {
   });
 
   test('should toggle fullscreen cook mode with checklist and step cards', async ({ page }) => {
-    // Navigate to recipes list and click first recipe
-    await page.goto('/');
-    const firstRecipe = page.locator('.recipe-card h3 a').first();
-    await firstRecipe.click();
+    // We are already on the recipe details page for the created fixture recipe!
 
     // Verify we are on a recipe detail page and Cook Mode button exists
     const cookBtn = page.locator('#start-cook-mode-btn');
