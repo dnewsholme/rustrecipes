@@ -8,7 +8,7 @@ use askama::Template;
 use axum::{
     Form, Router,
     extract::Request,
-    extract::{DefaultBodyLimit, FromRef, Multipart, Path, State},
+    extract::{DefaultBodyLimit, FromRef, Multipart, Path, Query, State},
     http::StatusCode,
     middleware::{self, Next},
     response::{Html, IntoResponse, Json, Redirect, Response},
@@ -22,10 +22,19 @@ use tower_http::{services::ServeDir, trace::TraceLayer};
 use tracing::{error, info, warn};
 
 #[derive(Clone)]
+struct GoogleOauthConfig {
+    client_id: String,
+    client_secret: String,
+    redirect_uri: String,
+    admin_email: String,
+}
+
+#[derive(Clone)]
 struct AppState {
     key: Key,
     password_hash: String,
     app_base: &'static str,
+    google_oauth: Option<GoogleOauthConfig>,
 }
 
 impl FromRef<AppState> for Key {
@@ -78,6 +87,7 @@ struct LoginTemplate {
     app_version: String,
     error: Option<String>,
     is_admin: bool,
+    google_auth_enabled: bool,
 }
 
 const APP_VERSION: &str = match option_env!("APP_VERSION") {
@@ -622,7 +632,16 @@ async fn require_admin(
     }
 }
 
-async fn login_form(State(state): State<AppState>, jar: PrivateCookieJar) -> impl IntoResponse {
+#[derive(Deserialize)]
+struct LoginQuery {
+    error: Option<String>,
+}
+
+async fn login_form(
+    State(state): State<AppState>,
+    jar: PrivateCookieJar,
+    Query(query): Query<LoginQuery>,
+) -> impl IntoResponse {
     if is_admin_session(&jar) {
         return Redirect::to(&format!("{}/", state.app_base)).into_response();
     }
@@ -630,8 +649,9 @@ async fn login_form(State(state): State<AppState>, jar: PrivateCookieJar) -> imp
     let template = LoginTemplate {
         app_base: state.app_base,
         app_version: APP_VERSION.to_string(),
-        error: None,
+        error: query.error,
         is_admin: false,
+        google_auth_enabled: state.google_oauth.is_some(),
     };
     Html(template.render().unwrap()).into_response()
 }
@@ -667,6 +687,7 @@ async fn login_submit(
         app_version: APP_VERSION.to_string(),
         error: Some("Invalid password".to_string()),
         is_admin: false,
+        google_auth_enabled: state.google_oauth.is_some(),
     };
     Html(template.render().unwrap()).into_response()
 }
@@ -680,6 +701,263 @@ async fn logout(State(state): State<AppState>, jar: PrivateCookieJar) -> impl In
     let cookie = Cookie::build("admin_session").path(cookie_path).build();
     let updated_jar = jar.remove(cookie);
     (updated_jar, Redirect::to(&format!("{}/", state.app_base)))
+}
+
+async fn login_google(State(state): State<AppState>, jar: PrivateCookieJar) -> impl IntoResponse {
+    let config = match &state.google_oauth {
+        Some(c) => c,
+        None => {
+            return Redirect::to(&format!(
+                "{}/login?error=Google+OAuth+not+configured",
+                state.app_base
+            ))
+            .into_response();
+        }
+    };
+
+    let state_token = uuid::Uuid::new_v4().to_string();
+    let cookie_path = if state.app_base.is_empty() {
+        "/"
+    } else {
+        state.app_base
+    };
+
+    let state_cookie = Cookie::build(("oauth_state", state_token.clone()))
+        .path(cookie_path)
+        .http_only(true)
+        .secure(false)
+        .same_site(SameSite::Lax)
+        .build();
+
+    let mut auth_url = match reqwest::Url::parse("https://accounts.google.com/o/oauth2/v2/auth") {
+        Ok(u) => u,
+        Err(_) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Invalid Google auth URL").into_response();
+        }
+    };
+    auth_url
+        .query_pairs_mut()
+        .append_pair("client_id", &config.client_id)
+        .append_pair("redirect_uri", &config.redirect_uri)
+        .append_pair("response_type", "code")
+        .append_pair("scope", "openid email profile")
+        .append_pair("state", &state_token);
+
+    let updated_jar = jar.add(state_cookie);
+    (updated_jar, Redirect::to(auth_url.as_str())).into_response()
+}
+
+#[derive(Deserialize)]
+struct GoogleCallbackQuery {
+    code: String,
+    state: String,
+}
+
+#[derive(Deserialize)]
+struct GoogleTokenResponse {
+    access_token: String,
+}
+
+#[derive(Deserialize)]
+struct GoogleUserInfo {
+    email: String,
+    email_verified: Option<bool>,
+}
+
+async fn login_google_callback(
+    State(state): State<AppState>,
+    jar: PrivateCookieJar,
+    Query(query): Query<GoogleCallbackQuery>,
+) -> impl IntoResponse {
+    let config = match &state.google_oauth {
+        Some(c) => c,
+        None => {
+            return Redirect::to(&format!(
+                "{}/login?error=Google+OAuth+not+configured",
+                state.app_base
+            ))
+            .into_response();
+        }
+    };
+
+    let stored_state = jar.get("oauth_state").map(|c| c.value().to_string());
+
+    let cookie_path = if state.app_base.is_empty() {
+        "/"
+    } else {
+        state.app_base
+    };
+    let clear_state_cookie = Cookie::build("oauth_state").path(cookie_path).build();
+    let jar = jar.remove(clear_state_cookie);
+
+    if stored_state.is_none() || stored_state.unwrap() != query.state {
+        warn!("CSRF state mismatch in Google OAuth callback");
+        return (
+            jar,
+            Redirect::to(&format!(
+                "{}/login?error=Invalid+session+state",
+                state.app_base
+            )),
+        )
+            .into_response();
+    }
+
+    let mut dummy_url = match reqwest::Url::parse("http://localhost") {
+        Ok(u) => u,
+        Err(_) => {
+            return (
+                jar,
+                Redirect::to(&format!(
+                    "{}/login?error=Internal+server+error",
+                    state.app_base
+                )),
+            )
+                .into_response();
+        }
+    };
+    dummy_url
+        .query_pairs_mut()
+        .append_pair("code", &query.code)
+        .append_pair("client_id", &config.client_id)
+        .append_pair("client_secret", &config.client_secret)
+        .append_pair("redirect_uri", &config.redirect_uri)
+        .append_pair("grant_type", "authorization_code");
+
+    let body_str = dummy_url.query().unwrap_or("").to_string();
+
+    let client = reqwest::Client::new();
+    let token_res = match client
+        .post("https://oauth2.googleapis.com/token")
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .body(body_str)
+        .send()
+        .await
+    {
+        Ok(res) => res,
+        Err(e) => {
+            error!("Failed to contact Google token endpoint: {:?}", e);
+            return (
+                jar,
+                Redirect::to(&format!(
+                    "{}/login?error=Failed+to+exchange+code+with+Google",
+                    state.app_base
+                )),
+            )
+                .into_response();
+        }
+    };
+
+    if !token_res.status().is_success() {
+        let err_text = token_res.text().await.unwrap_or_default();
+        error!("Google token endpoint returned error: {}", err_text);
+        return (
+            jar,
+            Redirect::to(&format!(
+                "{}/login?error=Google+login+failed",
+                state.app_base
+            )),
+        )
+            .into_response();
+    }
+
+    let token_json: GoogleTokenResponse = match token_res.json().await {
+        Ok(t) => t,
+        Err(e) => {
+            error!("Failed to parse token response: {:?}", e);
+            return (
+                jar,
+                Redirect::to(&format!(
+                    "{}/login?error=Invalid+token+response+from+Google",
+                    state.app_base
+                )),
+            )
+                .into_response();
+        }
+    };
+
+    let user_info_res = match client
+        .get("https://www.googleapis.com/oauth2/v3/userinfo")
+        .bearer_auth(token_json.access_token)
+        .send()
+        .await
+    {
+        Ok(res) => res,
+        Err(e) => {
+            error!("Failed to fetch userinfo from Google: {:?}", e);
+            return (
+                jar,
+                Redirect::to(&format!(
+                    "{}/login?error=Failed+to+get+user+profile",
+                    state.app_base
+                )),
+            )
+                .into_response();
+        }
+    };
+
+    if !user_info_res.status().is_success() {
+        error!(
+            "Google userinfo endpoint returned error status: {}",
+            user_info_res.status()
+        );
+        return (
+            jar,
+            Redirect::to(&format!(
+                "{}/login?error=Failed+to+retrieve+profile+information",
+                state.app_base
+            )),
+        )
+            .into_response();
+    }
+
+    let user_info: GoogleUserInfo = match user_info_res.json().await {
+        Ok(u) => u,
+        Err(e) => {
+            error!("Failed to parse userinfo response: {:?}", e);
+            return (
+                jar,
+                Redirect::to(&format!(
+                    "{}/login?error=Invalid+profile+data+from+Google",
+                    state.app_base
+                )),
+            )
+                .into_response();
+        }
+    };
+
+    if user_info.email_verified == Some(false) {
+        warn!("Google email is not verified: {}", user_info.email);
+        return (
+            jar,
+            Redirect::to(&format!(
+                "{}/login?error=Google+email+is+not+verified",
+                state.app_base
+            )),
+        )
+            .into_response();
+    }
+
+    if user_info.email.to_lowercase() == config.admin_email.to_lowercase() {
+        info!("OAuth login successful for admin: {}", user_info.email);
+        let cookie = Cookie::build(("admin_session", "true"))
+            .path(cookie_path)
+            .http_only(true)
+            .secure(false)
+            .same_site(SameSite::Lax)
+            .build();
+        let updated_jar = jar.add(cookie);
+        (updated_jar, Redirect::to(&format!("{}/", state.app_base))).into_response()
+    } else {
+        warn!("Unauthorized Google OAuth attempt: {}", user_info.email);
+        (
+            jar,
+            Redirect::to(&format!(
+                "{}/login?error=Unauthorized+email+address",
+                state.app_base
+            )),
+        )
+            .into_response()
+    }
 }
 
 #[tokio::main]
@@ -718,10 +996,37 @@ async fn main() {
     let app_base: &'static str =
         Box::leak(app_base.trim_end_matches('/').to_string().into_boxed_str());
 
+    let google_oauth = if let (Ok(client_id), Ok(client_secret), Ok(admin_email)) = (
+        std::env::var("GOOGLE_CLIENT_ID"),
+        std::env::var("GOOGLE_CLIENT_SECRET"),
+        std::env::var("ADMIN_EMAIL"),
+    ) {
+        let redirect_uri = std::env::var("GOOGLE_REDIRECT_URI").unwrap_or_else(|_| {
+            let base = if app_base.is_empty() {
+                "http://localhost:3000"
+            } else {
+                app_base
+            };
+            format!("{}/login/google/callback", base)
+        });
+
+        info!("Google OAuth enabled for admin email: {}", admin_email);
+        Some(GoogleOauthConfig {
+            client_id,
+            client_secret,
+            redirect_uri,
+            admin_email,
+        })
+    } else {
+        info!("Google OAuth is not configured. Falling back to standard password login.");
+        None
+    };
+
     let state = AppState {
         key,
         password_hash,
         app_base,
+        google_oauth,
     };
 
     let protected_routes = Router::new()
@@ -747,6 +1052,8 @@ async fn main() {
         .route("/recipe/{id}", get(view_recipe))
         .route("/recipe/favorite/{id}", post(toggle_favorite))
         .route("/login", get(login_form).post(login_submit))
+        .route("/login/google", get(login_google))
+        .route("/login/google/callback", get(login_google_callback))
         .route("/logout", post(logout))
         .route("/api", get(api_guide))
         .route("/api/", get(api_guide))
@@ -764,4 +1071,143 @@ async fn main() {
     info!("Server starting at http://{}", addr);
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
+}
+
+#[cfg(test)]
+mod oauth_tests {
+    use super::*;
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use http_body_util::BodyExt;
+    use tower::ServiceExt;
+
+    fn build_test_app(google_config: Option<GoogleOauthConfig>) -> Router {
+        let state = AppState {
+            key: axum_extra::extract::cookie::Key::generate(),
+            password_hash: "".to_string(),
+            app_base: "",
+            google_oauth: google_config,
+        };
+
+        let static_assets = Router::new()
+            .nest_service("/static", ServeDir::new("static"))
+            .nest_service("/uploads", ServeDir::new("data/uploads"));
+
+        let public_routes = Router::new()
+            .route("/", get(index))
+            .route("/login", get(login_form).post(login_submit))
+            .route("/login/google", get(login_google))
+            .route("/login/google/callback", get(login_google_callback))
+            .merge(static_assets);
+
+        Router::new().merge(public_routes).with_state(state)
+    }
+
+    #[tokio::test]
+    async fn test_google_oauth_disabled_by_default() {
+        let app = build_test_app(None);
+
+        let req = Request::builder()
+            .method("GET")
+            .uri("/login")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let body_str = String::from_utf8(body.to_vec()).unwrap();
+        assert!(!body_str.contains("Sign in with Google"));
+    }
+
+    #[tokio::test]
+    async fn test_google_oauth_enabled_shows_button() {
+        let config = GoogleOauthConfig {
+            client_id: "test-client-id".to_string(),
+            client_secret: "test-client-secret".to_string(),
+            redirect_uri: "http://localhost/callback".to_string(),
+            admin_email: "admin@example.com".to_string(),
+        };
+        let app = build_test_app(Some(config));
+
+        let req = Request::builder()
+            .method("GET")
+            .uri("/login")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let body_str = String::from_utf8(body.to_vec()).unwrap();
+        assert!(body_str.contains("Sign in with Google"));
+        assert!(body_str.contains("/login/google"));
+    }
+
+    #[tokio::test]
+    async fn test_google_oauth_redirect() {
+        let config = GoogleOauthConfig {
+            client_id: "test-client-id".to_string(),
+            client_secret: "test-client-secret".to_string(),
+            redirect_uri: "http://localhost/callback".to_string(),
+            admin_email: "admin@example.com".to_string(),
+        };
+        let app = build_test_app(Some(config));
+
+        let req = Request::builder()
+            .method("GET")
+            .uri("/login/google")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::SEE_OTHER);
+        let location = response
+            .headers()
+            .get("location")
+            .unwrap()
+            .to_str()
+            .unwrap();
+        assert!(location.contains("accounts.google.com"));
+        assert!(location.contains("client_id=test-client-id"));
+        assert!(location.contains("redirect_uri=http%3A%2F%2Flocalhost%2Fcallback"));
+        assert!(location.contains("state="));
+
+        let cookie_header = response
+            .headers()
+            .get("set-cookie")
+            .unwrap()
+            .to_str()
+            .unwrap();
+        assert!(cookie_header.contains("oauth_state="));
+    }
+
+    #[tokio::test]
+    async fn test_google_oauth_callback_csrf_protection() {
+        let config = GoogleOauthConfig {
+            client_id: "test-client-id".to_string(),
+            client_secret: "test-client-secret".to_string(),
+            redirect_uri: "http://localhost/callback".to_string(),
+            admin_email: "admin@example.com".to_string(),
+        };
+        let app = build_test_app(Some(config));
+
+        let req = Request::builder()
+            .method("GET")
+            .uri("/login/google/callback?code=some-code&state=mismatched-state")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::SEE_OTHER);
+        let location = response
+            .headers()
+            .get("location")
+            .unwrap()
+            .to_str()
+            .unwrap();
+        assert!(location.contains("/login?error=Invalid+session+state"));
+    }
 }

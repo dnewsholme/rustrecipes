@@ -549,6 +549,7 @@ mod tests {
             key: axum_extra::extract::cookie::Key::generate(),
             password_hash: "".to_string(),
             app_base: "",
+            google_oauth: None,
         }
     }
 
