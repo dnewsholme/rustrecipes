@@ -110,7 +110,7 @@
 {% endblock %}
 
 {% block content %}
-{% if is_admin %}
+{% if current_user_id.is_some() %}
 <section id="importer-section" class="importer-section" style="display: none;">
     <h2>Import Recipe</h2>
     <p style="color: var(--text-secondary); margin-bottom: 1rem;">Import from a web URL, YouTube (Requires Gemini),
@@ -335,9 +335,9 @@
                 </div>
                 <div style="display: flex; align-items: center; gap: 0.25rem;">
                     <button onclick="toggleFavorite('{{ recipe.id }}', this, event)"
-                        class="favorite-heart-btn {% if recipe.favorite %}is-favorite{% endif %} {% if is_admin %}is-admin{% endif %}"
-                        {% if !is_admin %}disabled{% endif %}
-                        title="{% if is_admin %}Toggle Favorite{% else %}Favorite{% endif %}">
+                        class="favorite-heart-btn {% if recipe.favorite %}is-favorite{% endif %} {% if current_user_id.is_some() %}is-admin{% endif %}"
+                        {% if !current_user_id.is_some() %}disabled{% endif %}
+                        title="{% if current_user_id.is_some() %}Toggle Favorite{% else %}Favorite{% endif %}">
                         <svg width="20" height="20" viewBox="0 0 24 24"
                             fill="{% if recipe.favorite %}currentColor{% else %}none{% endif %}" stroke="currentColor"
                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -474,7 +474,7 @@
     <div style="display: flex; gap: 0.5rem; flex-wrap: nowrap; align-items: center;">
         <button class="btn btn-primary" onclick="generateShoppingList()" style="padding: 0.5rem 1rem;">Generate Shopping List</button>
         
-        {% if is_admin %}
+        {% if current_user_id.is_some() %}
         <button class="btn" onclick="addToPlannedMeals()" style="padding: 0.5rem 1rem; display: flex; align-items: center; gap: 0.25rem; background: darkorange; border-color: darkorange; color: white; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='orange'; this.style.borderColor='orange';" onmouseout="this.style.backgroundColor='darkorange'; this.style.borderColor='darkorange';">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
@@ -514,6 +514,7 @@
 
 {% block scripts %}
 <script>
+    const currentUserId = "{% match current_user_id %}{% when Some with (uid) %}{{ uid }}{% when None %}{% endmatch %}";
     // Handle import=true query parameter
     window.addEventListener('DOMContentLoaded', () => {
         const urlParams = new URLSearchParams(window.location.search);
@@ -570,7 +571,7 @@
 
             // By default, public recipes owned by others are hidden unless showPublic is true
             let matchesPublicShow = true;
-            if (!showPublic && card.dataset.public === "true" && card.dataset.owned === "false") {
+            if (currentUserId && !showPublic && card.dataset.public === "true" && card.dataset.owned === "false") {
                 matchesPublicShow = false;
             }
 
@@ -847,7 +848,7 @@
         btn.style.opacity = '0.7';
     });
 
-    {% if is_admin %}
+    {% if current_user_id.is_some() %}
     async function loadPlannedMeals() {
         try {
             const response = await fetch('{{ app_base }}/api/v1/meal-plan');
@@ -1034,6 +1035,11 @@
     window.addEventListener('DOMContentLoaded', () => {
         loadPlannedMeals();
         initMealPlannerCollapse();
+        filterRecipes();
+    });
+    {% else %}
+    window.addEventListener('DOMContentLoaded', () => {
+        filterRecipes();
     });
     {% endif %}
 </script>

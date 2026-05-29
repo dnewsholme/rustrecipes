@@ -74,15 +74,6 @@ pub fn db_init(
         [],
     )?;
 
-    // Create meal_plans table
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS meal_plans (
-            recipe_id TEXT PRIMARY KEY,
-            checked INTEGER DEFAULT 0
-        )",
-        [],
-    )?;
-
     // Seed default admin user if no users exist
     let mut stmt = conn.prepare("SELECT COUNT(*) FROM users")?;
     let count: i64 = stmt.query_row([], |row| row.get(0))?;
@@ -99,6 +90,80 @@ pub fn db_init(
         let mut stmt = conn.prepare("SELECT id FROM users LIMIT 1")?;
         stmt.query_row([], |row| row.get::<_, String>(0))?
     };
+
+    // Create or migrate meal_plans table
+    let table_info_res: Result<Vec<String>, rusqlite::Error> = conn
+        .prepare("PRAGMA table_info(meal_plans)")
+        .and_then(|mut stmt| {
+            let rows = stmt.query_map([], |row| row.get::<_, String>(1))?;
+            let mut cols = Vec::new();
+            for c in rows.flatten() {
+                cols.push(c);
+            }
+            Ok(cols)
+        });
+
+    let has_user_id = match table_info_res {
+        Ok(cols) => cols.iter().any(|col| col == "user_id"),
+        Err(_) => false,
+    };
+
+    if !has_user_id {
+        let table_exists: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='meal_plans'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+
+        if table_exists > 0 {
+            // Table exists but lacks user_id. Migrate it!
+            let mut stmt = conn.prepare("SELECT recipe_id, checked FROM meal_plans")?;
+            let existing_meals: Vec<(String, i32)> = stmt
+                .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+                .flatten()
+                .collect();
+
+            // Drop old table
+            conn.execute("DROP TABLE meal_plans", [])?;
+
+            // Create new table
+            conn.execute(
+                "CREATE TABLE meal_plans (
+                    user_id TEXT NOT NULL,
+                    recipe_id TEXT NOT NULL,
+                    checked INTEGER DEFAULT 0,
+                    PRIMARY KEY (user_id, recipe_id),
+                    FOREIGN KEY(user_id) REFERENCES users(id)
+                )",
+                [],
+            )?;
+
+            // Re-insert existing planned meals under the administrator
+            for (recipe_id, checked) in existing_meals {
+                let _ = conn.execute(
+                    "INSERT INTO meal_plans (user_id, recipe_id, checked) VALUES (?1, ?2, ?3)",
+                    (&admin_id, &recipe_id, checked),
+                );
+            }
+            tracing::info!(
+                "Successfully migrated existing global meal plans to administrator account."
+            );
+        } else {
+            // Create table from scratch
+            conn.execute(
+                "CREATE TABLE meal_plans (
+                    user_id TEXT NOT NULL,
+                    recipe_id TEXT NOT NULL,
+                    checked INTEGER DEFAULT 0,
+                    PRIMARY KEY (user_id, recipe_id),
+                    FOREIGN KEY(user_id) REFERENCES users(id)
+                )",
+                [],
+            )?;
+        }
+    }
 
     // AUTOMATIC DATA MIGRATION FROM FLAT MARKDOWN FILES
     // Clean up any bad legacy migration entries with empty string IDs
@@ -170,15 +235,17 @@ pub fn db_init(
                 let mut migrated_meals_count = 0;
                 for meal in meals {
                     // Check if it already exists in the table to avoid primary key conflict
-                    let mut stmt =
-                        conn.prepare("SELECT COUNT(*) FROM meal_plans WHERE recipe_id = ?1")?;
-                    let exists: i64 = stmt.query_row([&meal.recipe_id], |row| row.get(0))?;
+                    let mut stmt = conn.prepare(
+                        "SELECT COUNT(*) FROM meal_plans WHERE user_id = ?1 AND recipe_id = ?2",
+                    )?;
+                    let exists: i64 =
+                        stmt.query_row([&admin_id, &meal.recipe_id], |row| row.get(0))?;
                     if exists == 0 {
                         let checked_int = if meal.checked { 1 } else { 0 };
                         if conn
                             .execute(
-                                "INSERT INTO meal_plans (recipe_id, checked) VALUES (?1, ?2)",
-                                (&meal.recipe_id, checked_int),
+                                "INSERT INTO meal_plans (user_id, recipe_id, checked) VALUES (?1, ?2, ?3)",
+                                (&admin_id, &meal.recipe_id, checked_int),
                             )
                             .is_ok()
                         {
@@ -420,16 +487,17 @@ pub fn delete_recipe(id: &str) -> Result<(), std::io::Error> {
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
 }
 
-pub fn read_meal_plan() -> Vec<crate::models::PlannedMeal> {
+pub fn read_meal_plan(user_id: &str) -> Vec<crate::models::PlannedMeal> {
     let conn = match rusqlite::Connection::open(get_db_path()) {
         Ok(c) => c,
         Err(_) => return Vec::new(),
     };
-    let mut stmt = match conn.prepare("SELECT recipe_id, checked FROM meal_plans") {
-        Ok(s) => s,
-        Err(_) => return Vec::new(),
-    };
-    let meal_iter = stmt.query_map([], |row| {
+    let mut stmt =
+        match conn.prepare("SELECT recipe_id, checked FROM meal_plans WHERE user_id = ?1") {
+            Ok(s) => s,
+            Err(_) => return Vec::new(),
+        };
+    let meal_iter = stmt.query_map([user_id], |row| {
         let checked_int: i32 = row.get(1)?;
         Ok(crate::models::PlannedMeal {
             recipe_id: row.get(0)?,
@@ -442,21 +510,24 @@ pub fn read_meal_plan() -> Vec<crate::models::PlannedMeal> {
     }
 }
 
-pub fn save_meal_plan(meals: &[crate::models::PlannedMeal]) -> Result<(), std::io::Error> {
+pub fn save_meal_plan(
+    user_id: &str,
+    meals: &[crate::models::PlannedMeal],
+) -> Result<(), std::io::Error> {
     let mut conn = rusqlite::Connection::open(get_db_path())
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
     let tx = conn
         .transaction()
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
 
-    tx.execute("DELETE FROM meal_plans", [])
+    tx.execute("DELETE FROM meal_plans WHERE user_id = ?1", [user_id])
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
 
     for meal in meals {
         let checked_int = if meal.checked { 1 } else { 0 };
         tx.execute(
-            "INSERT INTO meal_plans (recipe_id, checked) VALUES (?1, ?2)",
-            (&meal.recipe_id, checked_int),
+            "INSERT INTO meal_plans (user_id, recipe_id, checked) VALUES (?1, ?2, ?3)",
+            (user_id, &meal.recipe_id, checked_int),
         )
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
     }

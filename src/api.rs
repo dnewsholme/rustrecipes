@@ -434,23 +434,32 @@ struct ToggleMealRequest {
     recipe_id: String,
 }
 
-fn is_admin_session(jar: &axum_extra::extract::cookie::PrivateCookieJar) -> bool {
+fn get_session_user_id(jar: &axum_extra::extract::cookie::PrivateCookieJar) -> Option<String> {
     if let Some(c) = jar.get("admin_session") {
         let val = c.value();
-        val == "true" || !val.is_empty()
-    } else {
-        false
+        if val == "true" {
+            let admin_email = std::env::var("ADMIN_EMAIL")
+                .unwrap_or_else(|_| "dbizsley@googlemail.com".to_string());
+            if let Some(user) = storage::find_user_by_email(&admin_email) {
+                return Some(user.id);
+            }
+        }
+        if !val.is_empty() {
+            return Some(val.to_string());
+        }
     }
+    None
 }
 
 async fn get_meal_plan(
     jar: axum_extra::extract::cookie::PrivateCookieJar,
 ) -> Result<impl IntoResponse, StatusCode> {
-    if !is_admin_session(&jar) {
-        return Err(StatusCode::UNAUTHORIZED);
-    }
+    let user_id = match get_session_user_id(&jar) {
+        Some(uid) => uid,
+        None => return Err(StatusCode::UNAUTHORIZED),
+    };
 
-    let meals = storage::read_meal_plan();
+    let meals = storage::read_meal_plan(&user_id);
     let mut items = Vec::new();
     for meal in meals {
         let title = if meal.recipe_id.starts_with("manual:") {
@@ -475,11 +484,12 @@ async fn add_to_meal_plan(
     jar: axum_extra::extract::cookie::PrivateCookieJar,
     Json(payload): Json<AddMealPlanRequest>,
 ) -> Result<impl IntoResponse, StatusCode> {
-    if !is_admin_session(&jar) {
-        return Err(StatusCode::UNAUTHORIZED);
-    }
+    let user_id = match get_session_user_id(&jar) {
+        Some(uid) => uid,
+        None => return Err(StatusCode::UNAUTHORIZED),
+    };
 
-    let mut meals = storage::read_meal_plan();
+    let mut meals = storage::read_meal_plan(&user_id);
     for id in payload.recipe_ids {
         if !meals.iter().any(|m| m.recipe_id == id) {
             meals.push(crate::models::PlannedMeal {
@@ -489,7 +499,7 @@ async fn add_to_meal_plan(
         }
     }
 
-    if storage::save_meal_plan(&meals).is_err() {
+    if storage::save_meal_plan(&user_id, &meals).is_err() {
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     }
 
@@ -500,11 +510,12 @@ async fn toggle_meal_plan(
     jar: axum_extra::extract::cookie::PrivateCookieJar,
     Json(payload): Json<ToggleMealRequest>,
 ) -> Result<impl IntoResponse, StatusCode> {
-    if !is_admin_session(&jar) {
-        return Err(StatusCode::UNAUTHORIZED);
-    }
+    let user_id = match get_session_user_id(&jar) {
+        Some(uid) => uid,
+        None => return Err(StatusCode::UNAUTHORIZED),
+    };
 
-    let mut meals = storage::read_meal_plan();
+    let mut meals = storage::read_meal_plan(&user_id);
     let mut found = false;
     for meal in &mut meals {
         if meal.recipe_id == payload.recipe_id {
@@ -518,7 +529,7 @@ async fn toggle_meal_plan(
         return Err(StatusCode::NOT_FOUND);
     }
 
-    if storage::save_meal_plan(&meals).is_err() {
+    if storage::save_meal_plan(&user_id, &meals).is_err() {
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     }
 
@@ -528,11 +539,12 @@ async fn toggle_meal_plan(
 async fn clear_meal_plan(
     jar: axum_extra::extract::cookie::PrivateCookieJar,
 ) -> Result<impl IntoResponse, StatusCode> {
-    if !is_admin_session(&jar) {
-        return Err(StatusCode::UNAUTHORIZED);
-    }
+    let user_id = match get_session_user_id(&jar) {
+        Some(uid) => uid,
+        None => return Err(StatusCode::UNAUTHORIZED),
+    };
 
-    if storage::save_meal_plan(&[]).is_err() {
+    if storage::save_meal_plan(&user_id, &[]).is_err() {
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     }
 

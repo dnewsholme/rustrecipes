@@ -51,8 +51,8 @@ struct IndexTemplate {
     all_tags: Vec<String>,
     app_base: &'static str,
     app_version: String,
-    is_admin: bool,
     current_user_id: Option<String>,
+    current_user_email: Option<String>,
 }
 
 #[derive(Template)]
@@ -62,6 +62,8 @@ struct RecipeTemplate {
     app_base: &'static str,
     app_version: String,
     is_admin: bool,
+    current_user_id: Option<String>,
+    current_user_email: Option<String>,
 }
 
 #[derive(Template)]
@@ -71,7 +73,8 @@ struct EditTemplate {
     is_new: bool,
     app_base: &'static str,
     app_version: String,
-    is_admin: bool,
+    current_user_id: Option<String>,
+    current_user_email: Option<String>,
 }
 
 #[derive(Template)]
@@ -79,7 +82,8 @@ struct EditTemplate {
 struct ApiGuideTemplate {
     app_base: &'static str,
     app_version: String,
-    is_admin: bool,
+    current_user_id: Option<String>,
+    current_user_email: Option<String>,
 }
 
 #[derive(Template)]
@@ -88,8 +92,9 @@ struct LoginTemplate {
     app_base: &'static str,
     app_version: String,
     error: Option<String>,
-    is_admin: bool,
     google_auth_enabled: bool,
+    current_user_id: Option<String>,
+    current_user_email: Option<String>,
 }
 
 #[derive(Template)]
@@ -98,7 +103,8 @@ struct RegisterTemplate {
     app_base: &'static str,
     app_version: String,
     error: Option<String>,
-    is_admin: bool,
+    current_user_id: Option<String>,
+    current_user_email: Option<String>,
 }
 
 const APP_VERSION: &str = match option_env!("APP_VERSION") {
@@ -306,7 +312,17 @@ fn is_admin_session(jar: &PrivateCookieJar) -> bool {
     if let Some(c) = jar.get("admin_session") {
         let val = c.value();
         info!("Found session cookie with value: {}", val);
-        val == "true" || !val.is_empty()
+        if val == "true" {
+            return true;
+        }
+        if !val.is_empty() {
+            let admin_email = std::env::var("ADMIN_EMAIL")
+                .unwrap_or_else(|_| "dbizsley@googlemail.com".to_string());
+            if let Some(user) = storage::find_user_by_email(&admin_email) {
+                return val == user.id;
+            }
+        }
+        false
     } else {
         // Distinguish between missing and invalid
         if jar.iter().any(|c| c.name() == "admin_session") {
@@ -337,6 +353,11 @@ async fn get_session_user_id(jar: &PrivateCookieJar) -> Option<String> {
 
 async fn index(State(state): State<AppState>, jar: PrivateCookieJar) -> impl IntoResponse {
     let user_id = get_session_user_id(&jar).await;
+    let user_email = if let Some(uid) = &user_id {
+        storage::find_user_by_id(uid).map(|u| u.email)
+    } else {
+        None
+    };
     let recipes = storage::list_recipes_for_user(user_id.as_deref());
     let mut all_tags: Vec<String> = recipes
         .iter()
@@ -351,17 +372,24 @@ async fn index(State(state): State<AppState>, jar: PrivateCookieJar) -> impl Int
         all_tags,
         app_base: state.app_base,
         app_version: APP_VERSION.to_string(),
-        is_admin: is_admin_session(&jar),
         current_user_id: user_id.clone(),
+        current_user_email: user_email,
     };
     Html(template.render().unwrap())
 }
 
 async fn api_guide(State(state): State<AppState>, jar: PrivateCookieJar) -> impl IntoResponse {
+    let user_id = get_session_user_id(&jar).await;
+    let user_email = if let Some(uid) = &user_id {
+        storage::find_user_by_id(uid).map(|u| u.email)
+    } else {
+        None
+    };
     let template = ApiGuideTemplate {
         app_base: state.app_base,
         app_version: APP_VERSION.to_string(),
-        is_admin: is_admin_session(&jar),
+        current_user_id: user_id,
+        current_user_email: user_email,
     };
     Html(template.render().unwrap())
 }
@@ -373,6 +401,11 @@ async fn view_recipe(
 ) -> Result<Html<String>, (StatusCode, &'static str)> {
     if let Some(recipe) = storage::read_recipe(&id) {
         let user_id = get_session_user_id(&jar).await;
+        let user_email = if let Some(uid) = &user_id {
+            storage::find_user_by_id(uid).map(|u| u.email)
+        } else {
+            None
+        };
         let is_owner = user_id.as_ref() == Some(&recipe.owner_id);
 
         if recipe.is_public || is_owner {
@@ -381,6 +414,8 @@ async fn view_recipe(
                 app_base: state.app_base,
                 app_version: APP_VERSION.to_string(),
                 is_admin: is_admin_session(&jar),
+                current_user_id: user_id.clone(),
+                current_user_email: user_email,
             };
             Ok(Html(template.render().unwrap()))
         } else {
@@ -395,9 +430,11 @@ async fn view_recipe(
 }
 
 async fn new_recipe(State(state): State<AppState>, jar: PrivateCookieJar) -> impl IntoResponse {
-    if !is_admin_session(&jar) {
-        return Redirect::to(&format!("{}/login", state.app_base)).into_response();
-    }
+    let user_id = match get_session_user_id(&jar).await {
+        Some(id) => id,
+        None => return Redirect::to(&format!("{}/login", state.app_base)).into_response(),
+    };
+    let user_email = storage::find_user_by_id(&user_id).map(|u| u.email);
 
     let template = EditTemplate {
         recipe: models::Recipe {
@@ -416,14 +453,15 @@ async fn new_recipe(State(state): State<AppState>, jar: PrivateCookieJar) -> imp
             html: None,
             video_url: None,
             favorite: false,
-            owner_id: "admin".to_string(),
+            owner_id: user_id.clone(),
             is_public: true,
             owner_email: None,
         },
         is_new: true,
         app_base: state.app_base,
         app_version: APP_VERSION.to_string(),
-        is_admin: true,
+        current_user_id: Some(user_id),
+        current_user_email: user_email,
     };
     Html(template.render().unwrap()).into_response()
 }
@@ -481,7 +519,7 @@ async fn toggle_favorite(jar: PrivateCookieJar, Path(id): Path<String>) -> impl 
     };
 
     if let Some(mut recipe) = storage::read_recipe(&id) {
-        if recipe.owner_id != user_id {
+        if recipe.owner_id != user_id && !is_admin_session(&jar) {
             return Err((StatusCode::FORBIDDEN, "Forbidden"));
         }
         recipe.favorite = !recipe.favorite;
@@ -501,9 +539,10 @@ async fn edit_recipe(
         Some(id) => id,
         None => return (StatusCode::UNAUTHORIZED, "Unauthorized").into_response(),
     };
+    let user_email = storage::find_user_by_id(&user_id).map(|u| u.email);
 
     if let Some(recipe) = storage::read_recipe(&id) {
-        if recipe.owner_id != user_id {
+        if recipe.owner_id != user_id && !is_admin_session(&jar) {
             return (StatusCode::FORBIDDEN, "Access denied").into_response();
         }
         let template = EditTemplate {
@@ -511,7 +550,8 @@ async fn edit_recipe(
             is_new: false,
             app_base: state.app_base,
             app_version: APP_VERSION.to_string(),
-            is_admin: true,
+            current_user_id: Some(user_id),
+            current_user_email: user_email,
         };
         Html(template.render().unwrap()).into_response()
     } else {
@@ -537,7 +577,7 @@ async fn update_recipe(
     };
 
     if let Some(mut recipe) = storage::read_recipe(&id) {
-        if recipe.owner_id != user_id {
+        if recipe.owner_id != user_id && !is_admin_session(&jar) {
             return Err((StatusCode::FORBIDDEN, "Forbidden"));
         }
         recipe.title = form.title;
@@ -578,7 +618,7 @@ async fn delete_recipe(
     };
 
     if let Some(recipe) = storage::read_recipe(&id) {
-        if recipe.owner_id != user_id {
+        if recipe.owner_id != user_id && !is_admin_session(&jar) {
             return Err((StatusCode::FORBIDDEN, "Forbidden"));
         }
         let _ = storage::delete_recipe(&id);
@@ -592,17 +632,25 @@ async fn delete_recipe(
 #[axum::debug_handler]
 async fn import_recipe(
     State(state): State<AppState>,
+    jar: PrivateCookieJar,
     Form(form): Form<ImportForm>,
 ) -> impl IntoResponse {
+    let user_id = match get_session_user_id(&jar).await {
+        Some(id) => id,
+        None => return Redirect::to(&format!("{}/login", state.app_base)).into_response(),
+    };
+    let user_email = storage::find_user_by_id(&user_id).map(|u| u.email);
     match importer::import_recipe_from_url(&form.url).await {
-        Ok(recipe) => {
+        Ok(mut recipe) => {
             info!("Successfully imported recipe from URL: {}", form.url);
+            recipe.owner_id = user_id.clone();
             let template = EditTemplate {
                 recipe,
                 is_new: true,
                 app_base: state.app_base,
                 app_version: APP_VERSION.to_string(),
-                is_admin: true,
+                current_user_id: Some(user_id),
+                current_user_email: user_email,
             };
             Html(template.render().unwrap()).into_response()
         }
@@ -616,8 +664,13 @@ async fn import_recipe(
 
 async fn import_paprika(
     State(state): State<AppState>,
+    jar: PrivateCookieJar,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
+    let user_id = match get_session_user_id(&jar).await {
+        Some(id) => id,
+        None => return Redirect::to(&format!("{}/login", state.app_base)).into_response(),
+    };
     let mut count = 0;
     info!("Starting Paprika archive import");
     while let Some(field) = multipart.next_field().await.unwrap_or(None) {
@@ -628,7 +681,8 @@ async fn import_paprika(
             println!("Received Paprika file: {} bytes", data.len());
             let recipes = importer::import_paprika_archive(&data).await;
             info!("Parsed {} recipes from archive", recipes.len());
-            for recipe in recipes {
+            for mut recipe in recipes {
+                recipe.owner_id = user_id.clone();
                 if let Err(e) = storage::save_recipe(&recipe) {
                     error!("Failed to save recipe {}: {:?}", recipe.title, e);
                 } else {
@@ -641,10 +695,18 @@ async fn import_paprika(
     info!("Successfully imported {} Paprika recipes", count);
 
     // Redirect to index after import
-    Redirect::to(&format!("{}/", state.app_base))
+    Redirect::to(&format!("{}/", state.app_base)).into_response()
 }
 
-async fn import_photo(State(state): State<AppState>, mut multipart: Multipart) -> Response {
+async fn import_photo(
+    State(state): State<AppState>,
+    jar: PrivateCookieJar,
+    mut multipart: Multipart,
+) -> Response {
+    let user_id = match get_session_user_id(&jar).await {
+        Some(id) => id,
+        None => return Redirect::to(&format!("{}/login", state.app_base)).into_response(),
+    };
     while let Some(field) = multipart.next_field().await.unwrap_or(None) {
         let name = field.name().unwrap_or("").to_string();
         if name == "photo"
@@ -668,17 +730,20 @@ async fn import_photo(State(state): State<AppState>, mut multipart: Multipart) -
                 Ok(mut recipe) => {
                     // Set the image
                     recipe.image = Some(format!("uploads/{}", new_filename));
+                    recipe.owner_id = user_id.clone();
 
                     info!(
                         "Successfully parsed recipe from photo using AI: {}",
                         recipe.title
                     );
+                    let user_email = storage::find_user_by_id(&user_id).map(|u| u.email);
                     let template = EditTemplate {
                         recipe,
                         is_new: true,
                         app_base: state.app_base,
                         app_version: APP_VERSION.to_string(),
-                        is_admin: true,
+                        current_user_id: Some(user_id.clone()),
+                        current_user_email: user_email,
                     };
                     return Html(template.render().unwrap()).into_response();
                 }
@@ -731,7 +796,7 @@ async fn require_admin(
     req: Request,
     next: Next,
 ) -> Result<Response, Redirect> {
-    if is_admin_session(&jar) {
+    if get_session_user_id(&jar).await.is_some() {
         Ok(next.run(req).await)
     } else {
         Err(Redirect::to(&format!("{}/login", state.app_base)))
@@ -748,7 +813,7 @@ async fn login_form(
     jar: PrivateCookieJar,
     Query(query): Query<LoginQuery>,
 ) -> impl IntoResponse {
-    if is_admin_session(&jar) {
+    if get_session_user_id(&jar).await.is_some() {
         return Redirect::to(&format!("{}/", state.app_base)).into_response();
     }
 
@@ -756,8 +821,9 @@ async fn login_form(
         app_base: state.app_base,
         app_version: APP_VERSION.to_string(),
         error: query.error,
-        is_admin: false,
         google_auth_enabled: state.google_oauth.is_some(),
+        current_user_id: None,
+        current_user_email: None,
     };
     Html(template.render().unwrap()).into_response()
 }
@@ -808,8 +874,9 @@ async fn login_submit(
         app_base: state.app_base,
         app_version: APP_VERSION.to_string(),
         error: Some("Invalid email or password".to_string()),
-        is_admin: false,
         google_auth_enabled: state.google_oauth.is_some(),
+        current_user_id: None,
+        current_user_email: None,
     };
     Html(template.render().unwrap()).into_response()
 }
@@ -826,7 +893,7 @@ async fn logout(State(state): State<AppState>, jar: PrivateCookieJar) -> impl In
 }
 
 async fn register_form(State(state): State<AppState>, jar: PrivateCookieJar) -> impl IntoResponse {
-    if is_admin_session(&jar) {
+    if get_session_user_id(&jar).await.is_some() {
         return Redirect::to(&format!("{}/", state.app_base)).into_response();
     }
 
@@ -834,7 +901,8 @@ async fn register_form(State(state): State<AppState>, jar: PrivateCookieJar) -> 
         app_base: state.app_base,
         app_version: APP_VERSION.to_string(),
         error: None,
-        is_admin: false,
+        current_user_id: None,
+        current_user_email: None,
     };
     Html(template.render().unwrap()).into_response()
 }
@@ -856,7 +924,8 @@ async fn register_submit(
             app_base: state.app_base,
             app_version: APP_VERSION.to_string(),
             error: Some("Email and password cannot be empty".to_string()),
-            is_admin: false,
+            current_user_id: None,
+            current_user_email: None,
         };
         return Html(template.render().unwrap()).into_response();
     }
@@ -866,7 +935,8 @@ async fn register_submit(
             app_base: state.app_base,
             app_version: APP_VERSION.to_string(),
             error: Some("Passwords do not match".to_string()),
-            is_admin: false,
+            current_user_id: None,
+            current_user_email: None,
         };
         return Html(template.render().unwrap()).into_response();
     }
@@ -876,7 +946,8 @@ async fn register_submit(
             app_base: state.app_base,
             app_version: APP_VERSION.to_string(),
             error: Some("A user with this email already exists".to_string()),
-            is_admin: false,
+            current_user_id: None,
+            current_user_email: None,
         };
         return Html(template.render().unwrap()).into_response();
     }
@@ -888,7 +959,8 @@ async fn register_submit(
                 app_base: state.app_base,
                 app_version: APP_VERSION.to_string(),
                 error: Some("Failed to process password".to_string()),
-                is_admin: false,
+                current_user_id: None,
+                current_user_email: None,
             };
             return Html(template.render().unwrap()).into_response();
         }
@@ -908,7 +980,8 @@ async fn register_submit(
             app_base: state.app_base,
             app_version: APP_VERSION.to_string(),
             error: Some("Failed to register account".to_string()),
-            is_admin: false,
+            current_user_id: None,
+            current_user_email: None,
         };
         return Html(template.render().unwrap()).into_response();
     }
