@@ -1,0 +1,18 @@
+---
+title: TEST-Image Test Recipe
+description: null
+image: https://example.com/image.jpg
+source_url: null
+tags:
+- test
+servings: null
+prep_time: null
+cook_time: null
+ingredients:
+- '- 100g flour'
+- '- 60g water'
+combustion_csv: null
+video_url: null
+favorite: false
+---
+Bake.

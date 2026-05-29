@@ -1,5 +1,9 @@
 use serde::{Deserialize, Serialize};
 
+fn default_true() -> bool {
+    true
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Recipe {
     #[serde(default)]
@@ -25,6 +29,18 @@ pub struct Recipe {
     pub video_url: Option<String>,
     #[serde(default)]
     pub favorite: bool,
+    #[serde(default)]
+    pub owner_id: String,
+    #[serde(default = "default_true")]
+    pub is_public: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct User {
+    pub id: String,
+    pub email: String,
+    pub password_hash: String,
+    pub created_at: String,
 }
 
 impl Recipe {

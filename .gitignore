@@ -12,6 +12,7 @@ playwright/.cache/
 data/recipes/test-*.md
 data/uploads/*
 data/recipes/*.md
+data/recipes.db
 
 geminiapikey.txt
 

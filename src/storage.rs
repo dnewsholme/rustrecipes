@@ -1,149 +1,449 @@
+#![allow(clippy::io_other_error, clippy::bool_assert_comparison)]
 use crate::models::Recipe;
-use serde::Serialize;
-// use tracing::error;
-
 use image::{GenericImageView, ImageFormat};
 use pulldown_cmark::{Parser, html};
-use std::fs;
 use std::io::Cursor;
 use std::path::PathBuf;
 
 const RECIPES_DIR: &str = "data/recipes";
 
+#[cfg(test)]
+thread_local! {
+    static DB_PATH_TEST: std::cell::RefCell<String> = std::cell::RefCell::new({
+        let _ = std::fs::create_dir_all("target/test_dbs");
+        format!("target/test_dbs/recipes_test_{}.db", uuid::Uuid::new_v4())
+    });
+}
+
+#[cfg(test)]
+fn get_db_path() -> String {
+    DB_PATH_TEST.with(|path| path.borrow().clone())
+}
+
+#[cfg(not(test))]
+fn get_db_path() -> String {
+    "data/recipes.db".to_string()
+}
+
 pub fn get_recipes_dir() -> PathBuf {
     PathBuf::from(RECIPES_DIR)
 }
 
-pub async fn list_recipes() -> Vec<Recipe> {
-    let mut recipes = Vec::new();
-    let dir = get_recipes_dir();
+pub fn db_init(
+    admin_password_hash: &str,
+    admin_email: &str,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    // Ensure directories exist
+    let _ = std::fs::create_dir_all("data");
+    let _ = std::fs::create_dir_all("target");
 
-    if let Ok(entries) = fs::read_dir(dir) {
+    let conn = rusqlite::Connection::open(get_db_path())?;
+
+    // Create users table
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS users (
+            id TEXT PRIMARY KEY,
+            email TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )",
+        [],
+    )?;
+
+    // Create recipes table
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS recipes (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            description TEXT,
+            image TEXT,
+            source_url TEXT,
+            tags TEXT,
+            servings INTEGER,
+            prep_time TEXT,
+            cook_time TEXT,
+            ingredients TEXT,
+            markdown TEXT NOT NULL,
+            combustion_csv TEXT,
+            video_url TEXT,
+            favorite INTEGER DEFAULT 0,
+            owner_id TEXT NOT NULL,
+            is_public INTEGER DEFAULT 1,
+            FOREIGN KEY(owner_id) REFERENCES users(id)
+        )",
+        [],
+    )?;
+
+    // Create meal_plans table
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS meal_plans (
+            recipe_id TEXT PRIMARY KEY,
+            checked INTEGER DEFAULT 0
+        )",
+        [],
+    )?;
+
+    // Seed default admin user if no users exist
+    let mut stmt = conn.prepare("SELECT COUNT(*) FROM users")?;
+    let count: i64 = stmt.query_row([], |row| row.get(0))?;
+
+    let admin_id = if count == 0 {
+        let id = uuid::Uuid::new_v4().to_string();
+        conn.execute(
+            "INSERT INTO users (id, email, password_hash) VALUES (?1, ?2, ?3)",
+            (&id, &admin_email, &admin_password_hash),
+        )?;
+        tracing::info!("Seeded default administrator: {} (ID: {})", admin_email, id);
+        id
+    } else {
+        let mut stmt = conn.prepare("SELECT id FROM users LIMIT 1")?;
+        stmt.query_row([], |row| row.get::<_, String>(0))?
+    };
+
+    // AUTOMATIC DATA MIGRATION FROM FLAT MARKDOWN FILES
+    let dir = get_recipes_dir();
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        let mut migrated_count = 0;
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.extension().and_then(|e| e.to_str()) == Some("md")
-                && let Some(id) = path.file_stem().and_then(|s| s.to_str())
-                && let Some(recipe) = read_recipe(id).await
-            {
-                recipes.push(recipe);
+            if path.extension().and_then(|e| e.to_str()) == Some("md") {
+                if let Some(id) = path.file_stem().and_then(|s| s.to_str()) {
+                    let mut stmt = conn.prepare("SELECT COUNT(*) FROM recipes WHERE id = ?1")?;
+                    let exists: i64 = stmt.query_row([id], |row| row.get(0))?;
+                    if exists == 0 {
+                        if let Some(mut recipe) = read_recipe_file(&path) {
+                            recipe.owner_id = admin_id.clone();
+                            recipe.is_public = true; // backward compatibility
+                            if let Err(e) = save_recipe_db(&conn, &recipe) {
+                                tracing::error!(
+                                    "Failed to migrate recipe {}: {:?}",
+                                    recipe.title,
+                                    e
+                                );
+                            } else {
+                                migrated_count += 1;
+                            }
+                        }
+                    }
+                    // Rename the file to md.bak to prevent duplicate migration runs
+                    let mut bak_path = path.clone();
+                    bak_path.set_extension("md.bak");
+                    let _ = std::fs::rename(&path, bak_path);
+                }
             }
         }
+        if migrated_count > 0 {
+            tracing::info!(
+                "Successfully migrated {} Markdown recipes into SQLite!",
+                migrated_count
+            );
+        }
     }
-    recipes.sort_by(|a, b| a.title.cmp(&b.title));
-    recipes
+
+    Ok(())
 }
 
-pub async fn read_recipe(id: &str) -> Option<Recipe> {
-    let path = get_recipes_dir().join(format!("{}.md", id));
-    let content = fs::read_to_string(&path).ok()?;
-
+fn read_recipe_file(path: &std::path::Path) -> Option<Recipe> {
+    let content = std::fs::read_to_string(path).ok()?;
     let parts: Vec<&str> = content.splitn(3, "---").collect();
     if parts.len() == 3 {
         let frontmatter = parts[1];
         let markdown = parts[2].trim_start().to_string();
 
         if let Ok(mut recipe) = serde_yaml::from_str::<Recipe>(frontmatter) {
-            recipe.id = id.to_string();
             recipe.markdown = markdown;
-
-            // Fix legacy absolute paths for images and csvs
-            if let Some(img) = &mut recipe.image
-                && img.starts_with("/uploads/")
-            {
-                *img = img[1..].to_string();
+            if let Some(img) = &mut recipe.image {
+                if img.starts_with("/uploads/") {
+                    *img = img[1..].to_string();
+                }
             }
-            if let Some(csv) = &mut recipe.combustion_csv
-                && csv.starts_with("/uploads/")
-            {
-                *csv = csv[1..].to_string();
+            if let Some(csv) = &mut recipe.combustion_csv {
+                if csv.starts_with("/uploads/") {
+                    *csv = csv[1..].to_string();
+                }
             }
-
-            let parser = Parser::new(&recipe.markdown);
-            let mut html_output = String::new();
-            html::push_html(&mut html_output, parser);
-            recipe.html = Some(html_output);
-
             return Some(recipe);
         }
     }
     None
 }
 
-#[derive(Serialize)]
-struct RecipeFrontmatter<'a> {
-    title: &'a str,
-    description: &'a Option<String>,
-    image: &'a Option<String>,
-    source_url: &'a Option<String>,
-    tags: &'a Vec<String>,
-    servings: &'a Option<u32>,
-    prep_time: &'a Option<String>,
-    cook_time: &'a Option<String>,
-    ingredients: &'a Vec<String>,
-    combustion_csv: &'a Option<String>,
-    video_url: &'a Option<String>,
-    favorite: bool,
+pub fn list_recipes() -> Vec<Recipe> {
+    list_recipes_for_user(None)
 }
 
-pub async fn save_recipe(recipe: &Recipe) -> Result<(), std::io::Error> {
-    let path = get_recipes_dir().join(format!("{}.md", recipe.id));
-
-    let fm = RecipeFrontmatter {
-        title: &recipe.title,
-        description: &recipe.description,
-        image: &recipe.image,
-        source_url: &recipe.source_url,
-        tags: &recipe.tags,
-        servings: &recipe.servings,
-        prep_time: &recipe.prep_time,
-        cook_time: &recipe.cook_time,
-        ingredients: &recipe.ingredients,
-        combustion_csv: &recipe.combustion_csv,
-        video_url: &recipe.video_url,
-        favorite: recipe.favorite,
+pub fn list_recipes_for_user(user_id: Option<&str>) -> Vec<Recipe> {
+    let conn = match rusqlite::Connection::open(get_db_path()) {
+        Ok(c) => c,
+        Err(_) => return Vec::new(),
     };
 
-    // Create frontmatter
-    let frontmatter = serde_yaml::to_string(&fm)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-    let content = format!("---\n{}---\n{}", frontmatter, recipe.markdown);
-
-    fs::write(path, content)
-}
-
-pub async fn delete_recipe(id: &str) -> Result<(), std::io::Error> {
-    let path = get_recipes_dir().join(format!("{}.md", id));
-    fs::remove_file(path)
-}
-
-const MEAL_PLAN_FILE: &str = "data/meal_plan.json";
-
-pub async fn read_meal_plan() -> Vec<crate::models::PlannedMeal> {
-    let path = std::path::Path::new(MEAL_PLAN_FILE);
-    if !path.exists() {
-        return Vec::new();
+    let mut stmt = match user_id {
+        Some(_) => conn.prepare(
+            "SELECT id, title, description, image, source_url, tags, servings, 
+                    prep_time, cook_time, ingredients, markdown, combustion_csv, 
+                    video_url, favorite, owner_id, is_public 
+             FROM recipes WHERE is_public = 1 OR owner_id = ?1",
+        ),
+        None => conn.prepare(
+            "SELECT id, title, description, image, source_url, tags, servings, 
+                    prep_time, cook_time, ingredients, markdown, combustion_csv, 
+                    video_url, favorite, owner_id, is_public 
+             FROM recipes WHERE is_public = 1",
+        ),
     }
+    .unwrap();
 
-    match fs::read_to_string(path) {
-        Ok(content) => serde_json::from_str(&content).unwrap_or_else(|_| Vec::new()),
+    let row_to_recipe = |row: &rusqlite::Row| {
+        let tags_str: String = row.get(5)?;
+        let tags = tags_str
+            .split(',')
+            .map(|s| s.to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        let ingredients_str: String = row.get(9)?;
+        let ingredients = ingredients_str.lines().map(|s| s.to_string()).collect();
+        let is_public_int: i32 = row.get(15)?;
+        let favorite_int: i32 = row.get(13)?;
+
+        let mut recipe = Recipe {
+            id: row.get(0)?,
+            title: row.get(1)?,
+            description: row.get(2)?,
+            image: row.get(3)?,
+            source_url: row.get(4)?,
+            tags,
+            servings: row.get(6)?,
+            prep_time: row.get(7)?,
+            cook_time: row.get(8)?,
+            ingredients,
+            markdown: row.get(10)?,
+            html: None,
+            combustion_csv: row.get(11)?,
+            video_url: row.get(12)?,
+            favorite: favorite_int != 0,
+            owner_id: row.get(14)?,
+            is_public: is_public_int != 0,
+        };
+
+        let parser = Parser::new(&recipe.markdown);
+        let mut html_output = String::new();
+        html::push_html(&mut html_output, parser);
+        recipe.html = Some(html_output);
+
+        Ok(recipe)
+    };
+
+    let params: Vec<&str> = match user_id {
+        Some(uid) => vec![uid],
+        None => vec![],
+    };
+
+    let recipe_iter = stmt
+        .query_map(rusqlite::params_from_iter(params), row_to_recipe)
+        .unwrap();
+    let mut recipes: Vec<Recipe> = recipe_iter.flatten().collect();
+    recipes.sort_by(|a, b| a.title.cmp(&b.title));
+    recipes
+}
+
+pub fn read_recipe(id: &str) -> Option<Recipe> {
+    let conn = rusqlite::Connection::open(get_db_path()).ok()?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, title, description, image, source_url, tags, servings, 
+                    prep_time, cook_time, ingredients, markdown, combustion_csv, 
+                    video_url, favorite, owner_id, is_public 
+             FROM recipes WHERE id = ?1",
+        )
+        .ok()?;
+
+    let row_to_recipe = |row: &rusqlite::Row| {
+        let tags_str: String = row.get(5)?;
+        let tags = tags_str
+            .split(',')
+            .map(|s| s.to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        let ingredients_str: String = row.get(9)?;
+        let ingredients = ingredients_str.lines().map(|s| s.to_string()).collect();
+        let is_public_int: i32 = row.get(15)?;
+        let favorite_int: i32 = row.get(13)?;
+
+        let mut recipe = Recipe {
+            id: row.get(0)?,
+            title: row.get(1)?,
+            description: row.get(2)?,
+            image: row.get(3)?,
+            source_url: row.get(4)?,
+            tags,
+            servings: row.get(6)?,
+            prep_time: row.get(7)?,
+            cook_time: row.get(8)?,
+            ingredients,
+            markdown: row.get(10)?,
+            html: None,
+            combustion_csv: row.get(11)?,
+            video_url: row.get(12)?,
+            favorite: favorite_int != 0,
+            owner_id: row.get(14)?,
+            is_public: is_public_int != 0,
+        };
+
+        let parser = Parser::new(&recipe.markdown);
+        let mut html_output = String::new();
+        html::push_html(&mut html_output, parser);
+        recipe.html = Some(html_output);
+
+        Ok(recipe)
+    };
+
+    stmt.query_row([id], row_to_recipe).ok()
+}
+
+pub fn save_recipe(recipe: &Recipe) -> Result<(), std::io::Error> {
+    let conn = rusqlite::Connection::open(get_db_path())
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    save_recipe_db(&conn, recipe)
+}
+
+fn save_recipe_db(conn: &rusqlite::Connection, recipe: &Recipe) -> Result<(), std::io::Error> {
+    let tags_str = recipe.tags.join(",");
+    let ingredients_str = recipe.ingredients.join("\n");
+    let is_public_int = if recipe.is_public { 1 } else { 0 };
+    let favorite_int = if recipe.favorite { 1 } else { 0 };
+
+    conn.execute(
+        "INSERT OR REPLACE INTO recipes (
+            id, title, description, image, source_url, tags, servings, 
+            prep_time, cook_time, ingredients, markdown, combustion_csv, 
+            video_url, favorite, owner_id, is_public
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+        (
+            &recipe.id,
+            &recipe.title,
+            &recipe.description,
+            &recipe.image,
+            &recipe.source_url,
+            &tags_str,
+            recipe.servings,
+            &recipe.prep_time,
+            &recipe.cook_time,
+            &ingredients_str,
+            &recipe.markdown,
+            &recipe.combustion_csv,
+            &recipe.video_url,
+            favorite_int,
+            &recipe.owner_id,
+            is_public_int,
+        ),
+    )
+    .map(|_| ())
+    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+}
+
+pub fn delete_recipe(id: &str) -> Result<(), std::io::Error> {
+    let conn = rusqlite::Connection::open(get_db_path())
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    conn.execute("DELETE FROM recipes WHERE id = ?1", [id])
+        .map(|_| ())
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+}
+
+pub fn read_meal_plan() -> Vec<crate::models::PlannedMeal> {
+    let conn = match rusqlite::Connection::open(get_db_path()) {
+        Ok(c) => c,
+        Err(_) => return Vec::new(),
+    };
+    let mut stmt = match conn.prepare("SELECT recipe_id, checked FROM meal_plans") {
+        Ok(s) => s,
+        Err(_) => return Vec::new(),
+    };
+    let meal_iter = stmt.query_map([], |row| {
+        let checked_int: i32 = row.get(1)?;
+        Ok(crate::models::PlannedMeal {
+            recipe_id: row.get(0)?,
+            checked: checked_int != 0,
+        })
+    });
+    match meal_iter {
+        Ok(iter) => iter.flatten().collect(),
         Err(_) => Vec::new(),
     }
 }
 
-pub async fn save_meal_plan(meals: &[crate::models::PlannedMeal]) -> Result<(), std::io::Error> {
-    let path = std::path::Path::new(MEAL_PLAN_FILE);
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
+pub fn save_meal_plan(meals: &[crate::models::PlannedMeal]) -> Result<(), std::io::Error> {
+    let mut conn = rusqlite::Connection::open(get_db_path())
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    let tx = conn
+        .transaction()
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+    tx.execute("DELETE FROM meal_plans", [])
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+    for meal in meals {
+        let checked_int = if meal.checked { 1 } else { 0 };
+        tx.execute(
+            "INSERT INTO meal_plans (recipe_id, checked) VALUES (?1, ?2)",
+            (&meal.recipe_id, checked_int),
+        )
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
     }
-    let content = serde_json::to_string(meals)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-    fs::write(path, content)
+
+    tx.commit()
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+}
+
+pub fn find_user_by_email(email: &str) -> Option<crate::models::User> {
+    let conn = rusqlite::Connection::open(get_db_path()).ok()?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, email, password_hash, created_at FROM users WHERE LOWER(email) = LOWER(?1)",
+        )
+        .ok()?;
+    stmt.query_row([email], |row| {
+        Ok(crate::models::User {
+            id: row.get(0)?,
+            email: row.get(1)?,
+            password_hash: row.get(2)?,
+            created_at: row.get(3)?,
+        })
+    })
+    .ok()
+}
+
+#[allow(dead_code)]
+pub fn find_user_by_id(id: &str) -> Option<crate::models::User> {
+    let conn = rusqlite::Connection::open(get_db_path()).ok()?;
+    let mut stmt = conn
+        .prepare("SELECT id, email, password_hash, created_at FROM users WHERE id = ?1")
+        .ok()?;
+    stmt.query_row([id], |row| {
+        Ok(crate::models::User {
+            id: row.get(0)?,
+            email: row.get(1)?,
+            password_hash: row.get(2)?,
+            created_at: row.get(3)?,
+        })
+    })
+    .ok()
+}
+
+pub fn save_user(user: &crate::models::User) -> Result<(), std::io::Error> {
+    let conn = rusqlite::Connection::open(get_db_path())
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    conn.execute(
+        "INSERT OR REPLACE INTO users (id, email, password_hash, created_at) VALUES (?1, ?2, ?3, ?4)",
+        (&user.id, &user.email, &user.password_hash, &user.created_at),
+    )
+    .map(|_| ())
+    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
 }
 
 pub fn process_image(data: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let img = image::load_from_memory(data)?;
 
-    // Resize if larger than 1200px in either dimension while maintaining aspect ratio
     let (width, height) = img.dimensions();
     let img = if width > 1200 || height > 1200 {
         img.resize(1200, 1200, image::imageops::FilterType::Lanczos3)
@@ -153,9 +453,6 @@ pub fn process_image(data: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>>
 
     let mut buf = Vec::new();
     let mut cursor = Cursor::new(&mut buf);
-
-    // Save as WebP for better compression
-    // We use the webp crate for more control or just ImageFormat::Webp if supported by the image crate
     img.write_to(&mut cursor, ImageFormat::WebP)?;
 
     Ok(buf)
@@ -165,12 +462,18 @@ pub fn process_image(data: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>>
 mod tests {
     use super::*;
     use crate::models::Recipe;
-    use std::fs;
 
-    #[tokio::test]
-    async fn test_save_and_read_recipe() {
-        // Ensure the real recipes directory exists for the test in CI
-        fs::create_dir_all(get_recipes_dir()).unwrap();
+    #[test]
+    fn test_save_and_read_recipe() {
+        let _ = std::fs::create_dir_all("data");
+
+        db_init(
+            "$2b$12$xeIhvWgV.yZ2FMHbwZL39.WZSDZWSKIokohV5S7aIwR.spHXuW72G",
+            "dbizsley@googlemail.com",
+        )
+        .unwrap();
+
+        let admin_id = find_user_by_email("dbizsley@googlemail.com").unwrap().id;
 
         let test_id = "test-recipe-123";
         let recipe = Recipe {
@@ -189,16 +492,18 @@ mod tests {
             combustion_csv: None,
             video_url: None,
             favorite: false,
+            owner_id: admin_id,
+            is_public: true,
         };
 
-        // We'll temporarily point to a test file in the real dir or just use a unique ID
-        save_recipe(&recipe).await.unwrap();
+        save_recipe(&recipe).unwrap();
 
-        let read = read_recipe(test_id).await.unwrap();
+        let read = read_recipe(test_id).unwrap();
         assert_eq!(read.title, "Test Recipe");
         assert_eq!(read.tags, vec!["test".to_string()]);
         assert_eq!(read.favorite, false);
+        assert_eq!(read.is_public, true);
 
-        delete_recipe(test_id).await.unwrap();
+        delete_recipe(test_id).unwrap();
     }
 }

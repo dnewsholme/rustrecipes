@@ -1,3 +1,4 @@
+#![allow(clippy::items_after_test_module)]
 use crate::models::Recipe;
 use lazy_static::lazy_static;
 use regex::Regex;
@@ -501,6 +502,8 @@ mod tests {
             combustion_csv: None,
             video_url: None,
             favorite: false,
+            owner_id: "admin".to_string(),
+            is_public: true,
         };
 
         // Scale by 2
@@ -541,6 +544,8 @@ mod tests {
             combustion_csv: None,
             video_url: None,
             favorite: false,
+            owner_id: "admin".to_string(),
+            is_public: true,
         };
 
         let bakers = convert_recipe(r.clone(), None, None, None, true);
@@ -567,6 +572,8 @@ mod tests {
             combustion_csv: None,
             video_url: None,
             favorite: false,
+            owner_id: "admin".to_string(),
+            is_public: true,
         };
 
         let r2 = Recipe {
@@ -589,6 +596,8 @@ mod tests {
             combustion_csv: None,
             video_url: None,
             favorite: false,
+            owner_id: "admin".to_string(),
+            is_public: true,
         };
 
         let res = crate::conversions::generate_combined_shopping_list(vec![r1, r2], 4, "metric");

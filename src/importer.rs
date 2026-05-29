@@ -208,6 +208,8 @@ pub async fn import_recipe_from_text(text: &str) -> Result<Recipe, ImportError> 
                     combustion_csv: None,
                     video_url: None,
                     favorite: false,
+                    owner_id: "admin".to_string(),
+                    is_public: true,
                 })
             }
             Err(e) => {
@@ -347,6 +349,8 @@ fn convert_ld_to_recipe(ld: LdRecipe, url: &str) -> Recipe {
         combustion_csv: None,
         video_url: None,
         favorite: false,
+        owner_id: "admin".to_string(),
+        is_public: true,
     }
 }
 
@@ -532,6 +536,8 @@ pub async fn import_paprika_archive(bytes: &[u8]) -> Vec<Recipe> {
                             combustion_csv: None,
                             video_url: None,
                             favorite: false,
+                            owner_id: "admin".to_string(),
+                            is_public: true,
                         };
                         imported.push(recipe);
                     }
@@ -682,6 +688,8 @@ pub async fn import_recipe_from_photo(
                     combustion_csv: None,
                     video_url: None,
                     favorite: false,
+                    owner_id: "admin".to_string(),
+                    is_public: true,
                 })
             }
             Err(e) => {

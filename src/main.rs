@@ -1,3 +1,4 @@
+#![allow(clippy::collapsible_if)]
 mod api;
 mod conversions;
 mod importer;
@@ -90,6 +91,15 @@ struct LoginTemplate {
     google_auth_enabled: bool,
 }
 
+#[derive(Template)]
+#[template(path = "register.html")]
+struct RegisterTemplate {
+    app_base: &'static str,
+    app_version: String,
+    error: Option<String>,
+    is_admin: bool,
+}
+
 const APP_VERSION: &str = match option_env!("APP_VERSION") {
     Some(v) => v,
     None => env!("CARGO_PKG_VERSION"),
@@ -109,6 +119,7 @@ struct RecipeFormData {
     source_url: Option<String>,
     video_url: Option<String>,
     remove_combustion_csv: bool,
+    is_public: bool,
 }
 
 async fn parse_recipe_multipart(mut multipart: Multipart) -> Option<RecipeFormData> {
@@ -125,6 +136,7 @@ async fn parse_recipe_multipart(mut multipart: Multipart) -> Option<RecipeFormDa
     let mut source_url = None;
     let mut video_url = None;
     let mut remove_combustion_csv = false;
+    let mut is_public = false;
 
     while let Some(field) = multipart.next_field().await.unwrap_or(None) {
         let name = field.name().unwrap_or("").to_string();
@@ -242,6 +254,7 @@ async fn parse_recipe_multipart(mut multipart: Multipart) -> Option<RecipeFormDa
                     }
                 }
                 "remove_combustion_csv" => remove_combustion_csv = text == "true",
+                "is_public" => is_public = text == "true" || text == "on",
                 _ => {}
             }
         }
@@ -265,6 +278,7 @@ async fn parse_recipe_multipart(mut multipart: Multipart) -> Option<RecipeFormDa
         source_url,
         video_url,
         remove_combustion_csv,
+        is_public,
     })
 }
 
@@ -291,7 +305,7 @@ fn is_admin_session(jar: &PrivateCookieJar) -> bool {
     if let Some(c) = jar.get("admin_session") {
         let val = c.value();
         info!("Found session cookie with value: {}", val);
-        val == "true"
+        val == "true" || !val.is_empty()
     } else {
         // Distinguish between missing and invalid
         if jar.iter().any(|c| c.name() == "admin_session") {
@@ -303,8 +317,26 @@ fn is_admin_session(jar: &PrivateCookieJar) -> bool {
     }
 }
 
+async fn get_session_user_id(jar: &PrivateCookieJar) -> Option<String> {
+    if let Some(c) = jar.get("admin_session") {
+        let val = c.value();
+        if val == "true" {
+            let admin_email = std::env::var("ADMIN_EMAIL")
+                .unwrap_or_else(|_| "dbizsley@googlemail.com".to_string());
+            if let Some(user) = storage::find_user_by_email(&admin_email) {
+                return Some(user.id);
+            }
+        }
+        if !val.is_empty() {
+            return Some(val.to_string());
+        }
+    }
+    None
+}
+
 async fn index(State(state): State<AppState>, jar: PrivateCookieJar) -> impl IntoResponse {
-    let recipes = storage::list_recipes().await;
+    let user_id = get_session_user_id(&jar).await;
+    let recipes = storage::list_recipes_for_user(user_id.as_deref());
     let mut all_tags: Vec<String> = recipes
         .iter()
         .flat_map(|r| r.tags.clone())
@@ -336,21 +368,35 @@ async fn view_recipe(
     State(state): State<AppState>,
     jar: PrivateCookieJar,
     Path(id): Path<String>,
-) -> impl IntoResponse {
-    if let Some(recipe) = storage::read_recipe(&id).await {
-        let template = RecipeTemplate {
-            recipe,
-            app_base: state.app_base,
-            app_version: APP_VERSION.to_string(),
-            is_admin: is_admin_session(&jar),
-        };
-        Ok(Html(template.render().unwrap()))
+) -> Result<Html<String>, (StatusCode, &'static str)> {
+    if let Some(recipe) = storage::read_recipe(&id) {
+        let user_id = get_session_user_id(&jar).await;
+        let is_owner = user_id.as_ref() == Some(&recipe.owner_id);
+
+        if recipe.is_public || is_owner {
+            let template = RecipeTemplate {
+                recipe,
+                app_base: state.app_base,
+                app_version: APP_VERSION.to_string(),
+                is_admin: is_admin_session(&jar),
+            };
+            Ok(Html(template.render().unwrap()))
+        } else {
+            Err((
+                StatusCode::FORBIDDEN,
+                "Access denied. This recipe is private.",
+            ))
+        }
     } else {
         Err((StatusCode::NOT_FOUND, "Recipe not found"))
     }
 }
 
-async fn new_recipe(State(state): State<AppState>) -> impl IntoResponse {
+async fn new_recipe(State(state): State<AppState>, jar: PrivateCookieJar) -> impl IntoResponse {
+    if !is_admin_session(&jar) {
+        return Redirect::to(&format!("{}/login", state.app_base)).into_response();
+    }
+
     let template = EditTemplate {
         recipe: models::Recipe {
             id: String::new(),
@@ -368,16 +414,28 @@ async fn new_recipe(State(state): State<AppState>) -> impl IntoResponse {
             html: None,
             video_url: None,
             favorite: false,
+            owner_id: "admin".to_string(),
+            is_public: true,
         },
         is_new: true,
         app_base: state.app_base,
         app_version: APP_VERSION.to_string(),
         is_admin: true,
     };
-    Html(template.render().unwrap())
+    Html(template.render().unwrap()).into_response()
 }
 
-async fn create_recipe(State(state): State<AppState>, multipart: Multipart) -> impl IntoResponse {
+#[axum::debug_handler]
+async fn create_recipe(
+    State(state): State<AppState>,
+    jar: PrivateCookieJar,
+    multipart: Multipart,
+) -> impl IntoResponse {
+    let user_id = match get_session_user_id(&jar).await {
+        Some(id) => id,
+        None => return Err((StatusCode::UNAUTHORIZED, "Unauthorized")),
+    };
+
     let form = match parse_recipe_multipart(multipart).await {
         Some(f) => f,
         None => return Err((StatusCode::BAD_REQUEST, "Invalid form data")),
@@ -403,29 +461,47 @@ async fn create_recipe(State(state): State<AppState>, multipart: Multipart) -> i
         combustion_csv: form.combustion_csv,
         video_url: form.video_url,
         favorite: false,
+        owner_id: user_id,
+        is_public: form.is_public,
     };
-    let _ = storage::save_recipe(&recipe).await;
+    let _ = storage::save_recipe(&recipe);
     let redirect_url = format!("{}/recipe/{}", state.app_base, id);
     info!("Redirecting to: {}", redirect_url);
     Ok(Redirect::to(&redirect_url))
 }
 
 async fn toggle_favorite(jar: PrivateCookieJar, Path(id): Path<String>) -> impl IntoResponse {
-    if !is_admin_session(&jar) {
-        return Err((StatusCode::UNAUTHORIZED, "Admin only"));
-    }
+    let user_id = match get_session_user_id(&jar).await {
+        Some(id) => id,
+        None => return Err((StatusCode::UNAUTHORIZED, "Unauthorized")),
+    };
 
-    if let Some(mut recipe) = storage::read_recipe(&id).await {
+    if let Some(mut recipe) = storage::read_recipe(&id) {
+        if recipe.owner_id != user_id {
+            return Err((StatusCode::FORBIDDEN, "Forbidden"));
+        }
         recipe.favorite = !recipe.favorite;
-        let _ = storage::save_recipe(&recipe).await;
+        let _ = storage::save_recipe(&recipe);
         Ok(Json(serde_json::json!({ "favorite": recipe.favorite })))
     } else {
         Err((StatusCode::NOT_FOUND, "Recipe not found"))
     }
 }
 
-async fn edit_recipe(State(state): State<AppState>, Path(id): Path<String>) -> impl IntoResponse {
-    if let Some(recipe) = storage::read_recipe(&id).await {
+async fn edit_recipe(
+    State(state): State<AppState>,
+    jar: PrivateCookieJar,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    let user_id = match get_session_user_id(&jar).await {
+        Some(id) => id,
+        None => return (StatusCode::UNAUTHORIZED, "Unauthorized").into_response(),
+    };
+
+    if let Some(recipe) = storage::read_recipe(&id) {
+        if recipe.owner_id != user_id {
+            return (StatusCode::FORBIDDEN, "Access denied").into_response();
+        }
         let template = EditTemplate {
             recipe,
             is_new: false,
@@ -433,26 +509,35 @@ async fn edit_recipe(State(state): State<AppState>, Path(id): Path<String>) -> i
             app_version: APP_VERSION.to_string(),
             is_admin: true,
         };
-        Ok(Html(template.render().unwrap()))
+        Html(template.render().unwrap()).into_response()
     } else {
-        Err((StatusCode::NOT_FOUND, "Recipe not found"))
+        (StatusCode::NOT_FOUND, "Recipe not found").into_response()
     }
 }
 
+#[axum::debug_handler]
 async fn update_recipe(
     State(state): State<AppState>,
+    jar: PrivateCookieJar,
     Path(id): Path<String>,
     multipart: Multipart,
 ) -> impl IntoResponse {
+    let user_id = match get_session_user_id(&jar).await {
+        Some(id) => id,
+        None => return Err((StatusCode::UNAUTHORIZED, "Unauthorized")),
+    };
+
     let form = match parse_recipe_multipart(multipart).await {
         Some(f) => f,
         None => return Err((StatusCode::BAD_REQUEST, "Invalid form data")),
     };
 
-    if let Some(mut recipe) = storage::read_recipe(&id).await {
+    if let Some(mut recipe) = storage::read_recipe(&id) {
+        if recipe.owner_id != user_id {
+            return Err((StatusCode::FORBIDDEN, "Forbidden"));
+        }
         recipe.title = form.title;
         recipe.description = form.description;
-        // Only update image if a new one was uploaded or text was provided
         if form.image.is_some() {
             recipe.image = form.image;
         }
@@ -469,7 +554,8 @@ async fn update_recipe(
         recipe.ingredients = form.ingredients;
         recipe.markdown = form.markdown;
         recipe.video_url = form.video_url;
-        let _ = storage::save_recipe(&recipe).await;
+        recipe.is_public = form.is_public;
+        let _ = storage::save_recipe(&recipe);
         info!("Updated recipe: {} ({})", recipe.title, id);
         Ok(Redirect::to(&format!("{}/recipe/{}", state.app_base, id)))
     } else {
@@ -477,10 +563,26 @@ async fn update_recipe(
     }
 }
 
-async fn delete_recipe(State(state): State<AppState>, Path(id): Path<String>) -> impl IntoResponse {
-    let _ = storage::delete_recipe(&id).await;
-    info!("Deleted recipe: {}", id);
-    Redirect::to(&format!("{}/", state.app_base))
+async fn delete_recipe(
+    State(state): State<AppState>,
+    jar: PrivateCookieJar,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    let user_id = match get_session_user_id(&jar).await {
+        Some(id) => id,
+        None => return Err((StatusCode::UNAUTHORIZED, "Unauthorized")),
+    };
+
+    if let Some(recipe) = storage::read_recipe(&id) {
+        if recipe.owner_id != user_id {
+            return Err((StatusCode::FORBIDDEN, "Forbidden"));
+        }
+        let _ = storage::delete_recipe(&id);
+        info!("Deleted recipe: {}", id);
+        Ok(Redirect::to(&format!("{}/", state.app_base)))
+    } else {
+        Err((StatusCode::NOT_FOUND, "Recipe not found"))
+    }
 }
 
 #[axum::debug_handler]
@@ -523,7 +625,7 @@ async fn import_paprika(
             let recipes = importer::import_paprika_archive(&data).await;
             info!("Parsed {} recipes from archive", recipes.len());
             for recipe in recipes {
-                if let Err(e) = storage::save_recipe(&recipe).await {
+                if let Err(e) = storage::save_recipe(&recipe) {
                     error!("Failed to save recipe {}: {:?}", recipe.title, e);
                 } else {
                     count += 1;
@@ -658,6 +760,7 @@ async fn login_form(
 
 #[derive(Deserialize)]
 struct LoginFormData {
+    email: Option<String>,
     password: String,
 }
 
@@ -666,26 +769,41 @@ async fn login_submit(
     jar: PrivateCookieJar,
     Form(form): Form<LoginFormData>,
 ) -> impl IntoResponse {
-    if let Ok(true) = bcrypt::verify(&form.password, &state.password_hash) {
-        let cookie_path = if state.app_base.is_empty() {
-            "/"
-        } else {
-            state.app_base
-        };
-        let cookie = Cookie::build(("admin_session", "true"))
-            .path(cookie_path)
-            .http_only(true)
-            .secure(false)
-            .same_site(SameSite::Lax)
-            .build();
-        let updated_jar = jar.add(cookie);
-        return (updated_jar, Redirect::to(&format!("{}/", state.app_base))).into_response();
+    let admin_email =
+        std::env::var("ADMIN_EMAIL").unwrap_or_else(|_| "dbizsley@googlemail.com".to_string());
+    let email_lookup = match &form.email {
+        Some(e) if !e.trim().is_empty() => {
+            if e.trim().to_lowercase() == "admin" {
+                admin_email
+            } else {
+                e.trim().to_string()
+            }
+        }
+        _ => admin_email,
+    };
+
+    if let Some(user) = storage::find_user_by_email(&email_lookup) {
+        if let Ok(true) = bcrypt::verify(&form.password, &user.password_hash) {
+            let cookie_path = if state.app_base.is_empty() {
+                "/"
+            } else {
+                state.app_base
+            };
+            let cookie = Cookie::build(("admin_session", user.id))
+                .path(cookie_path)
+                .http_only(true)
+                .secure(false)
+                .same_site(SameSite::Lax)
+                .build();
+            let updated_jar = jar.add(cookie);
+            return (updated_jar, Redirect::to(&format!("{}/", state.app_base))).into_response();
+        }
     }
 
     let template = LoginTemplate {
         app_base: state.app_base,
         app_version: APP_VERSION.to_string(),
-        error: Some("Invalid password".to_string()),
+        error: Some("Invalid email or password".to_string()),
         is_admin: false,
         google_auth_enabled: state.google_oauth.is_some(),
     };
@@ -701,6 +819,109 @@ async fn logout(State(state): State<AppState>, jar: PrivateCookieJar) -> impl In
     let cookie = Cookie::build("admin_session").path(cookie_path).build();
     let updated_jar = jar.remove(cookie);
     (updated_jar, Redirect::to(&format!("{}/", state.app_base)))
+}
+
+async fn register_form(State(state): State<AppState>, jar: PrivateCookieJar) -> impl IntoResponse {
+    if is_admin_session(&jar) {
+        return Redirect::to(&format!("{}/", state.app_base)).into_response();
+    }
+
+    let template = RegisterTemplate {
+        app_base: state.app_base,
+        app_version: APP_VERSION.to_string(),
+        error: None,
+        is_admin: false,
+    };
+    Html(template.render().unwrap()).into_response()
+}
+
+#[derive(Deserialize)]
+struct RegisterFormData {
+    email: String,
+    password: String,
+    confirm_password: String,
+}
+
+async fn register_submit(
+    State(state): State<AppState>,
+    jar: PrivateCookieJar,
+    Form(form): Form<RegisterFormData>,
+) -> impl IntoResponse {
+    if form.email.trim().is_empty() || form.password.is_empty() {
+        let template = RegisterTemplate {
+            app_base: state.app_base,
+            app_version: APP_VERSION.to_string(),
+            error: Some("Email and password cannot be empty".to_string()),
+            is_admin: false,
+        };
+        return Html(template.render().unwrap()).into_response();
+    }
+
+    if form.password != form.confirm_password {
+        let template = RegisterTemplate {
+            app_base: state.app_base,
+            app_version: APP_VERSION.to_string(),
+            error: Some("Passwords do not match".to_string()),
+            is_admin: false,
+        };
+        return Html(template.render().unwrap()).into_response();
+    }
+
+    if storage::find_user_by_email(&form.email).is_some() {
+        let template = RegisterTemplate {
+            app_base: state.app_base,
+            app_version: APP_VERSION.to_string(),
+            error: Some("A user with this email already exists".to_string()),
+            is_admin: false,
+        };
+        return Html(template.render().unwrap()).into_response();
+    }
+
+    let password_hash = match bcrypt::hash(&form.password, bcrypt::DEFAULT_COST) {
+        Ok(h) => h,
+        Err(_) => {
+            let template = RegisterTemplate {
+                app_base: state.app_base,
+                app_version: APP_VERSION.to_string(),
+                error: Some("Failed to process password".to_string()),
+                is_admin: false,
+            };
+            return Html(template.render().unwrap()).into_response();
+        }
+    };
+
+    let user_id = uuid::Uuid::new_v4().to_string();
+    let new_user = models::User {
+        id: user_id.clone(),
+        email: form.email.trim().to_string(),
+        password_hash,
+        created_at: "".to_string(),
+    };
+
+    if let Err(e) = storage::save_user(&new_user) {
+        error!("Failed to save new user: {:?}", e);
+        let template = RegisterTemplate {
+            app_base: state.app_base,
+            app_version: APP_VERSION.to_string(),
+            error: Some("Failed to register account".to_string()),
+            is_admin: false,
+        };
+        return Html(template.render().unwrap()).into_response();
+    }
+
+    let cookie_path = if state.app_base.is_empty() {
+        "/"
+    } else {
+        state.app_base
+    };
+    let cookie = Cookie::build(("admin_session", user_id))
+        .path(cookie_path)
+        .http_only(true)
+        .secure(false)
+        .same_site(SameSite::Lax)
+        .build();
+    let updated_jar = jar.add(cookie);
+    (updated_jar, Redirect::to(&format!("{}/", state.app_base))).into_response()
 }
 
 async fn login_google(State(state): State<AppState>, jar: PrivateCookieJar) -> impl IntoResponse {
@@ -937,27 +1158,42 @@ async fn login_google_callback(
             .into_response();
     }
 
-    if user_info.email.to_lowercase() == config.admin_email.to_lowercase() {
-        info!("OAuth login successful for admin: {}", user_info.email);
-        let cookie = Cookie::build(("admin_session", "true"))
-            .path(cookie_path)
-            .http_only(true)
-            .secure(false)
-            .same_site(SameSite::Lax)
-            .build();
-        let updated_jar = jar.add(cookie);
-        (updated_jar, Redirect::to(&format!("{}/", state.app_base))).into_response()
-    } else {
-        warn!("Unauthorized Google OAuth attempt: {}", user_info.email);
-        (
-            jar,
-            Redirect::to(&format!(
-                "{}/login?error=Unauthorized+email+address",
-                state.app_base
-            )),
-        )
-            .into_response()
-    }
+    let user = match storage::find_user_by_email(&user_info.email) {
+        Some(u) => u,
+        None => {
+            if user_info.email.to_lowercase() == config.admin_email.to_lowercase() {
+                let user_id = uuid::Uuid::new_v4().to_string();
+                let new_user = models::User {
+                    id: user_id.clone(),
+                    email: user_info.email.trim().to_string(),
+                    password_hash: "".to_string(),
+                    created_at: "".to_string(),
+                };
+                let _ = storage::save_user(&new_user);
+                new_user
+            } else {
+                warn!("Unauthorized Google OAuth attempt: {}", user_info.email);
+                return (
+                    jar,
+                    Redirect::to(&format!(
+                        "{}/login?error=Unauthorized+email+address",
+                        state.app_base
+                    )),
+                )
+                    .into_response();
+            }
+        }
+    };
+
+    info!("OAuth login successful for user: {}", user.email);
+    let cookie = Cookie::build(("admin_session", user.id))
+        .path(cookie_path)
+        .http_only(true)
+        .secure(false)
+        .same_site(SameSite::Lax)
+        .build();
+    let updated_jar = jar.add(cookie);
+    (updated_jar, Redirect::to(&format!("{}/", state.app_base))).into_response()
 }
 
 #[tokio::main]
@@ -1029,6 +1265,10 @@ async fn main() {
         google_oauth,
     };
 
+    let admin_email =
+        std::env::var("ADMIN_EMAIL").unwrap_or_else(|_| "dbizsley@googlemail.com".to_string());
+    storage::db_init(&state.password_hash, &admin_email).unwrap();
+
     let protected_routes = Router::new()
         .route("/new", get(new_recipe).post(create_recipe))
         .route("/edit/{id}", get(edit_recipe).post(update_recipe))
@@ -1054,18 +1294,18 @@ async fn main() {
         .route("/login", get(login_form).post(login_submit))
         .route("/login/google", get(login_google))
         .route("/login/google/callback", get(login_google_callback))
+        .route("/register", get(register_form).post(register_submit))
         .route("/logout", post(logout))
         .route("/api", get(api_guide))
         .route("/api/", get(api_guide))
         .merge(static_assets);
 
     let app = Router::new()
-        .merge(public_routes)
-        .merge(protected_routes)
-        .nest("/api/v1", api::router(state.clone()))
+        .merge(public_routes.with_state(state.clone()))
+        .merge(protected_routes.with_state(state.clone()))
+        .nest("/api/v1", api::router(state.clone()).with_state(state))
         .layer(TraceLayer::new_for_http())
-        .layer(DefaultBodyLimit::max(1024 * 1024 * 250)) // 250 MB limit
-        .with_state(state);
+        .layer(DefaultBodyLimit::max(1024 * 1024 * 250)); // 250 MB limit
 
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
     info!("Server starting at http://{}", addr);
@@ -1081,13 +1321,16 @@ mod oauth_tests {
     use http_body_util::BodyExt;
     use tower::ServiceExt;
 
-    fn build_test_app(google_config: Option<GoogleOauthConfig>) -> Router {
+    async fn build_test_app(google_config: Option<GoogleOauthConfig>) -> Router {
+        let _ = std::fs::remove_file("data/recipes.db"); // Deterministic db state
         let state = AppState {
             key: axum_extra::extract::cookie::Key::generate(),
             password_hash: "".to_string(),
             app_base: "",
             google_oauth: google_config,
         };
+
+        storage::db_init(&state.password_hash, "dbizsley@googlemail.com").unwrap();
 
         let static_assets = Router::new()
             .nest_service("/static", ServeDir::new("static"))
@@ -1098,6 +1341,7 @@ mod oauth_tests {
             .route("/login", get(login_form).post(login_submit))
             .route("/login/google", get(login_google))
             .route("/login/google/callback", get(login_google_callback))
+            .route("/register", get(register_form).post(register_submit))
             .merge(static_assets);
 
         Router::new().merge(public_routes).with_state(state)
@@ -1105,7 +1349,7 @@ mod oauth_tests {
 
     #[tokio::test]
     async fn test_google_oauth_disabled_by_default() {
-        let app = build_test_app(None);
+        let app = build_test_app(None).await;
 
         let req = Request::builder()
             .method("GET")
@@ -1129,7 +1373,7 @@ mod oauth_tests {
             redirect_uri: "http://localhost/callback".to_string(),
             admin_email: "admin@example.com".to_string(),
         };
-        let app = build_test_app(Some(config));
+        let app = build_test_app(Some(config)).await;
 
         let req = Request::builder()
             .method("GET")
@@ -1154,7 +1398,7 @@ mod oauth_tests {
             redirect_uri: "http://localhost/callback".to_string(),
             admin_email: "admin@example.com".to_string(),
         };
-        let app = build_test_app(Some(config));
+        let app = build_test_app(Some(config)).await;
 
         let req = Request::builder()
             .method("GET")
@@ -1192,7 +1436,7 @@ mod oauth_tests {
             redirect_uri: "http://localhost/callback".to_string(),
             admin_email: "admin@example.com".to_string(),
         };
-        let app = build_test_app(Some(config));
+        let app = build_test_app(Some(config)).await;
 
         let req = Request::builder()
             .method("GET")

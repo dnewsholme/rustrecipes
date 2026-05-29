@@ -112,7 +112,7 @@ struct Log7Query {
 }
 
 async fn list_recipes() -> impl IntoResponse {
-    let recipes = storage::list_recipes().await;
+    let recipes = storage::list_recipes();
     let summaries = recipes
         .into_iter()
         .map(|r| {
@@ -150,7 +150,7 @@ async fn get_recipe(
     Path(id): Path<String>,
     axum::extract::Query(query): axum::extract::Query<GetRecipeQuery>,
 ) -> impl IntoResponse {
-    match storage::read_recipe(&id).await {
+    match storage::read_recipe(&id) {
         Some(recipe) => {
             let converted = crate::conversions::convert_recipe(
                 recipe,
@@ -166,7 +166,7 @@ async fn get_recipe(
 }
 
 async fn create_recipe(Json(recipe): Json<Recipe>) -> impl IntoResponse {
-    match storage::save_recipe(&recipe).await {
+    match storage::save_recipe(&recipe) {
         Ok(_) => (StatusCode::CREATED, Json(recipe)).into_response(),
         Err(e) => {
             error!("Failed to create recipe: {}", e);
@@ -190,7 +190,7 @@ struct ShoppingListResponse {
 async fn generate_shopping_list(Json(payload): Json<ShoppingListRequest>) -> impl IntoResponse {
     let mut recipes = Vec::new();
     for id in &payload.recipe_ids {
-        if let Some(r) = storage::read_recipe(id).await {
+        if let Some(r) = storage::read_recipe(id) {
             recipes.push(r);
         }
     }
@@ -208,12 +208,13 @@ async fn generate_shopping_list(Json(payload): Json<ShoppingListRequest>) -> imp
     Json(ShoppingListResponse { ingredients }).into_response()
 }
 
+#[axum::debug_handler]
 async fn update_recipe(
     Path(id): Path<String>,
     Json(mut recipe): Json<Recipe>,
 ) -> impl IntoResponse {
     recipe.id = id.clone();
-    match storage::save_recipe(&recipe).await {
+    match storage::save_recipe(&recipe) {
         Ok(_) => Json(recipe).into_response(),
         Err(e) => {
             error!("Failed to update recipe {}: {}", id, e);
@@ -223,7 +224,7 @@ async fn update_recipe(
 }
 
 async fn delete_recipe(Path(id): Path<String>) -> impl IntoResponse {
-    match storage::delete_recipe(&id).await {
+    match storage::delete_recipe(&id) {
         Ok(_) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => {
             error!("Failed to delete recipe {}: {}", id, e);
@@ -446,12 +447,12 @@ async fn get_meal_plan(
         return Err(StatusCode::UNAUTHORIZED);
     }
 
-    let meals = storage::read_meal_plan().await;
+    let meals = storage::read_meal_plan();
     let mut items = Vec::new();
     for meal in meals {
         let title = if meal.recipe_id.starts_with("manual:") {
             meal.recipe_id.trim_start_matches("manual:").to_string()
-        } else if let Some(recipe) = storage::read_recipe(&meal.recipe_id).await {
+        } else if let Some(recipe) = storage::read_recipe(&meal.recipe_id) {
             recipe.title
         } else {
             meal.recipe_id.clone()
@@ -475,7 +476,7 @@ async fn add_to_meal_plan(
         return Err(StatusCode::UNAUTHORIZED);
     }
 
-    let mut meals = storage::read_meal_plan().await;
+    let mut meals = storage::read_meal_plan();
     for id in payload.recipe_ids {
         if !meals.iter().any(|m| m.recipe_id == id) {
             meals.push(crate::models::PlannedMeal {
@@ -485,7 +486,7 @@ async fn add_to_meal_plan(
         }
     }
 
-    if storage::save_meal_plan(&meals).await.is_err() {
+    if storage::save_meal_plan(&meals).is_err() {
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     }
 
@@ -500,7 +501,7 @@ async fn toggle_meal_plan(
         return Err(StatusCode::UNAUTHORIZED);
     }
 
-    let mut meals = storage::read_meal_plan().await;
+    let mut meals = storage::read_meal_plan();
     let mut found = false;
     for meal in &mut meals {
         if meal.recipe_id == payload.recipe_id {
@@ -514,7 +515,7 @@ async fn toggle_meal_plan(
         return Err(StatusCode::NOT_FOUND);
     }
 
-    if storage::save_meal_plan(&meals).await.is_err() {
+    if storage::save_meal_plan(&meals).is_err() {
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     }
 
@@ -528,7 +529,7 @@ async fn clear_meal_plan(
         return Err(StatusCode::UNAUTHORIZED);
     }
 
-    if storage::save_meal_plan(&[]).await.is_err() {
+    if storage::save_meal_plan(&[]).is_err() {
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     }
 
@@ -545,6 +546,8 @@ mod tests {
     use tower::ServiceExt;
 
     fn test_state() -> AppState {
+        let _ = std::fs::create_dir_all("data");
+        let _ = storage::db_init("", "dbizsley@googlemail.com");
         AppState {
             key: axum_extra::extract::cookie::Key::generate(),
             password_hash: "".to_string(),
@@ -600,6 +603,10 @@ mod tests {
         }
         let app = router(state.clone()).with_state(state);
 
+        let owner_id = storage::find_user_by_email("dbizsley@googlemail.com")
+            .map(|u| u.id)
+            .unwrap_or_else(|| "admin".to_string());
+
         let test_id = "api-test-recipe";
         let recipe = Recipe {
             id: test_id.to_string(),
@@ -617,6 +624,8 @@ mod tests {
             combustion_csv: None,
             video_url: None,
             favorite: false,
+            owner_id,
+            is_public: true,
         };
 
         // 1. Create
@@ -692,7 +701,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         let body = response.into_body().collect().await.unwrap().to_bytes();
         let temps: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert!(temps.as_array().unwrap().len() > 0);
+        assert!(!temps.as_array().unwrap().is_empty());
 
         // Test /log7
         let req = Request::builder()

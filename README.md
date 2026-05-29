@@ -65,7 +65,13 @@ A lightning-fast, highly-customizable recipe manager built in Rust. It's designe
 - **Cooking Temperatures & Safety**: 
   - **Meat Temp Reference**: A dedicated reference page for internal meat temperatures and doneness levels, covering everything from rare steak to low & slow BBQ brisket.
   - **USDA Log 7 Calculator**: Interactive calculator for poultry safety. Achieve perfectly juicy chicken at lower temperatures by calculating the required hold time for safe Salmonella lethality.
-- **Secure Admin Login**: Protect your recipes from unauthorized edits or imports. Set an `ADMIN_PASSWORD_HASH` environment variable to restrict modifying actions to yourself while keeping the site read-only for guests.
+- **Multi-User Workspace & Access Controls**:
+  - **SQLite Database Persistence**: Migrated from flat Markdown files to a robust, synchronous SQLite database layer (`recipes.db`).
+  - **Zero-Downtime Data Migration**: Automatically ingests existing `data/recipes/*.md` files into SQLite on boot, associating them with the seeded admin account and marking them public by default to preserve pre-existing share links.
+  - **Self-Service Registration & Multi-User Support**: Anyone can sign up for an account. Passwords are securely hashed with `bcrypt`.
+  - **Public/Private Recipe Visibility**: Toggle individual recipes as "Public" (viewable to anyone via a shared read-only link) or keep them private to your own account.
+  - **Granular Ownership Enforcements**: Mutating operations (editing, deleting, uploading images/CSV) are strictly restricted to the recipe's verified creator.
+- **Secure Admin & OAuth Login**: Authenticate with standard credentials (email and password) or configure **Google OAuth 2.0** for seamless one-tap login.
 - **Developer-Friendly API**: Comprehensive REST API (v1) for programmatic recipe management, enabling future mobile app integrations or custom automation workflows.
 - **Multi-Select Shopping List**:
   - Select multiple recipes from the home page.
@@ -126,7 +132,11 @@ Copy the output (e.g., `$2y$12$...`) and use it as the value for `ADMIN_PASSWORD
 ## 🚀 Running Locally (Development)
 
 **Environment Variables**:
+- `ADMIN_EMAIL`: The default administrator email (defaults to `dbizsley@googlemail.com`). Used for initial seeding and Google OAuth mapping.
 - `ADMIN_PASSWORD_HASH`: Required for secure login. See the section above to generate your hash. If omitted, the default temporary password is "admin".
+- `GOOGLE_CLIENT_ID`: (Optional) Google OAuth Client ID for setting up Google Login.
+- `GOOGLE_CLIENT_SECRET`: (Optional) Google OAuth Client Secret.
+- `GOOGLE_REDIRECT_URI`: (Optional) Redirect URI for Google OAuth (defaults to `<app_base>/login/google/callback`).
 - `API_TOKEN`: (Required for API write access) A secure token for authenticating API requests.
 - `SESSION_SECRET`: (Optional but recommended) A long random string used to cryptographically sign session cookies. If omitted, sessions will reset every time the server restarts.
 - `GEMINI_API_KEY`: Required if you want to use the AI Photo Import or Video URL Import features. You can get a free key from [Google AI Studio](https://aistudio.google.com/app/apikey).
@@ -172,8 +182,9 @@ docker run -d \
 ```
 
 ### Data Directory Structure
-The `/app/data` volume contains two critical subdirectories:
-- `recipes/`: Contains the markdown files (`.md`) representing your saved recipes.
-- `uploads/`: Contains any images or Combustion CSV files you have uploaded.
+The `/app/data` volume contains:
+- `recipes.db`: The SQLite database containing all users, recipes, and meal plans.
+- `uploads/`: Contains any cover images or Combustion CSV files you have uploaded.
+- `recipes/`: (Legacy) If you are migrating from a previous version, place your legacy `.md` files here. The application will automatically ingest them into `recipes.db` and rename them to `.md.bak` at startup.
 
 ---
