@@ -162,6 +162,44 @@ pub fn db_init(
         }
     }
 
+    // AUTOMATIC MEAL PLAN MIGRATION FROM JSON FILE
+    let meal_plan_path = std::path::Path::new("data/meal_plan.json");
+    if meal_plan_path.exists() {
+        if let Ok(content) = std::fs::read_to_string(meal_plan_path) {
+            if let Ok(meals) = serde_json::from_str::<Vec<crate::models::PlannedMeal>>(&content) {
+                let mut migrated_meals_count = 0;
+                for meal in meals {
+                    // Check if it already exists in the table to avoid primary key conflict
+                    let mut stmt =
+                        conn.prepare("SELECT COUNT(*) FROM meal_plans WHERE recipe_id = ?1")?;
+                    let exists: i64 = stmt.query_row([&meal.recipe_id], |row| row.get(0))?;
+                    if exists == 0 {
+                        let checked_int = if meal.checked { 1 } else { 0 };
+                        if conn
+                            .execute(
+                                "INSERT INTO meal_plans (recipe_id, checked) VALUES (?1, ?2)",
+                                (&meal.recipe_id, checked_int),
+                            )
+                            .is_ok()
+                        {
+                            migrated_meals_count += 1;
+                        }
+                    }
+                }
+                if migrated_meals_count > 0 {
+                    tracing::info!(
+                        "Successfully migrated {} planned meals from JSON into SQLite!",
+                        migrated_meals_count
+                    );
+                }
+            }
+        }
+        // Rename the meal_plan.json to meal_plan.json.bak to prevent duplicate migration runs
+        let mut bak_path = meal_plan_path.to_path_buf();
+        bak_path.set_extension("json.bak");
+        let _ = std::fs::rename(meal_plan_path, bak_path);
+    }
+
     Ok(())
 }
 
