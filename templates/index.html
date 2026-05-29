@@ -244,15 +244,15 @@
                 </svg>
                 Favorites
             </button>
-            <button class="action-filter-btn" id="hide-public-btn" onclick="toggleHidePublicFilter()"
+            <button class="action-filter-btn" id="show-public-btn" onclick="toggleShowPublicFilter()"
                 style="background: var(--bg-color); border: 1px solid var(--border-color); padding: 0.35rem 0.85rem; border-radius: 20px; font-size: 0.85rem; color: var(--text-secondary); cursor: pointer; transition: var(--transition); display: flex; align-items: center; gap: 0.4rem;"
-                title="Hide Public Recipes">
+                title="Show Public Recipes">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                     stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
-                    <line x1="1" y1="1" x2="23" y2="23"></line>
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
                 </svg>
-                Hide Public
+                Show Public
             </button>
         </div>
         <div id="user-tags-container" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
@@ -271,6 +271,7 @@
     {% for recipe in recipes %}
     <div class="recipe-card" style="position: relative;"
         data-public="{{ recipe.is_public }}"
+        data-owned="{{ recipe.is_owned_by(current_user_id) }}"
         data-search='{{ recipe.title }} {{ recipe.tags.join(" ") }} {{ recipe.ingredients.join(" ") }} {% match recipe.description %}{% when Some with (d) %}{{ d }}{% when None %}{% endmatch %} {% if recipe.has_video() %}has-video{% endif %} {% if recipe.has_combustion() %}has-combustion{% endif %} {% if recipe.favorite %}is-favorite{% endif %}'
         data-tags='{{ recipe.tags.join(",") }}{% if recipe.has_video() %},has-video{% endif %}{% if recipe.has_combustion() %},has-combustion{% endif %}{% if recipe.favorite %},is-favorite{% endif %}'>
         
@@ -545,7 +546,7 @@
     const tagSearchInput = document.getElementById('tag-search');
     const clearBtn = document.getElementById('clear-search-btn');
     let activeTags = new Set();
-    let hidePublic = false;
+    let showPublic = false;
 
     function filterRecipes() {
         const query = searchInput.value.toLowerCase();
@@ -567,13 +568,13 @@
                 }
             });
 
-            // Check if hiding public recipes
-            let matchesPublic = true;
-            if (hidePublic && card.dataset.public === "true") {
-                matchesPublic = false;
+            // By default, public recipes owned by others are hidden unless showPublic is true
+            let matchesPublicShow = true;
+            if (!showPublic && card.dataset.public === "true" && card.dataset.owned === "false") {
+                matchesPublicShow = false;
             }
 
-            if (matchesSearch && matchesTags && matchesPublic) {
+            if (matchesSearch && matchesTags && matchesPublicShow) {
                 card.style.display = 'block';
                 // Collect tags from this visible recipe
                 tags.forEach(t => {
@@ -602,18 +603,18 @@
             }
         });
 
-        if (query || activeTags.size > 0 || hidePublic) {
+        if (query || activeTags.size > 0 || showPublic) {
             clearBtn.style.display = 'block';
         } else {
             clearBtn.style.display = 'none';
         }
     }
 
-    function toggleHidePublicFilter() {
-        const btn = document.getElementById('hide-public-btn');
+    function toggleShowPublicFilter() {
+        const btn = document.getElementById('show-public-btn');
         if (!btn) return;
-        hidePublic = !hidePublic;
-        if (hidePublic) {
+        showPublic = !showPublic;
+        if (showPublic) {
             btn.style.background = 'var(--accent-color)';
             btn.style.color = 'white';
             btn.style.borderColor = 'var(--accent-color)';
@@ -657,13 +658,13 @@
         searchInput.value = '';
         if (tagSearchInput) tagSearchInput.value = '';
         activeTags.clear();
-        hidePublic = false;
+        showPublic = false;
         
-        const hpBtn = document.getElementById('hide-public-btn');
-        if (hpBtn) {
-            hpBtn.style.background = 'var(--bg-color)';
-            hpBtn.style.color = 'var(--text-secondary)';
-            hpBtn.style.borderColor = 'var(--border-color)';
+        const spBtn = document.getElementById('show-public-btn');
+        if (spBtn) {
+            spBtn.style.background = 'var(--bg-color)';
+            spBtn.style.color = 'var(--text-secondary)';
+            spBtn.style.borderColor = 'var(--border-color)';
         }
 
         document.querySelectorAll('.tag-filter-btn').forEach(btn => {

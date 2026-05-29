@@ -46,6 +46,13 @@ pub struct User {
 }
 
 impl Recipe {
+    pub fn is_owned_by(&self, user_id: &Option<String>) -> bool {
+        if let Some(uid) = user_id {
+            &self.owner_id == uid
+        } else {
+            false
+        }
+    }
     pub fn has_tag(&self, tag: &str) -> bool {
         self.tags
             .iter()

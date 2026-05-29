@@ -52,6 +52,7 @@ struct IndexTemplate {
     app_base: &'static str,
     app_version: String,
     is_admin: bool,
+    current_user_id: Option<String>,
 }
 
 #[derive(Template)]
@@ -351,6 +352,7 @@ async fn index(State(state): State<AppState>, jar: PrivateCookieJar) -> impl Int
         app_base: state.app_base,
         app_version: APP_VERSION.to_string(),
         is_admin: is_admin_session(&jar),
+        current_user_id: user_id.clone(),
     };
     Html(template.render().unwrap())
 }
