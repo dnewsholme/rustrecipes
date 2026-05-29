@@ -4,6 +4,7 @@ import * as path from 'path';
 
 export async function login(page: Page) {
   await page.goto('/login');
+  await page.fill('input[name="email"]', 'admin');
   await page.fill('input[name="password"]', process.env.ADMIN_PASSWORD || 'admin');
   await page.click('button[type="submit"]');
   

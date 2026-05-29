@@ -5,6 +5,7 @@ test.describe('Recipe Imports', () => {
     test.setTimeout(120000); // Allow more time for external imports
     // Login as admin (required for imports)
     await page.goto('/login');
+    await page.fill('input[name="email"]', 'admin');
     await page.fill('input[name="password"]', process.env.ADMIN_PASSWORD || 'admin');
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL('/');

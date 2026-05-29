@@ -5,6 +5,7 @@ test.describe('Combustion Data', () => {
   test.beforeEach(async ({ page }) => {
     // Login as admin
     await page.goto('/login');
+    await page.fill('input[name="email"]', 'admin');
     await page.fill('input[name="password"]', process.env.ADMIN_PASSWORD || 'admin');
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL('/');
