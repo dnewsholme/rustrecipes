@@ -244,7 +244,7 @@
                 </svg>
                 Favorites
             </button>
-            <button class="tag-filter-btn" id="hide-public-btn" onclick="toggleHidePublicFilter()"
+            <button class="action-filter-btn" id="hide-public-btn" onclick="toggleHidePublicFilter()"
                 style="background: var(--bg-color); border: 1px solid var(--border-color); padding: 0.35rem 0.85rem; border-radius: 20px; font-size: 0.85rem; color: var(--text-secondary); cursor: pointer; transition: var(--transition); display: flex; align-items: center; gap: 0.4rem;"
                 title="Hide Public Recipes">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -589,8 +589,6 @@
         const tagQuery = tagSearchInput?.value.toLowerCase() || "";
 
         tagButtons.forEach(btn => {
-            if (btn.id === 'hide-public-btn') return;
-
             const tag = btn.dataset.tag?.toLowerCase() || "";
             const label = btn.innerText.toLowerCase();
 
@@ -669,7 +667,6 @@
         }
 
         document.querySelectorAll('.tag-filter-btn').forEach(btn => {
-            if (btn.id === 'hide-public-btn') return;
             btn.style.background = 'var(--bg-color)';
             btn.style.color = 'var(--text-secondary)';
             btn.style.borderColor = 'var(--border-color)';
