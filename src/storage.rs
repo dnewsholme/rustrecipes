@@ -101,35 +101,57 @@ pub fn db_init(
     };
 
     // AUTOMATIC DATA MIGRATION FROM FLAT MARKDOWN FILES
+    // Clean up any bad legacy migration entries with empty string IDs
+    let _ = conn.execute("DELETE FROM recipes WHERE id = ''", []);
+
     let dir = get_recipes_dir();
     if let Ok(entries) = std::fs::read_dir(&dir) {
         let mut migrated_count = 0;
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.extension().and_then(|e| e.to_str()) == Some("md") {
-                if let Some(id) = path.file_stem().and_then(|s| s.to_str()) {
-                    let mut stmt = conn.prepare("SELECT COUNT(*) FROM recipes WHERE id = ?1")?;
-                    let exists: i64 = stmt.query_row([id], |row| row.get(0))?;
-                    if exists == 0 {
-                        if let Some(mut recipe) = read_recipe_file(&path) {
-                            recipe.owner_id = admin_id.clone();
-                            recipe.is_public = true; // backward compatibility
-                            if let Err(e) = save_recipe_db(&conn, &recipe) {
-                                tracing::error!(
-                                    "Failed to migrate recipe {}: {:?}",
-                                    recipe.title,
-                                    e
-                                );
-                            } else {
-                                migrated_count += 1;
-                            }
-                        }
+            let filename = match path.file_name().and_then(|s| s.to_str()) {
+                Some(f) => f,
+                None => continue,
+            };
+
+            let (id, is_bak) = if let Some(stripped) = filename.strip_suffix(".md.bak") {
+                (stripped.to_string(), true)
+            } else if let Some(stripped) = filename.strip_suffix(".md") {
+                (stripped.to_string(), false)
+            } else {
+                continue;
+            };
+
+            // Skip special files like ".md"
+            if id.is_empty() {
+                continue;
+            }
+
+            let mut stmt = conn.prepare("SELECT COUNT(*) FROM recipes WHERE id = ?1")?;
+            let exists: i64 = stmt.query_row([&id], |row| row.get(0))?;
+            if exists == 0 {
+                if let Some(mut recipe) = read_recipe_file(&path) {
+                    recipe.id = id.clone();
+                    recipe.owner_id = admin_id.clone();
+                    recipe.is_public = true; // backward compatibility
+                    if let Err(e) = save_recipe_db(&conn, &recipe) {
+                        tracing::error!(
+                            "Failed to migrate recipe {} (ID: {}): {:?}",
+                            recipe.title,
+                            id,
+                            e
+                        );
+                    } else {
+                        migrated_count += 1;
                     }
-                    // Rename the file to md.bak to prevent duplicate migration runs
-                    let mut bak_path = path.clone();
-                    bak_path.set_extension("md.bak");
-                    let _ = std::fs::rename(&path, bak_path);
                 }
+            }
+
+            // For .md files, rename them to .md.bak to prevent duplicate migration runs in future
+            if !is_bak {
+                let mut bak_path = path.clone();
+                bak_path.set_extension("md.bak");
+                let _ = std::fs::rename(&path, bak_path);
             }
         }
         if migrated_count > 0 {
