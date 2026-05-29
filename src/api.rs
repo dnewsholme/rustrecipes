@@ -629,6 +629,7 @@ mod tests {
             favorite: false,
             owner_id,
             is_public: true,
+            owner_email: None,
         };
 
         // 1. Create

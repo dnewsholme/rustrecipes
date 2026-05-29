@@ -504,6 +504,7 @@ mod tests {
             favorite: false,
             owner_id: "admin".to_string(),
             is_public: true,
+            owner_email: None,
         };
 
         // Scale by 2
@@ -546,6 +547,7 @@ mod tests {
             favorite: false,
             owner_id: "admin".to_string(),
             is_public: true,
+            owner_email: None,
         };
 
         let bakers = convert_recipe(r.clone(), None, None, None, true);
@@ -574,6 +576,7 @@ mod tests {
             favorite: false,
             owner_id: "admin".to_string(),
             is_public: true,
+            owner_email: None,
         };
 
         let r2 = Recipe {
@@ -598,6 +601,7 @@ mod tests {
             favorite: false,
             owner_id: "admin".to_string(),
             is_public: true,
+            owner_email: None,
         };
 
         let res = crate::conversions::generate_combined_shopping_list(vec![r1, r2], 4, "metric");

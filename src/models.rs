@@ -33,6 +33,8 @@ pub struct Recipe {
     pub owner_id: String,
     #[serde(default = "default_true")]
     pub is_public: bool,
+    #[serde(default)]
+    pub owner_email: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

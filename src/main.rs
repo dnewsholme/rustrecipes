@@ -416,6 +416,7 @@ async fn new_recipe(State(state): State<AppState>, jar: PrivateCookieJar) -> imp
             favorite: false,
             owner_id: "admin".to_string(),
             is_public: true,
+            owner_email: None,
         },
         is_new: true,
         app_base: state.app_base,
@@ -463,6 +464,7 @@ async fn create_recipe(
         favorite: false,
         owner_id: user_id,
         is_public: form.is_public,
+        owner_email: None,
     };
     let _ = storage::save_recipe(&recipe);
     let redirect_url = format!("{}/recipe/{}", state.app_base, id);

@@ -244,6 +244,16 @@
                 </svg>
                 Favorites
             </button>
+            <button class="tag-filter-btn" id="hide-public-btn" onclick="toggleHidePublicFilter()"
+                style="background: var(--bg-color); border: 1px solid var(--border-color); padding: 0.35rem 0.85rem; border-radius: 20px; font-size: 0.85rem; color: var(--text-secondary); cursor: pointer; transition: var(--transition); display: flex; align-items: center; gap: 0.4rem;"
+                title="Hide Public Recipes">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                    <line x1="1" y1="1" x2="23" y2="23"></line>
+                </svg>
+                Hide Public
+            </button>
         </div>
         <div id="user-tags-container" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
             {% for tag in all_tags %}
@@ -260,6 +270,7 @@
 <div class="recipe-grid">
     {% for recipe in recipes %}
     <div class="recipe-card" style="position: relative;"
+        data-public="{{ recipe.is_public }}"
         data-search='{{ recipe.title }} {{ recipe.tags.join(" ") }} {{ recipe.ingredients.join(" ") }} {% match recipe.description %}{% when Some with (d) %}{{ d }}{% when None %}{% endmatch %} {% if recipe.has_video() %}has-video{% endif %} {% if recipe.has_combustion() %}has-combustion{% endif %} {% if recipe.favorite %}is-favorite{% endif %}'
         data-tags='{{ recipe.tags.join(",") }}{% if recipe.has_video() %},has-video{% endif %}{% if recipe.has_combustion() %},has-combustion{% endif %}{% if recipe.favorite %},is-favorite{% endif %}'>
         
@@ -416,6 +427,19 @@
                 </span>
                 {% when None %}
                 {% endmatch %}
+                {% match recipe.owner_email %}
+                {% when Some with (email) %}
+                <span
+                    style="font-size: 0.85rem; color: var(--text-secondary); display: flex; align-items: center; gap: 0.25rem;" title="Owner">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="12" cy="7" r="4"></circle>
+                    </svg>
+                    {{ email }}
+                </span>
+                {% when None %}
+                {% endmatch %}
             </div>
             <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
                 {% for tag in recipe.tags %}
@@ -521,6 +545,7 @@
     const tagSearchInput = document.getElementById('tag-search');
     const clearBtn = document.getElementById('clear-search-btn');
     let activeTags = new Set();
+    let hidePublic = false;
 
     function filterRecipes() {
         const query = searchInput.value.toLowerCase();
@@ -542,7 +567,13 @@
                 }
             });
 
-            if (matchesSearch && matchesTags) {
+            // Check if hiding public recipes
+            let matchesPublic = true;
+            if (hidePublic && card.dataset.public === "true") {
+                matchesPublic = false;
+            }
+
+            if (matchesSearch && matchesTags && matchesPublic) {
                 card.style.display = 'block';
                 // Collect tags from this visible recipe
                 tags.forEach(t => {
@@ -558,7 +589,9 @@
         const tagQuery = tagSearchInput?.value.toLowerCase() || "";
 
         tagButtons.forEach(btn => {
-            const tag = btn.dataset.tag.toLowerCase();
+            if (btn.id === 'hide-public-btn') return;
+
+            const tag = btn.dataset.tag?.toLowerCase() || "";
             const label = btn.innerText.toLowerCase();
 
             const matchesTagSearch = !tagQuery || tag.includes(tagQuery) || label.includes(tagQuery);
@@ -571,11 +604,27 @@
             }
         });
 
-        if (query || activeTags.size > 0) {
+        if (query || activeTags.size > 0 || hidePublic) {
             clearBtn.style.display = 'block';
         } else {
             clearBtn.style.display = 'none';
         }
+    }
+
+    function toggleHidePublicFilter() {
+        const btn = document.getElementById('hide-public-btn');
+        if (!btn) return;
+        hidePublic = !hidePublic;
+        if (hidePublic) {
+            btn.style.background = 'var(--accent-color)';
+            btn.style.color = 'white';
+            btn.style.borderColor = 'var(--accent-color)';
+        } else {
+            btn.style.background = 'var(--bg-color)';
+            btn.style.color = 'var(--text-secondary)';
+            btn.style.borderColor = 'var(--border-color)';
+        }
+        filterRecipes();
     }
 
     function toggleTagFilter(tag) {
@@ -610,7 +659,17 @@
         searchInput.value = '';
         if (tagSearchInput) tagSearchInput.value = '';
         activeTags.clear();
+        hidePublic = false;
+        
+        const hpBtn = document.getElementById('hide-public-btn');
+        if (hpBtn) {
+            hpBtn.style.background = 'var(--bg-color)';
+            hpBtn.style.color = 'var(--text-secondary)';
+            hpBtn.style.borderColor = 'var(--border-color)';
+        }
+
         document.querySelectorAll('.tag-filter-btn').forEach(btn => {
+            if (btn.id === 'hide-public-btn') return;
             btn.style.background = 'var(--bg-color)';
             btn.style.color = 'var(--text-secondary)';
             btn.style.borderColor = 'var(--border-color)';

@@ -240,16 +240,20 @@ pub fn list_recipes_for_user(user_id: Option<&str>) -> Vec<Recipe> {
 
     let mut stmt = match user_id {
         Some(_) => conn.prepare(
-            "SELECT id, title, description, image, source_url, tags, servings, 
-                    prep_time, cook_time, ingredients, markdown, combustion_csv, 
-                    video_url, favorite, owner_id, is_public 
-             FROM recipes WHERE is_public = 1 OR owner_id = ?1",
+            "SELECT r.id, r.title, r.description, r.image, r.source_url, r.tags, r.servings, 
+                    r.prep_time, r.cook_time, r.ingredients, r.markdown, r.combustion_csv, 
+                    r.video_url, r.favorite, r.owner_id, r.is_public, u.email 
+             FROM recipes r
+             LEFT JOIN users u ON r.owner_id = u.id
+             WHERE r.is_public = 1 OR r.owner_id = ?1",
         ),
         None => conn.prepare(
-            "SELECT id, title, description, image, source_url, tags, servings, 
-                    prep_time, cook_time, ingredients, markdown, combustion_csv, 
-                    video_url, favorite, owner_id, is_public 
-             FROM recipes WHERE is_public = 1",
+            "SELECT r.id, r.title, r.description, r.image, r.source_url, r.tags, r.servings, 
+                    r.prep_time, r.cook_time, r.ingredients, r.markdown, r.combustion_csv, 
+                    r.video_url, r.favorite, r.owner_id, r.is_public, u.email 
+             FROM recipes r
+             LEFT JOIN users u ON r.owner_id = u.id
+             WHERE r.is_public = 1",
         ),
     }
     .unwrap();
@@ -265,6 +269,7 @@ pub fn list_recipes_for_user(user_id: Option<&str>) -> Vec<Recipe> {
         let ingredients = ingredients_str.lines().map(|s| s.to_string()).collect();
         let is_public_int: i32 = row.get(15)?;
         let favorite_int: i32 = row.get(13)?;
+        let owner_email: Option<String> = row.get(16)?;
 
         let mut recipe = Recipe {
             id: row.get(0)?,
@@ -284,6 +289,7 @@ pub fn list_recipes_for_user(user_id: Option<&str>) -> Vec<Recipe> {
             favorite: favorite_int != 0,
             owner_id: row.get(14)?,
             is_public: is_public_int != 0,
+            owner_email,
         };
 
         let parser = Parser::new(&recipe.markdown);
@@ -311,10 +317,12 @@ pub fn read_recipe(id: &str) -> Option<Recipe> {
     let conn = rusqlite::Connection::open(get_db_path()).ok()?;
     let mut stmt = conn
         .prepare(
-            "SELECT id, title, description, image, source_url, tags, servings, 
-                    prep_time, cook_time, ingredients, markdown, combustion_csv, 
-                    video_url, favorite, owner_id, is_public 
-             FROM recipes WHERE id = ?1",
+            "SELECT r.id, r.title, r.description, r.image, r.source_url, r.tags, r.servings, 
+                    r.prep_time, r.cook_time, r.ingredients, r.markdown, r.combustion_csv, 
+                    r.video_url, r.favorite, r.owner_id, r.is_public, u.email 
+             FROM recipes r
+             LEFT JOIN users u ON r.owner_id = u.id
+             WHERE r.id = ?1",
         )
         .ok()?;
 
@@ -329,6 +337,7 @@ pub fn read_recipe(id: &str) -> Option<Recipe> {
         let ingredients = ingredients_str.lines().map(|s| s.to_string()).collect();
         let is_public_int: i32 = row.get(15)?;
         let favorite_int: i32 = row.get(13)?;
+        let owner_email: Option<String> = row.get(16)?;
 
         let mut recipe = Recipe {
             id: row.get(0)?,
@@ -348,6 +357,7 @@ pub fn read_recipe(id: &str) -> Option<Recipe> {
             favorite: favorite_int != 0,
             owner_id: row.get(14)?,
             is_public: is_public_int != 0,
+            owner_email,
         };
 
         let parser = Parser::new(&recipe.markdown);
@@ -554,6 +564,7 @@ mod tests {
             favorite: false,
             owner_id: admin_id,
             is_public: true,
+            owner_email: None,
         };
 
         save_recipe(&recipe).unwrap();

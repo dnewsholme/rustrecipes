@@ -210,6 +210,7 @@ pub async fn import_recipe_from_text(text: &str) -> Result<Recipe, ImportError> 
                     favorite: false,
                     owner_id: "admin".to_string(),
                     is_public: true,
+                    owner_email: None,
                 })
             }
             Err(e) => {
@@ -351,6 +352,7 @@ fn convert_ld_to_recipe(ld: LdRecipe, url: &str) -> Recipe {
         favorite: false,
         owner_id: "admin".to_string(),
         is_public: true,
+        owner_email: None,
     }
 }
 
@@ -538,6 +540,7 @@ pub async fn import_paprika_archive(bytes: &[u8]) -> Vec<Recipe> {
                             favorite: false,
                             owner_id: "admin".to_string(),
                             is_public: true,
+                            owner_email: None,
                         };
                         imported.push(recipe);
                     }
@@ -690,6 +693,7 @@ pub async fn import_recipe_from_photo(
                     favorite: false,
                     owner_id: "admin".to_string(),
                     is_public: true,
+                    owner_email: None,
                 })
             }
             Err(e) => {

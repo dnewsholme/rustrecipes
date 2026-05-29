@@ -398,7 +398,7 @@
             <div class="ingredients-header-row"
                 style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1rem;">
                 <h2 style="margin: 0; border: none; padding: 0;">Ingredients</h2>
-                <div class="ingredients-meta-box" style="display: flex; align-items: center; gap: 1rem;">
+                <div class="ingredients-meta-box" style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
                     {% match recipe.servings %}
                     {% when Some with (s) %}
                     <span style="color: var(--text-secondary);">Servings: <strong id="servings-count"
@@ -429,6 +429,18 @@
                             <line x1="14" y1="1" x2="14" y2="4"></line>
                         </svg>
                         Cook: <strong style="color: var(--text-primary);">{{ t }}</strong>
+                    </span>
+                    {% when None %}
+                    {% endmatch %}
+                    {% match recipe.owner_email %}
+                    {% when Some with (email) %}
+                    <span style="color: var(--text-secondary); display: flex; align-items: center; gap: 0.25rem;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="12" cy="7" r="4"></circle>
+                        </svg>
+                        Owner: <strong style="color: var(--text-primary);">{{ email }}</strong>
                     </span>
                     {% when None %}
                     {% endmatch %}
