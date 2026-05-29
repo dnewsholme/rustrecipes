@@ -47,7 +47,9 @@ async fn require_api_token(
     let path = req.uri().path();
     if method == axum::http::Method::GET
         || path == "/shopping-list"
+        || path == "/api/v1/shopping-list"
         || path.starts_with("/meal-plan")
+        || path.starts_with("/api/v1/meal-plan")
     {
         return Ok(next.run(req).await);
     }
@@ -434,7 +436,8 @@ struct ToggleMealRequest {
 
 fn is_admin_session(jar: &axum_extra::extract::cookie::PrivateCookieJar) -> bool {
     if let Some(c) = jar.get("admin_session") {
-        c.value() == "true"
+        let val = c.value();
+        val == "true" || !val.is_empty()
     } else {
         false
     }
