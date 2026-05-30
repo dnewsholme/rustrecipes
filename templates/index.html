@@ -515,7 +515,7 @@
 {% block scripts %}
 <script>
     const currentUserId = "{% match current_user_id %}{% when Some with (uid) %}{{ uid }}{% when None %}{% endmatch %}";
-    // Handle import=true query parameter
+    // Handle import=true or shopping_list=true query parameters
     window.addEventListener('DOMContentLoaded', () => {
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get('import') === 'true') {
@@ -527,6 +527,12 @@
                 const newUrl = window.location.pathname;
                 window.history.replaceState({}, '', newUrl);
             }
+        }
+        if (urlParams.get('shopping_list') === 'true') {
+            loadSavedShoppingList();
+            // Clean up URL without reloading
+            const newUrl = window.location.pathname;
+            window.history.replaceState({}, '', newUrl);
         }
     });
 
@@ -763,46 +769,8 @@
 
             if (response.ok) {
                 const data = await response.json();
-                const ul = document.getElementById('shopping-list-ul');
-                ul.innerHTML = '';
-                
-                if (data.ingredients.length === 0) {
-                    ul.innerHTML = '<li style="color: var(--text-secondary); text-align: center; padding: 1rem;">No ingredients found.</li>';
-                } else {
-                    data.ingredients.forEach(ing => {
-                        const li = document.createElement('li');
-                        li.className = 'shopping-item';
-                        
-                        // Add a checkbox icon for better UX
-                        const icon = document.createElement('span');
-                        icon.innerHTML = '&#9744;'; // Empty checkbox
-                        icon.style.fontSize = '1.2rem';
-                        icon.style.marginRight = '0.5rem';
-                        icon.className = 'check-icon';
-                        
-                        const textSpan = document.createElement('span');
-                        textSpan.textContent = ing;
-                        
-                        li.appendChild(icon);
-                        li.appendChild(textSpan);
-                        ul.appendChild(li);
-                    });
-                    
-                    ul.onclick = function(e) {
-                        const li = e.target.closest('li.shopping-item');
-                        if (!li) return;
-                        li.classList.toggle('purchased');
-                        const icon = li.querySelector('.check-icon');
-                        if (li.classList.contains('purchased')) {
-                            icon.innerHTML = '&#9745;'; // Checked box
-                            icon.style.color = '#27ae60';
-                        } else {
-                            icon.innerHTML = '&#9744;';
-                            icon.style.color = '';
-                        }
-                    };
-                }
-                
+                const items = data.ingredients.map(ing => ({ name: ing, checked: false }));
+                renderShoppingListItems(items);
                 document.getElementById('shopping-list-modal').style.display = 'flex';
             } else {
                 alert('Failed to generate shopping list.');

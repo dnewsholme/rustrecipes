@@ -172,3 +172,9 @@ pub struct PlannedMeal {
     pub recipe_id: String,
     pub checked: bool,
 }
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+pub struct ShoppingItem {
+    pub name: String,
+    pub checked: bool,
+}

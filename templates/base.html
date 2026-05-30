@@ -62,6 +62,11 @@
                         <line x1="10" y1="22" x2="14" y2="22"></line>
                     </svg>
                 </button>
+                {% if current_user_id.is_some() %}
+                <button id="saved-shopping-list-btn" class="btn btn-secondary theme-toggle-btn" title="Saved Shopping List" onclick="loadSavedShoppingList()">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path></svg>
+                </button>
+                {% endif %}
                 {% if is_admin %}
                 <a href="{{ app_base }}/admin/users" class="btn btn-secondary theme-toggle-btn" title="Manage Users">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -683,6 +688,105 @@
             } else {
                 // Not on index page, redirect with param
                 window.location.href = '{{ app_base }}/?import=true';
+            }
+        }
+
+        async function loadSavedShoppingList() {
+            const modal = document.getElementById('shopping-list-modal');
+            const ul = document.getElementById('shopping-list-ul');
+            if (!modal || !ul) {
+                window.location.href = '{{ app_base }}/?shopping_list=true';
+                return;
+            }
+
+            ul.innerHTML = '<li style="color: var(--text-secondary); text-align: center; padding: 1rem;">Loading saved shopping list...</li>';
+            modal.style.display = 'flex';
+
+            try {
+                const response = await fetch('{{ app_base }}/api/v1/shopping-list');
+                if (response.ok) {
+                    const items = await response.json();
+                    renderShoppingListItems(items);
+                } else if (response.status === 404) {
+                    ul.innerHTML = '<li style="color: var(--text-secondary); text-align: center; padding: 1rem;">No saved shopping list found. Select some recipes and generate one!</li>';
+                } else {
+                    ul.innerHTML = '<li style="color: var(--text-secondary); text-align: center; padding: 1rem;">Failed to load saved shopping list.</li>';
+                }
+            } catch (e) {
+                console.error(e);
+                ul.innerHTML = '<li style="color: var(--text-secondary); text-align: center; padding: 1rem;">An error occurred while loading.</li>';
+            }
+        }
+
+        function renderShoppingListItems(items) {
+            const ul = document.getElementById('shopping-list-ul');
+            if (!ul) return;
+            ul.innerHTML = '';
+            
+            if (items.length === 0) {
+                ul.innerHTML = '<li style="color: var(--text-secondary); text-align: center; padding: 1rem;">No ingredients found.</li>';
+                return;
+            }
+
+            items.forEach(item => {
+                const li = document.createElement('li');
+                li.className = 'shopping-item';
+                if (item.checked) {
+                    li.className += ' purchased';
+                }
+                
+                const icon = document.createElement('span');
+                icon.innerHTML = item.checked ? '&#9745;' : '&#9744;';
+                icon.style.fontSize = '1.2rem';
+                icon.style.marginRight = '0.5rem';
+                icon.className = 'check-icon';
+                if (item.checked) {
+                    icon.style.color = '#27ae60';
+                }
+                
+                const textSpan = document.createElement('span');
+                textSpan.textContent = item.name;
+                
+                li.appendChild(icon);
+                li.appendChild(textSpan);
+                ul.appendChild(li);
+            });
+
+            ul.onclick = async function(e) {
+                const li = e.target.closest('li.shopping-item');
+                if (!li) return;
+                li.classList.toggle('purchased');
+                const icon = li.querySelector('.check-icon');
+                const isPurchased = li.classList.contains('purchased');
+                if (isPurchased) {
+                    icon.innerHTML = '&#9745;';
+                    icon.style.color = '#27ae60';
+                } else {
+                    icon.innerHTML = '&#9744;';
+                    icon.style.color = '';
+                }
+                {% if current_user_id.is_some() %}
+                await persistShoppingListState();
+                {% endif %}
+            };
+        }
+
+        async function persistShoppingListState() {
+            const items = [];
+            document.querySelectorAll('#shopping-list-ul li.shopping-item').forEach(li => {
+                const name = li.querySelector('span:last-child').textContent;
+                const checked = li.classList.contains('purchased');
+                items.push({ name, checked });
+            });
+
+            try {
+                await fetch('{{ app_base }}/api/v1/shopping-list', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(items)
+                });
+            } catch (e) {
+                console.error("Failed to persist shopping list state:", e);
             }
         }
     </script>

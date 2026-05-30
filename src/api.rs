@@ -22,7 +22,12 @@ pub fn router(state: AppState) -> Router<AppState> {
         .route("/temps", get(get_cooking_temps))
         .route("/log7", get(calculate_log7))
         .route("/import", post(import_recipe))
-        .route("/shopping-list", post(generate_shopping_list))
+        .route(
+            "/shopping-list",
+            get(get_shopping_list)
+                .post(generate_shopping_list)
+                .put(update_shopping_list),
+        )
         .route(
             "/meal-plan",
             get(get_meal_plan)
@@ -246,7 +251,48 @@ async fn generate_shopping_list(
         &payload.unit_system,
     );
 
+    // Save generated list automatically if user is logged in
+    if let Some(ref uid) = user_id {
+        let items: Vec<crate::models::ShoppingItem> = ingredients
+            .iter()
+            .map(|ing| crate::models::ShoppingItem {
+                name: ing.clone(),
+                checked: false,
+            })
+            .collect();
+        let _ = storage::save_shopping_list(uid, &items);
+    }
+
     Json(ShoppingListResponse { ingredients }).into_response()
+}
+
+async fn get_shopping_list(
+    jar: axum_extra::extract::cookie::PrivateCookieJar,
+) -> Result<impl IntoResponse, StatusCode> {
+    let user_id = match get_session_user_id(&jar) {
+        Some(uid) => uid,
+        None => return Err(StatusCode::UNAUTHORIZED),
+    };
+
+    match storage::read_shopping_list(&user_id) {
+        Some(items) => Ok(Json(items)),
+        None => Err(StatusCode::NOT_FOUND),
+    }
+}
+
+async fn update_shopping_list(
+    jar: axum_extra::extract::cookie::PrivateCookieJar,
+    Json(payload): Json<Vec<crate::models::ShoppingItem>>,
+) -> Result<impl IntoResponse, StatusCode> {
+    let user_id = match get_session_user_id(&jar) {
+        Some(uid) => uid,
+        None => return Err(StatusCode::UNAUTHORIZED),
+    };
+
+    match storage::save_shopping_list(&user_id, &payload) {
+        Ok(_) => Ok(StatusCode::OK),
+        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    }
 }
 
 #[axum::debug_handler]
@@ -873,5 +919,83 @@ mod tests {
         // Clean up
         let _ = storage::delete_recipe(private_recipe_id);
         let _ = storage::delete_user("some-user-id");
+    }
+
+    #[tokio::test]
+    async fn test_shopping_list_persistence() {
+        let state = test_state();
+        let app = router(state.clone()).with_state(state.clone());
+
+        let user_id = "shopping-test-user";
+        let test_user = crate::models::User {
+            id: user_id.to_string(),
+            email: "shopping@example.com".to_string(),
+            password_hash: "hash".to_string(),
+            created_at: "".to_string(),
+        };
+        storage::save_user(&test_user).unwrap();
+
+        // Construct encrypted cookie header
+        let cookie = axum_extra::extract::cookie::Cookie::new("admin_session", user_id);
+        let jar = axum_extra::extract::cookie::PrivateCookieJar::new(state.key.clone()).add(cookie);
+        let response = axum::response::IntoResponse::into_response(jar);
+        let cookie_header_val = response
+            .headers()
+            .get(axum::http::header::SET_COOKIE)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
+
+        // 1. GET /shopping-list initially should return NOT_FOUND (404)
+        let req = Request::builder()
+            .method("GET")
+            .uri("/shopping-list")
+            .header("Cookie", &cookie_header_val)
+            .body(Body::empty())
+            .unwrap();
+        let response = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+        // 2. PUT /shopping-list to save a shopping list
+        let list_items = vec![
+            crate::models::ShoppingItem {
+                name: "2 cups flour".to_string(),
+                checked: false,
+            },
+            crate::models::ShoppingItem {
+                name: "1 tsp salt".to_string(),
+                checked: true,
+            },
+        ];
+        let req = Request::builder()
+            .method("PUT")
+            .uri("/shopping-list")
+            .header("Cookie", &cookie_header_val)
+            .header("Content-Type", "application/json")
+            .body(Body::from(serde_json::to_string(&list_items).unwrap()))
+            .unwrap();
+        let response = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // 3. GET /shopping-list to verify list is saved correctly
+        let req = Request::builder()
+            .method("GET")
+            .uri("/shopping-list")
+            .header("Cookie", &cookie_header_val)
+            .body(Body::empty())
+            .unwrap();
+        let response = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let fetched: Vec<crate::models::ShoppingItem> = serde_json::from_slice(&body).unwrap();
+        assert_eq!(fetched.len(), 2);
+        assert_eq!(fetched[0].name, "2 cups flour");
+        assert_eq!(fetched[0].checked, false);
+        assert_eq!(fetched[1].name, "1 tsp salt");
+        assert_eq!(fetched[1].checked, true);
+
+        // Clean up
+        let _ = storage::delete_user(user_id);
     }
 }

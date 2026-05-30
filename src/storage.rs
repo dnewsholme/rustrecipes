@@ -177,6 +177,17 @@ pub fn db_init(
         [],
     )?;
 
+    // Create saved_shopping_lists table
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS saved_shopping_lists (
+            user_id TEXT PRIMARY KEY,
+            items_json TEXT NOT NULL,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        )",
+        [],
+    )?;
+
     // Migrate legacy global favorites to user_favorites
     let table_info_res: Result<Vec<String>, rusqlite::Error> = conn
         .prepare("PRAGMA table_info(recipes)")
@@ -612,6 +623,33 @@ pub fn save_meal_plan(
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
 }
 
+pub fn save_shopping_list(
+    user_id: &str,
+    items: &[crate::models::ShoppingItem],
+) -> Result<(), std::io::Error> {
+    let conn = rusqlite::Connection::open(get_db_path())
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+    let items_json = serde_json::to_string(items)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+    conn.execute(
+        "INSERT OR REPLACE INTO saved_shopping_lists (user_id, items_json, updated_at) VALUES (?1, ?2, datetime('now', 'localtime'))",
+        [user_id, &items_json],
+    )
+    .map(|_| ())
+    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+}
+
+pub fn read_shopping_list(user_id: &str) -> Option<Vec<crate::models::ShoppingItem>> {
+    let conn = rusqlite::Connection::open(get_db_path()).ok()?;
+    let mut stmt = conn
+        .prepare("SELECT items_json FROM saved_shopping_lists WHERE user_id = ?1")
+        .ok()?;
+    let items_json: String = stmt.query_row([user_id], |row| row.get(0)).ok()?;
+    serde_json::from_str(&items_json).ok()
+}
+
 pub fn find_user_by_email(email: &str) -> Option<crate::models::User> {
     let conn = rusqlite::Connection::open(get_db_path()).ok()?;
     let mut stmt = conn
@@ -651,7 +689,7 @@ pub fn save_user(user: &crate::models::User) -> Result<(), std::io::Error> {
     let conn = rusqlite::Connection::open(get_db_path())
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
     conn.execute(
-        "INSERT OR REPLACE INTO users (id, email, password_hash, created_at) VALUES (?1, ?2, ?3, ?4)",
+        "INSERT OR REPLACE INTO users (id, email, password_hash, created_at) VALUES (?1, ?2, ?3, COALESCE(NULLIF(?4, ''), datetime('now', 'localtime')))",
         (&user.id, &user.email, &user.password_hash, &user.created_at),
     )
     .map(|_| ())
