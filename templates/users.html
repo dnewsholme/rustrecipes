@@ -3,9 +3,54 @@
 {% block title %}User Management{% endblock %}
 
 {% block content %}
-<div style="max-width: 900px; margin: 2rem auto; padding: 2rem; background: var(--surface-color); border: 1px solid var(--border-color); border-radius: var(--radius-lg); box-shadow: var(--shadow-md);">
+<style>
+    .users-card-list { display: none; }
+
+    @media (max-width: 768px) {
+        .users-table-wrap { display: none !important; }
+        .users-card-list { display: flex !important; flex-direction: column; gap: 0.75rem; }
+        .user-card {
+            background: var(--bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 1rem;
+        }
+        .user-card-header {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            margin-bottom: 0.6rem;
+        }
+        .user-card-avatar {
+            width: 36px; height: 36px; border-radius: 50%;
+            background: var(--border-color); color: var(--text-secondary);
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 700; font-size: 0.95rem; flex-shrink: 0;
+        }
+        .user-card-info {
+            flex: 1; min-width: 0;
+        }
+        .user-card-email {
+            font-weight: 600; font-size: 0.95rem; color: var(--text-primary);
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .user-card-badges {
+            display: flex; gap: 0.3rem; flex-wrap: wrap; margin-top: 0.2rem;
+        }
+        .user-card-meta {
+            font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.6rem;
+            padding-left: 0.25rem;
+        }
+        .user-card-actions {
+            display: flex; gap: 0.5rem; flex-wrap: wrap;
+        }
+        .users-container { padding: 1rem !important; margin: 1rem auto !important; }
+        .users-heading { font-size: 1.3rem !important; }
+    }
+</style>
+<div class="users-container" style="max-width: 900px; margin: 2rem auto; padding: 2rem; background: var(--surface-color); border: 1px solid var(--border-color); border-radius: var(--radius-lg); box-shadow: var(--shadow-md);">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem;">
-        <h2 style="margin: 0; color: var(--text-color); font-weight: 800; font-size: 1.75rem; display: flex; align-items: center; gap: 0.5rem;">
+        <h2 class="users-heading" style="margin: 0; color: var(--text-color); font-weight: 800; font-size: 1.75rem; display: flex; align-items: center; gap: 0.5rem;">
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
                 <circle cx="9" cy="7" r="4"></circle>
@@ -19,7 +64,8 @@
         </span>
     </div>
 
-    <div style="overflow-x: auto;">
+    <!-- Desktop table view -->
+    <div class="users-table-wrap" style="overflow-x: auto;">
         <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.95rem;">
             <thead>
                 <tr style="border-bottom: 2px solid var(--border-color); color: var(--text-secondary);">
@@ -84,6 +130,63 @@
                 {% endfor %}
             </tbody>
         </table>
+    </div>
+
+    <!-- Mobile card view -->
+    <div class="users-card-list">
+        {% for user in users %}
+        <div class="user-card">
+            <div class="user-card-header">
+                <div class="user-card-avatar">
+                    {{ user.email.chars().next().unwrap_or('?').to_uppercase() }}
+                </div>
+                <div class="user-card-info">
+                    <div class="user-card-email">{{ user.email }}</div>
+                    <div class="user-card-badges">
+                        {% if current_user_id.as_ref() == Some(&user.id) %}
+                        <span style="background: rgba(46, 204, 113, 0.15); color: #2ecc71; font-size: 0.65rem; padding: 0.1rem 0.35rem; border-radius: 4px; font-weight: 700;">YOU (ADMIN)</span>
+                        {% endif %}
+                        {% if user.password_hash.is_empty() %}
+                        <span style="background: rgba(52, 152, 219, 0.15); color: #3498db; font-size: 0.65rem; padding: 0.1rem 0.35rem; border-radius: 4px; font-weight: 700;">GOOGLE OAUTH</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            <div class="user-card-meta">
+                {% if user.created_at.is_empty() %}
+                <span style="font-style: italic;">System seeded</span>
+                {% else %}
+                Registered: {{ user.created_at }}
+                {% endif %}
+            </div>
+            <div class="user-card-actions">
+                {% if current_user_id.as_ref() != Some(&user.id) %}
+                    {% if !user.password_hash.is_empty() %}
+                    <button onclick="resetPassword('{{ user.id }}', '{{ user.email }}')" class="btn btn-secondary" style="padding: 0.35rem 0.7rem; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 0.3rem;">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                            <path d="M7 11V7a5 5 0 0 1 9.9-1"></path>
+                        </svg>
+                        Reset
+                    </button>
+                    {% endif %}
+                    <form action="{{ app_base }}/admin/users/delete/{{ user.id }}" method="POST" style="margin: 0; display: inline;" onsubmit="return confirm('Are you sure you want to delete user {{ user.email }}? This will permanently purge their recipes, meal plans, and favorites.');">
+                        <button type="submit" class="btn btn-danger" style="padding: 0.35rem 0.7rem; font-size: 0.8rem; display: inline-flex; align-items: center; gap: 0.3rem;">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="3 6 5 6 21 6"></polyline>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                <line x1="10" y1="11" x2="10" y2="17"></line>
+                                <line x1="14" y1="11" x2="14" y2="17"></line>
+                            </svg>
+                            Delete
+                        </button>
+                    </form>
+                {% else %}
+                    <span style="color: var(--text-secondary); font-size: 0.8rem; font-style: italic;">Protected</span>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
     </div>
 </div>
 {% endblock %}
