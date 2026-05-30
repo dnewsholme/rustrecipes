@@ -49,13 +49,13 @@
                 RustRecipes
             </a>
             <nav class="header-nav">
-                <button id="temps-toggle-btn" class="btn btn-secondary theme-toggle-btn hide-mobile" title="Cooking Temperatures">
+                <button id="temps-toggle-btn" class="btn btn-secondary theme-toggle-btn mobile-collapsible" title="Cooking Temperatures">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4v10.54a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0Z"></path></svg>
                 </button>
                 <button id="timer-toggle-btn" class="btn btn-secondary theme-toggle-btn" title="Cooking Timer">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
                 </button>
-                <button id="wakelock-btn" class="btn btn-secondary theme-toggle-btn hide-mobile" onclick="toggleManualWakeLock()" title="Keep Screen On">
+                <button id="wakelock-btn" class="btn btn-secondary theme-toggle-btn mobile-collapsible" onclick="toggleManualWakeLock()" title="Keep Screen On">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.7 1.5-1.7 1.5-2.7a5 5 0 1 0-10 0c0 1 .5 2 1.5 2.7.8.8 1.3 1.5 1.5 2.5"></path>
                         <line x1="9" y1="18" x2="15" y2="18"></line>
@@ -68,7 +68,7 @@
                 </button>
                 {% endif %}
                 {% if is_admin %}
-                <a href="{{ app_base }}/admin/users" class="btn btn-secondary theme-toggle-btn hide-mobile" title="Manage Users">
+                <a href="{{ app_base }}/admin/users" class="btn btn-secondary theme-toggle-btn mobile-collapsible" title="Manage Users">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
                         <circle cx="9" cy="7" r="4"></circle>
@@ -100,7 +100,7 @@
                     </div>
                     {% match current_user_email %}
                     {% when Some with (email) %}
-                    <span class="hide-mobile" style="font-size: 0.9rem; color: var(--text-secondary); margin-right: 0.5rem; display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 500; vertical-align: middle;">
+                    <span class="user-email-label mobile-collapsible" style="margin-right: 0.5rem;">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
                             <circle cx="12" cy="7" r="4"></circle>
@@ -109,11 +109,57 @@
                     </span>
                     {% when None %}
                     {% endmatch %}
-                    <form action="{{ app_base }}/logout" method="POST" style="margin: 0; display: inline; vertical-align: middle;">
+                    <form action="{{ app_base }}/logout" method="POST" class="mobile-collapsible" style="margin: 0; display: inline; vertical-align: middle;">
                         <button type="submit" class="btn-icon-link" title="Logout">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
                         </button>
                     </form>
+                    <!-- Hamburger menu for mobile -->
+                    <div class="dropdown" style="position: relative;">
+                        <button id="mobile-menu-btn" class="mobile-menu-toggle" title="Menu" aria-label="Open menu">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+                        </button>
+                        <div id="mobile-menu-panel" class="mobile-menu-panel">
+                            {% match current_user_email %}
+                            {% when Some with (email) %}
+                            <div class="mobile-menu-user">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
+                                    <circle cx="12" cy="7" r="4"></circle>
+                                </svg>
+                                <span>{{ email }}</span>
+                            </div>
+                            {% when None %}
+                            {% endmatch %}
+                            <div class="mobile-menu-items">
+                                <button class="btn btn-secondary theme-toggle-btn" title="Cooking Temperatures" onclick="toggleTempsPanel(); closeMobileMenu();">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4v10.54a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0Z"></path></svg>
+                                </button>
+                                <button class="btn btn-secondary theme-toggle-btn" onclick="toggleManualWakeLock(); closeMobileMenu();" title="Keep Screen On">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.7 1.5-1.7 1.5-2.7a5 5 0 1 0-10 0c0 1 .5 2 1.5 2.7.8.8 1.3 1.5 1.5 2.5"></path>
+                                        <line x1="9" y1="18" x2="15" y2="18"></line>
+                                        <line x1="10" y1="22" x2="14" y2="22"></line>
+                                    </svg>
+                                </button>
+                                {% if is_admin %}
+                                <a href="{{ app_base }}/admin/users" class="btn btn-secondary theme-toggle-btn" title="Manage Users" onclick="closeMobileMenu();">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                                        <circle cx="9" cy="7" r="4"></circle>
+                                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                                    </svg>
+                                </a>
+                                {% endif %}
+                                <form action="{{ app_base }}/logout" method="POST" style="margin: 0; display: inline;">
+                                    <button type="submit" class="btn btn-secondary theme-toggle-btn" title="Logout">
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
                 {% else %}
                     <a href="{{ app_base }}/login" class="btn-icon-link" title="Login">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path><polyline points="10 17 15 12 10 7"></polyline><line x1="15" y1="12" x2="3" y2="12"></line></svg>
@@ -676,6 +722,25 @@
         document.addEventListener('click', (e) => {
             if (addRecipeDropdown?.classList.contains('show')) {
                 addRecipeDropdown.classList.remove('show');
+            }
+        });
+
+        // Mobile hamburger menu logic
+        const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+        const mobileMenuPanel = document.getElementById('mobile-menu-panel');
+
+        mobileMenuBtn?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            mobileMenuPanel.classList.toggle('open');
+        });
+
+        function closeMobileMenu() {
+            mobileMenuPanel?.classList.remove('open');
+        }
+
+        document.addEventListener('click', (e) => {
+            if (mobileMenuPanel?.classList.contains('open') && !e.target.closest('#mobile-menu-panel') && !e.target.closest('#mobile-menu-btn')) {
+                closeMobileMenu();
             }
         });
 
