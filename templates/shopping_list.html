@@ -199,6 +199,10 @@
                 <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path></svg>
                 Shopping List
             </h2>
+            <label class="no-print" style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.95rem; font-weight: 600; cursor: pointer; color: var(--text-secondary); user-select: none;">
+                <input type="checkbox" id="exclude-spices-checkbox" onchange="filterAndRenderUI()" style="width: 16px; height: 16px; accent-color: var(--accent-color); cursor: pointer;">
+                Exclude Spices
+            </label>
         </div>
 
         <ul id="shopping-list-ul" style="list-style-type: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.65rem;">
@@ -228,12 +232,22 @@
 {% block scripts %}
 <script>
     const currentUserId = "{% match current_user_id %}{% when Some with (uid) %}{{ uid }}{% when None %}{% endmatch %}";
+    
+    let allShoppingItems = [];
+    let spiceList = [];
 
     window.addEventListener('DOMContentLoaded', loadShoppingList);
 
     async function loadShoppingList() {
-        const ul = document.getElementById('shopping-list-ul');
-        if (!ul) return;
+        // Fetch spices list from database first
+        try {
+            const res = await fetch('{{ app_base }}/api/v1/spices');
+            if (res.ok) {
+                spiceList = await res.json();
+            }
+        } catch (e) {
+            console.error("Failed to fetch spices from database:", e);
+        }
 
         let items = [];
         let loadedFromServer = false;
@@ -245,8 +259,6 @@
                 if (response.ok) {
                     items = await response.json();
                     loadedFromServer = true;
-                } else if (response.status === 404) {
-                    // Handled gracefully below as an empty/no-items state
                 }
             } catch (e) {
                 console.error("Failed to load from server, will fall back to local storage:", e);
@@ -269,12 +281,35 @@
     }
 
     function renderShoppingListItems(items) {
+        allShoppingItems = items || [];
+        filterAndRenderUI();
+    }
+
+    function getFilteredItems() {
+        const excludeSpices = document.getElementById('exclude-spices-checkbox')?.checked || false;
+        
+        if (excludeSpices && spiceList.length > 0) {
+            return allShoppingItems.filter(item => {
+                const nameLower = item.name.toLowerCase();
+                return !spiceList.some(spice => {
+                    const escapedSpice = spice.toLowerCase().replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+                    const regex = new RegExp('\\b' + escapedSpice + '\\b', 'i');
+                    return regex.test(nameLower);
+                });
+            });
+        }
+        
+        return allShoppingItems;
+    }
+
+    function filterAndRenderUI() {
         const ul = document.getElementById('shopping-list-ul');
         if (!ul) return;
         
         ul.innerHTML = '';
+        const filteredItems = getFilteredItems();
 
-        if (!items || items.length === 0) {
+        if (allShoppingItems.length === 0) {
             ul.innerHTML = `
                 <li style="color: var(--text-secondary); text-align: center; padding: 2rem; display: flex; flex-direction: column; align-items: center; gap: 1rem;">
                     <div style="background: var(--bg-color); width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border-color); color: var(--text-secondary);">
@@ -289,7 +324,17 @@
             return;
         }
 
-        items.forEach(item => {
+        if (filteredItems.length === 0) {
+            ul.innerHTML = `
+                <li style="color: var(--text-secondary); text-align: center; padding: 2rem;">
+                    <p style="font-weight: 600; font-size: 1.1rem; margin: 0 0 0.25rem 0; color: var(--text-primary);">All ingredients filtered out</p>
+                    <p style="font-size: 0.9rem; margin: 0; color: var(--text-secondary);">Uncheck "Exclude Spices" to view all ingredients.</p>
+                </li>
+            `;
+            return;
+        }
+
+        filteredItems.forEach(item => {
             const li = document.createElement('li');
             li.className = 'shopping-item';
             if (item.checked) {
@@ -319,6 +364,13 @@
             
             li.classList.toggle('purchased');
             
+            const name = li.querySelector('.shopping-item-name').textContent;
+            const checked = li.classList.contains('purchased');
+            const item = allShoppingItems.find(i => i.name === name);
+            if (item) {
+                item.checked = checked;
+            }
+            
             if (currentUserId) {
                 await persistShoppingListState();
             } else {
@@ -327,23 +379,12 @@
         };
     }
 
-    function getListItemsFromUI() {
-        const items = [];
-        document.querySelectorAll('#shopping-list-ul li.shopping-item').forEach(li => {
-            const name = li.querySelector('.shopping-item-name').textContent;
-            const checked = li.classList.contains('purchased');
-            items.push({ name, checked });
-        });
-        return items;
-    }
-
     async function persistShoppingListState() {
-        const items = getListItemsFromUI();
         try {
             await fetch('{{ app_base }}/api/v1/shopping-list', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(items)
+                body: JSON.stringify(allShoppingItems)
             });
         } catch (e) {
             console.error("Failed to persist shopping list state on server:", e);
@@ -351,15 +392,14 @@
     }
 
     function persistShoppingListStateLocal() {
-        const items = getListItemsFromUI();
-        localStorage.setItem('shopping_list', JSON.stringify(items));
+        localStorage.setItem('shopping_list', JSON.stringify(allShoppingItems));
     }
 
     async function copyShoppingList() {
-        const items = getListItemsFromUI();
-        if (items.length === 0) return;
+        const filteredItems = getFilteredItems();
+        if (filteredItems.length === 0) return;
 
-        const text = items.map(item => `${item.checked ? '[x]' : '[ ]'} ${item.name}`).join('\n');
+        const text = filteredItems.map(item => `${item.checked ? '[x]' : '[ ]'} ${item.name}`).join('\n');
         
         try {
             await navigator.clipboard.writeText(text);

@@ -20,6 +20,7 @@ pub fn router(state: AppState) -> Router<AppState> {
         )
         .route("/ferment", get(calculate_fermentation))
         .route("/temps", get(get_cooking_temps))
+        .route("/spices", get(get_spices))
         .route("/log7", get(calculate_log7))
         .route("/import", post(import_recipe))
         .route(
@@ -462,6 +463,10 @@ async fn get_cooking_temps() -> impl IntoResponse {
     ];
 
     Json(temps)
+}
+
+async fn get_spices() -> impl IntoResponse {
+    Json(crate::storage::list_spices())
 }
 
 async fn calculate_log7(

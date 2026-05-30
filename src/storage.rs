@@ -188,6 +188,57 @@ pub fn db_init(
         [],
     )?;
 
+    // Create spices table
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS spices (
+            name TEXT PRIMARY KEY
+        )",
+        [],
+    )?;
+
+    // Seed default common spices if table is empty
+    let mut stmt = conn.prepare("SELECT COUNT(*) FROM spices")?;
+    let spice_count: i64 = stmt.query_row([], |row| row.get(0))?;
+    if spice_count == 0 {
+        let common_spices = vec![
+            "salt",
+            "pepper",
+            "cumin",
+            "coriander",
+            "paprika",
+            "oregano",
+            "thyme",
+            "basil",
+            "cinnamon",
+            "ginger",
+            "nutmeg",
+            "cloves",
+            "cardamom",
+            "cayenne",
+            "chili powder",
+            "turmeric",
+            "garlic powder",
+            "onion powder",
+            "rosemary",
+            "parsley",
+            "dill",
+            "mustard powder",
+            "celery salt",
+            "allspice",
+            "fennel",
+            "fenugreek",
+            "saffron",
+            "vanilla",
+            "bay leaves",
+            "star anise",
+            "sumac",
+            "chili flakes",
+        ];
+        for spice in common_spices {
+            let _ = conn.execute("INSERT OR IGNORE INTO spices (name) VALUES (?1)", [spice]);
+        }
+    }
+
     // Migrate legacy global favorites to user_favorites
     let table_info_res: Result<Vec<String>, rusqlite::Error> = conn
         .prepare("PRAGMA table_info(recipes)")
@@ -661,6 +712,22 @@ pub fn delete_shopping_list(user_id: &str) -> Result<(), std::io::Error> {
     .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
 }
 
+pub fn list_spices() -> Vec<String> {
+    let mut spices = Vec::new();
+    if let Ok(conn) = rusqlite::Connection::open(get_db_path()) {
+        if let Ok(mut stmt) = conn.prepare("SELECT name FROM spices ORDER BY name ASC") {
+            if let Ok(mut rows) = stmt.query([]) {
+                while let Ok(Some(row)) = rows.next() {
+                    if let Ok(name) = row.get(0) {
+                        spices.push(name);
+                    }
+                }
+            }
+        }
+    }
+    spices
+}
+
 pub fn find_user_by_email(email: &str) -> Option<crate::models::User> {
     let conn = rusqlite::Connection::open(get_db_path()).ok()?;
     let mut stmt = conn
@@ -872,6 +939,21 @@ mod tests {
         assert_eq!(read.is_public, true);
 
         delete_recipe(test_id).unwrap();
+    }
+
+    #[test]
+    fn test_list_spices() {
+        let _ = std::fs::create_dir_all("data");
+        db_init(
+            "$2b$12$xeIhvWgV.yZ2FMHbwZL39.WZSDZWSKIokohV5S7aIwR.spHXuW72G",
+            "dbizsley@googlemail.com",
+        )
+        .unwrap();
+
+        let spices = list_spices();
+        assert!(!spices.is_empty());
+        assert!(spices.contains(&"salt".to_string()));
+        assert!(spices.contains(&"pepper".to_string()));
     }
 
     #[test]
