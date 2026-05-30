@@ -1191,7 +1191,8 @@ async fn login_google(State(state): State<AppState>, jar: PrivateCookieJar) -> i
         .append_pair("redirect_uri", &config.redirect_uri)
         .append_pair("response_type", "code")
         .append_pair("scope", "openid email profile")
-        .append_pair("state", &state_token);
+        .append_pair("state", &state_token)
+        .append_pair("prompt", "select_account");
 
     let updated_jar = jar.add(state_cookie);
     (updated_jar, Redirect::to(auth_url.as_str())).into_response()
@@ -1641,6 +1642,7 @@ mod oauth_tests {
         assert!(location.contains("client_id=test-client-id"));
         assert!(location.contains("redirect_uri=http%3A%2F%2Flocalhost%2Fcallback"));
         assert!(location.contains("state="));
+        assert!(location.contains("prompt=select_account"));
 
         let cookie_header = response
             .headers()
