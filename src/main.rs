@@ -53,6 +53,7 @@ struct IndexTemplate {
     app_version: String,
     current_user_id: Option<String>,
     current_user_email: Option<String>,
+    is_admin: bool,
 }
 
 #[derive(Template)]
@@ -75,6 +76,7 @@ struct EditTemplate {
     app_version: String,
     current_user_id: Option<String>,
     current_user_email: Option<String>,
+    is_admin: bool,
 }
 
 #[derive(Template)]
@@ -84,6 +86,7 @@ struct ApiGuideTemplate {
     app_version: String,
     current_user_id: Option<String>,
     current_user_email: Option<String>,
+    is_admin: bool,
 }
 
 #[derive(Template)]
@@ -95,6 +98,7 @@ struct LoginTemplate {
     google_auth_enabled: bool,
     current_user_id: Option<String>,
     current_user_email: Option<String>,
+    is_admin: bool,
 }
 
 #[derive(Template)]
@@ -105,6 +109,18 @@ struct RegisterTemplate {
     error: Option<String>,
     current_user_id: Option<String>,
     current_user_email: Option<String>,
+    is_admin: bool,
+}
+
+#[derive(Template)]
+#[template(path = "users.html")]
+struct UsersTemplate {
+    users: Vec<crate::models::User>,
+    app_base: &'static str,
+    app_version: String,
+    current_user_id: Option<String>,
+    current_user_email: Option<String>,
+    is_admin: bool,
 }
 
 const APP_VERSION: &str = match option_env!("APP_VERSION") {
@@ -374,6 +390,7 @@ async fn index(State(state): State<AppState>, jar: PrivateCookieJar) -> impl Int
         app_version: APP_VERSION.to_string(),
         current_user_id: user_id.clone(),
         current_user_email: user_email,
+        is_admin: is_admin_session(&jar),
     };
     Html(template.render().unwrap())
 }
@@ -390,6 +407,7 @@ async fn api_guide(State(state): State<AppState>, jar: PrivateCookieJar) -> impl
         app_version: APP_VERSION.to_string(),
         current_user_id: user_id,
         current_user_email: user_email,
+        is_admin: is_admin_session(&jar),
     };
     Html(template.render().unwrap())
 }
@@ -462,6 +480,7 @@ async fn new_recipe(State(state): State<AppState>, jar: PrivateCookieJar) -> imp
         app_version: APP_VERSION.to_string(),
         current_user_id: Some(user_id),
         current_user_email: user_email,
+        is_admin: is_admin_session(&jar),
     };
     Html(template.render().unwrap()).into_response()
 }
@@ -557,6 +576,7 @@ async fn edit_recipe(
             app_version: APP_VERSION.to_string(),
             current_user_id: Some(user_id),
             current_user_email: user_email,
+            is_admin: is_admin_session(&jar),
         };
         Html(template.render().unwrap()).into_response()
     } else {
@@ -656,6 +676,7 @@ async fn import_recipe(
                 app_version: APP_VERSION.to_string(),
                 current_user_id: Some(user_id),
                 current_user_email: user_email,
+                is_admin: is_admin_session(&jar),
             };
             Html(template.render().unwrap()).into_response()
         }
@@ -749,6 +770,7 @@ async fn import_photo(
                         app_version: APP_VERSION.to_string(),
                         current_user_id: Some(user_id.clone()),
                         current_user_email: user_email,
+                        is_admin: is_admin_session(&jar),
                     };
                     return Html(template.render().unwrap()).into_response();
                 }
@@ -829,6 +851,7 @@ async fn login_form(
         google_auth_enabled: state.google_oauth.is_some(),
         current_user_id: None,
         current_user_email: None,
+        is_admin: false,
     };
     Html(template.render().unwrap()).into_response()
 }
@@ -882,6 +905,7 @@ async fn login_submit(
         google_auth_enabled: state.google_oauth.is_some(),
         current_user_id: None,
         current_user_email: None,
+        is_admin: false,
     };
     Html(template.render().unwrap()).into_response()
 }
@@ -897,6 +921,65 @@ async fn logout(State(state): State<AppState>, jar: PrivateCookieJar) -> impl In
     (updated_jar, Redirect::to(&format!("{}/", state.app_base)))
 }
 
+async fn admin_users_list(
+    State(state): State<AppState>,
+    jar: PrivateCookieJar,
+) -> impl IntoResponse {
+    if !is_admin_session(&jar) {
+        return (
+            StatusCode::FORBIDDEN,
+            "Forbidden. Only administrators can access this page.",
+        )
+            .into_response();
+    }
+
+    let user_id = get_session_user_id(&jar).await;
+    let user_email = if let Some(uid) = &user_id {
+        storage::find_user_by_id(uid).map(|u| u.email)
+    } else {
+        None
+    };
+
+    let users = storage::list_users();
+    let template = UsersTemplate {
+        users,
+        app_base: state.app_base,
+        app_version: APP_VERSION.to_string(),
+        current_user_id: user_id,
+        current_user_email: user_email,
+        is_admin: true,
+    };
+    Html(template.render().unwrap()).into_response()
+}
+
+async fn admin_users_delete(
+    State(state): State<AppState>,
+    jar: PrivateCookieJar,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    if !is_admin_session(&jar) {
+        return (
+            StatusCode::FORBIDDEN,
+            "Forbidden. Only administrators can perform this action.",
+        )
+            .into_response();
+    }
+
+    let current_uid = get_session_user_id(&jar).await;
+    if current_uid.as_ref() == Some(&id) {
+        return (
+            StatusCode::BAD_REQUEST,
+            "Cannot delete your own administrator account.",
+        )
+            .into_response();
+    }
+
+    match storage::delete_user(&id) {
+        Ok(_) => Redirect::to(&format!("{}/admin/users", state.app_base)).into_response(),
+        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to delete user").into_response(),
+    }
+}
+
 async fn register_form(State(state): State<AppState>, jar: PrivateCookieJar) -> impl IntoResponse {
     if get_session_user_id(&jar).await.is_some() {
         return Redirect::to(&format!("{}/", state.app_base)).into_response();
@@ -908,6 +991,7 @@ async fn register_form(State(state): State<AppState>, jar: PrivateCookieJar) -> 
         error: None,
         current_user_id: None,
         current_user_email: None,
+        is_admin: false,
     };
     Html(template.render().unwrap()).into_response()
 }
@@ -931,6 +1015,7 @@ async fn register_submit(
             error: Some("Email and password cannot be empty".to_string()),
             current_user_id: None,
             current_user_email: None,
+            is_admin: false,
         };
         return Html(template.render().unwrap()).into_response();
     }
@@ -942,6 +1027,7 @@ async fn register_submit(
             error: Some("Passwords do not match".to_string()),
             current_user_id: None,
             current_user_email: None,
+            is_admin: false,
         };
         return Html(template.render().unwrap()).into_response();
     }
@@ -953,6 +1039,7 @@ async fn register_submit(
             error: Some("A user with this email already exists".to_string()),
             current_user_id: None,
             current_user_email: None,
+            is_admin: false,
         };
         return Html(template.render().unwrap()).into_response();
     }
@@ -966,6 +1053,7 @@ async fn register_submit(
                 error: Some("Failed to process password".to_string()),
                 current_user_id: None,
                 current_user_email: None,
+                is_admin: false,
             };
             return Html(template.render().unwrap()).into_response();
         }
@@ -987,6 +1075,7 @@ async fn register_submit(
             error: Some("Failed to register account".to_string()),
             current_user_id: None,
             current_user_email: None,
+            is_admin: false,
         };
         return Html(template.render().unwrap()).into_response();
     }
@@ -1359,6 +1448,8 @@ async fn main() {
         .route("/import/paprika", post(import_paprika))
         .route("/import/photo", post(import_photo))
         .route("/upload", post(upload_image))
+        .route("/admin/users", get(admin_users_list))
+        .route("/admin/users/delete/{id}", post(admin_users_delete))
         .route_layer(middleware::from_fn_with_state(state.clone(), require_admin));
 
     let static_assets = Router::new()

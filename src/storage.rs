@@ -662,6 +662,58 @@ pub fn save_user(user: &crate::models::User) -> Result<(), std::io::Error> {
     .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
 }
 
+pub fn list_users() -> Vec<crate::models::User> {
+    let conn = match rusqlite::Connection::open(get_db_path()) {
+        Ok(c) => c,
+        Err(_) => return Vec::new(),
+    };
+    let mut stmt = match conn
+        .prepare("SELECT id, email, password_hash, created_at FROM users ORDER BY email ASC")
+    {
+        Ok(s) => s,
+        Err(_) => return Vec::new(),
+    };
+    let user_iter = stmt.query_map([], |row| {
+        Ok(crate::models::User {
+            id: row.get(0)?,
+            email: row.get(1)?,
+            password_hash: row.get(2)?,
+            created_at: row.get(3)?,
+        })
+    });
+    match user_iter {
+        Ok(iter) => iter.flatten().collect(),
+        Err(_) => Vec::new(),
+    }
+}
+
+pub fn delete_user(id: &str) -> Result<(), std::io::Error> {
+    let mut conn = rusqlite::Connection::open(get_db_path())
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    let tx = conn
+        .transaction()
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+    // Delete user's meal plans
+    tx.execute("DELETE FROM meal_plans WHERE user_id = ?1", [id])
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+    // Delete user's favorites
+    tx.execute("DELETE FROM user_favorites WHERE user_id = ?1", [id])
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+    // Delete user's recipes
+    tx.execute("DELETE FROM recipes WHERE owner_id = ?1", [id])
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+    // Delete the user
+    tx.execute("DELETE FROM users WHERE id = ?1", [id])
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+    tx.commit()
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+}
+
 pub fn process_image(data: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let img = image::load_from_memory(data)?;
 
@@ -830,5 +882,65 @@ mod tests {
             "DELETE FROM users WHERE id = ?1 OR id = ?2",
             [user1_id, user2_id],
         );
+    }
+
+    #[test]
+    fn test_admin_user_management() {
+        let _ = std::fs::create_dir_all("data");
+        db_init(
+            "$2b$12$xeIhvWgV.yZ2FMHbwZL39.WZSDZWSKIokohV5S7aIwR.spHXuW72G",
+            "dbizsley@googlemail.com",
+        )
+        .unwrap();
+
+        let test_user_id = "test-mgr-user";
+        let test_recipe_id = "test-mgr-recipe";
+
+        let conn = rusqlite::Connection::open(get_db_path()).unwrap();
+        let _ = conn.execute(
+            "DELETE FROM user_favorites WHERE user_id = ?1",
+            [test_user_id],
+        );
+        let _ = conn.execute("DELETE FROM meal_plans WHERE user_id = ?1", [test_user_id]);
+        let _ = conn.execute("DELETE FROM recipes WHERE id = ?1", [test_recipe_id]);
+        let _ = conn.execute("DELETE FROM users WHERE id = ?1", [test_user_id]);
+
+        conn.execute(
+            "INSERT INTO users (id, email, password_hash) VALUES (?1, 'mgr@test.com', 'hash')",
+            [test_user_id],
+        )
+        .unwrap();
+        conn.execute("INSERT INTO recipes (id, title, markdown, owner_id) VALUES (?1, 'Mgr Title', 'MD', ?2)", [test_recipe_id, test_user_id]).unwrap();
+        conn.execute(
+            "INSERT INTO meal_plans (user_id, recipe_id, checked) VALUES (?1, ?2, 0)",
+            [test_user_id, test_recipe_id],
+        )
+        .unwrap();
+
+        let users = list_users();
+        assert!(users.iter().any(|u| u.id == test_user_id));
+
+        delete_user(test_user_id).unwrap();
+
+        let users_after = list_users();
+        assert!(!users_after.iter().any(|u| u.id == test_user_id));
+
+        let recipe_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM recipes WHERE id = ?1",
+                [test_recipe_id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(recipe_count, 0);
+
+        let meal_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM meal_plans WHERE user_id = ?1",
+                [test_user_id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(meal_count, 0);
     }
 }
