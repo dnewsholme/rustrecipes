@@ -113,8 +113,9 @@ struct Log7Query {
     temp: f64,
 }
 
-async fn list_recipes() -> impl IntoResponse {
-    let recipes = storage::list_recipes();
+async fn list_recipes(jar: axum_extra::extract::cookie::PrivateCookieJar) -> impl IntoResponse {
+    let user_id = get_session_user_id(&jar);
+    let recipes = storage::list_recipes_for_user(user_id.as_deref());
     let summaries = recipes
         .into_iter()
         .map(|r| {
@@ -149,19 +150,38 @@ struct GetRecipeQuery {
 }
 
 async fn get_recipe(
+    jar: axum_extra::extract::cookie::PrivateCookieJar,
     Path(id): Path<String>,
     axum::extract::Query(query): axum::extract::Query<GetRecipeQuery>,
 ) -> impl IntoResponse {
-    match storage::read_recipe(&id) {
+    let user_id = get_session_user_id(&jar);
+    let is_admin = if let Some(ref uid) = user_id {
+        let admin_email =
+            std::env::var("ADMIN_EMAIL").unwrap_or_else(|_| "dbizsley@googlemail.com".to_string());
+        if let Some(admin_user) = storage::find_user_by_email(&admin_email) {
+            uid == &admin_user.id
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+
+    match storage::read_recipe_for_user(&id, user_id.as_deref()) {
         Some(recipe) => {
-            let converted = crate::conversions::convert_recipe(
-                recipe,
-                query.unit.as_deref(),
-                query.temp.as_deref(),
-                query.scale,
-                query.bakers.unwrap_or(false),
-            );
-            Json(converted).into_response()
+            let is_owner = user_id.as_ref() == Some(&recipe.owner_id);
+            if recipe.is_public || is_owner || is_admin {
+                let converted = crate::conversions::convert_recipe(
+                    recipe,
+                    query.unit.as_deref(),
+                    query.temp.as_deref(),
+                    query.scale,
+                    query.bakers.unwrap_or(false),
+                );
+                Json(converted).into_response()
+            } else {
+                StatusCode::FORBIDDEN.into_response()
+            }
         }
         None => StatusCode::NOT_FOUND.into_response(),
     }
@@ -189,11 +209,30 @@ struct ShoppingListResponse {
     ingredients: Vec<String>,
 }
 
-async fn generate_shopping_list(Json(payload): Json<ShoppingListRequest>) -> impl IntoResponse {
+async fn generate_shopping_list(
+    jar: axum_extra::extract::cookie::PrivateCookieJar,
+    Json(payload): Json<ShoppingListRequest>,
+) -> impl IntoResponse {
+    let user_id = get_session_user_id(&jar);
+    let is_admin = if let Some(ref uid) = user_id {
+        let admin_email =
+            std::env::var("ADMIN_EMAIL").unwrap_or_else(|_| "dbizsley@googlemail.com".to_string());
+        if let Some(admin_user) = storage::find_user_by_email(&admin_email) {
+            uid == &admin_user.id
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+
     let mut recipes = Vec::new();
     for id in &payload.recipe_ids {
-        if let Some(r) = storage::read_recipe(id) {
-            recipes.push(r);
+        if let Some(r) = storage::read_recipe_for_user(id, user_id.as_deref()) {
+            let is_owner = user_id.as_ref() == Some(&r.owner_id);
+            if r.is_public || is_owner || is_admin {
+                recipes.push(r);
+            }
         }
     }
 
@@ -746,5 +785,93 @@ mod tests {
         let log7: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(log7["temp_c"], 65.0);
         assert!(log7["display_time"].as_str().unwrap().contains("Min"));
+    }
+
+    #[tokio::test]
+    async fn test_private_recipe_api_access() {
+        let state = test_state();
+        let app = router(state.clone()).with_state(state);
+
+        let private_recipe_id = "api-private-test-recipe";
+        let owner_id = "some-user-id".to_string();
+
+        let test_user = crate::models::User {
+            id: owner_id.clone(),
+            email: "some-user@example.com".to_string(),
+            password_hash: "hash".to_string(),
+            created_at: "".to_string(),
+        };
+        storage::save_user(&test_user).unwrap();
+
+        let recipe = Recipe {
+            id: private_recipe_id.to_string(),
+            title: "Private API Test".to_string(),
+            description: None,
+            image: None,
+            source_url: None,
+            tags: vec![],
+            servings: Some(4),
+            prep_time: None,
+            cook_time: None,
+            ingredients: vec!["Secret Ingredient".to_string()],
+            markdown: "Secret instructions".to_string(),
+            html: None,
+            combustion_csv: None,
+            video_url: None,
+            favorite: false,
+            owner_id,
+            is_public: false,
+            owner_email: None,
+        };
+
+        // Save directly to storage
+        storage::save_recipe(&recipe).unwrap();
+
+        // 1. Verify GET /recipes does not contain the private recipe
+        let req = Request::builder()
+            .method("GET")
+            .uri("/recipes")
+            .body(Body::empty())
+            .unwrap();
+        let response = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let list: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let recipes = list["recipes"].as_array().unwrap();
+        let contains_private = recipes
+            .iter()
+            .any(|r| r["id"].as_str() == Some(private_recipe_id));
+        assert!(
+            !contains_private,
+            "Private recipe should not be listed for guest"
+        );
+
+        // 2. Verify GET /recipes/{id} returns FORBIDDEN
+        let req = Request::builder()
+            .method("GET")
+            .uri(format!("/recipes/{}", private_recipe_id))
+            .body(Body::empty())
+            .unwrap();
+        let response = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+        // 3. Verify POST /shopping-list returns BAD_REQUEST (No valid recipes found)
+        let payload = serde_json::json!({
+            "recipe_ids": [private_recipe_id],
+            "portions": 4,
+            "unit_system": "metric"
+        });
+        let req = Request::builder()
+            .method("POST")
+            .uri("/shopping-list")
+            .header("Content-Type", "application/json")
+            .body(Body::from(serde_json::to_string(&payload).unwrap()))
+            .unwrap();
+        let response = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        // Clean up
+        let _ = storage::delete_recipe(private_recipe_id);
+        let _ = storage::delete_user("some-user-id");
     }
 }

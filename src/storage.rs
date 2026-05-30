@@ -343,10 +343,6 @@ fn read_recipe_file(path: &std::path::Path) -> Option<Recipe> {
     None
 }
 
-pub fn list_recipes() -> Vec<Recipe> {
-    list_recipes_for_user(None)
-}
-
 pub fn list_recipes_for_user(user_id: Option<&str>) -> Vec<Recipe> {
     let conn = match rusqlite::Connection::open(get_db_path()) {
         Ok(c) => c,
