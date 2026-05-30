@@ -110,4 +110,52 @@ test.describe('Shopping List', () => {
     await closeBtn.click();
     await expect(modal).not.toBeVisible();
   });
+
+  test('should clear a shopping list from database and UI', async ({ page }) => {
+    // Select recipe and generate list
+    const checkboxes = page.locator('.recipe-select-checkbox');
+    await checkboxes.first().waitFor();
+    await checkboxes.first().check();
+
+    await page.locator('#shopping-list-bar .btn-primary').click();
+
+    const modal = page.locator('#shopping-list-modal');
+    await expect(modal).toBeVisible();
+
+    const listItems = page.locator('#shopping-list-ul li');
+    await expect(listItems.first()).toBeVisible({ timeout: 5000 });
+
+    // Click "Clear List" and handle confirm dialog
+    page.once('dialog', async dialog => {
+      expect(dialog.message()).toContain('Are you sure you want to clear your shopping list?');
+      await dialog.accept();
+    });
+
+    const deletePromise = page.waitForResponse(response => 
+      response.url().includes('/api/v1/shopping-list') && response.request().method() === 'DELETE'
+    );
+    await page.locator('#shopping-list-modal .btn-danger').click();
+    await deletePromise;
+
+    // Verify UI is updated to show empty list
+    await expect(page.locator('#shopping-list-ul')).toContainText('No ingredients found.');
+
+    // Close and reload
+    const closeBtn = page.locator('#shopping-list-modal .btn-secondary').filter({ hasText: 'Close' });
+    await closeBtn.click();
+    await expect(modal).not.toBeVisible();
+
+    await page.reload();
+
+    // Click Saved Shopping List to verify it shows no saved shopping list found
+    const savedListBtn = page.locator('#saved-shopping-list-btn');
+    await expect(savedListBtn).toBeVisible();
+    await savedListBtn.click();
+
+    await expect(modal).toBeVisible();
+    await expect(page.locator('#shopping-list-ul')).toContainText('No saved shopping list found.');
+
+    await closeBtn.click();
+    await expect(modal).not.toBeVisible();
+  });
 });

@@ -650,6 +650,17 @@ pub fn read_shopping_list(user_id: &str) -> Option<Vec<crate::models::ShoppingIt
     serde_json::from_str(&items_json).ok()
 }
 
+pub fn delete_shopping_list(user_id: &str) -> Result<(), std::io::Error> {
+    let conn = rusqlite::Connection::open(get_db_path())
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    conn.execute(
+        "DELETE FROM saved_shopping_lists WHERE user_id = ?1",
+        [user_id],
+    )
+    .map(|_| ())
+    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+}
+
 pub fn find_user_by_email(email: &str) -> Option<crate::models::User> {
     let conn = rusqlite::Connection::open(get_db_path()).ok()?;
     let mut stmt = conn

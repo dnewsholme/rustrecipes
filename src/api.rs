@@ -26,7 +26,8 @@ pub fn router(state: AppState) -> Router<AppState> {
             "/shopping-list",
             get(get_shopping_list)
                 .post(generate_shopping_list)
-                .put(update_shopping_list),
+                .put(update_shopping_list)
+                .delete(clear_shopping_list),
         )
         .route(
             "/meal-plan",
@@ -291,6 +292,20 @@ async fn update_shopping_list(
 
     match storage::save_shopping_list(&user_id, &payload) {
         Ok(_) => Ok(StatusCode::OK),
+        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    }
+}
+
+async fn clear_shopping_list(
+    jar: axum_extra::extract::cookie::PrivateCookieJar,
+) -> Result<impl IntoResponse, StatusCode> {
+    let user_id = match get_session_user_id(&jar) {
+        Some(uid) => uid,
+        None => return Err(StatusCode::UNAUTHORIZED),
+    };
+
+    match storage::delete_shopping_list(&user_id) {
+        Ok(_) => Ok(StatusCode::NO_CONTENT),
         Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
     }
 }
@@ -994,6 +1009,26 @@ mod tests {
         assert_eq!(fetched[0].checked, false);
         assert_eq!(fetched[1].name, "1 tsp salt");
         assert_eq!(fetched[1].checked, true);
+
+        // 4. DELETE /shopping-list to clear the shopping list
+        let req = Request::builder()
+            .method("DELETE")
+            .uri("/shopping-list")
+            .header("Cookie", &cookie_header_val)
+            .body(Body::empty())
+            .unwrap();
+        let response = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+        // 5. GET /shopping-list to verify list is deleted / empty (404)
+        let req = Request::builder()
+            .method("GET")
+            .uri("/shopping-list")
+            .header("Cookie", &cookie_header_val)
+            .body(Body::empty())
+            .unwrap();
+        let response = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
 
         // Clean up
         let _ = storage::delete_user(user_id);

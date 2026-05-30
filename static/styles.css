@@ -531,23 +531,110 @@ main {
   color: var(--accent-color);
 }
 
+/* Hamburger menu button - hidden on desktop */
+.mobile-menu-toggle {
+  display: none;
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 0.4rem;
+  cursor: pointer;
+  color: var(--text-primary);
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  transition: var(--transition);
+}
+
+.mobile-menu-toggle:hover {
+  background-color: var(--surface-hover);
+}
+
+/* Mobile menu panel */
+.mobile-menu-panel {
+  display: none;
+}
+
+/* User email styling */
+.user-email-label {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-weight: 500;
+  vertical-align: middle;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @media (max-width: 768px) {
   header {
     padding: 0.75rem 0;
   }
-  
+
   header .container {
     padding: 0 1rem;
     flex-wrap: nowrap;
     justify-content: space-between;
   }
 
-  .hide-mobile {
+  .header-nav {
+    gap: 0.5rem;
+  }
+
+  /* Hide items that go into the hamburger menu */
+  .header-nav .mobile-collapsible {
     display: none !important;
   }
 
-  .header-nav {
-    gap: 0.75rem;
+  .mobile-menu-toggle {
+    display: flex;
+  }
+
+  .mobile-menu-panel.open {
+    display: block;
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 0.5rem;
+    background-color: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    padding: 0.75rem;
+    min-width: 220px;
+    z-index: 5000;
+    animation: dropdownFade 0.2s ease-out;
+  }
+
+  .mobile-menu-panel .mobile-menu-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: center;
+  }
+
+  .mobile-menu-panel .mobile-menu-user {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.25rem;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+    overflow: hidden;
+  }
+
+  .mobile-menu-panel .mobile-menu-user span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .nav-btn-new {
@@ -564,10 +651,14 @@ main {
   .logo {
     font-size: 1.1rem;
   }
-  
+
   .logo svg {
     width: 24px;
     height: 24px;
+  }
+
+  .user-email-label {
+    max-width: 150px;
   }
 }
 
