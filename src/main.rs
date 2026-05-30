@@ -124,6 +124,16 @@ struct UsersTemplate {
     is_admin: bool,
 }
 
+#[derive(Template)]
+#[template(path = "shopping_list.html")]
+struct ShoppingListTemplate {
+    app_base: &'static str,
+    app_version: String,
+    current_user_id: Option<String>,
+    current_user_email: Option<String>,
+    is_admin: bool,
+}
+
 const APP_VERSION: &str = match option_env!("APP_VERSION") {
     Some(v) => v,
     None => env!("CARGO_PKG_VERSION"),
@@ -404,6 +414,26 @@ async fn api_guide(State(state): State<AppState>, jar: PrivateCookieJar) -> impl
         None
     };
     let template = ApiGuideTemplate {
+        app_base: state.app_base,
+        app_version: APP_VERSION.to_string(),
+        current_user_id: user_id,
+        current_user_email: user_email,
+        is_admin: is_admin_session(&jar),
+    };
+    Html(template.render().unwrap())
+}
+
+async fn shopping_list_page(
+    State(state): State<AppState>,
+    jar: PrivateCookieJar,
+) -> impl IntoResponse {
+    let user_id = get_session_user_id(&jar).await;
+    let user_email = if let Some(uid) = &user_id {
+        storage::find_user_by_id(uid).map(|u| u.email)
+    } else {
+        None
+    };
+    let template = ShoppingListTemplate {
         app_base: state.app_base,
         app_version: APP_VERSION.to_string(),
         current_user_id: user_id,
@@ -1522,6 +1552,7 @@ async fn main() {
         .route("/logout", post(logout))
         .route("/api", get(api_guide))
         .route("/api/", get(api_guide))
+        .route("/shopping-list", get(shopping_list_page))
         .merge(static_assets);
 
     let app = Router::new()

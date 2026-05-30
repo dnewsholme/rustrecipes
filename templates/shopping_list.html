@@ -1,0 +1,402 @@
+{% extends "base.html" %}
+
+{% block title %}Shopping List{% endblock %}
+
+{% block content %}
+<style>
+    .shopping-container {
+        max-width: 650px;
+        margin: 2rem auto;
+        padding: 0 1.5rem;
+    }
+    
+    .nav-back {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        color: var(--text-secondary);
+        font-weight: 500;
+        margin-bottom: 1.5rem;
+        transition: var(--transition);
+        font-size: 0.95rem;
+    }
+    
+    .nav-back:hover {
+        color: var(--accent-color);
+        transform: translateX(-3px);
+    }
+    
+    .shopping-list-card {
+        background-color: var(--surface-color);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-lg);
+        padding: 2rem;
+        box-shadow: var(--shadow-lg);
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+        transition: var(--transition);
+    }
+    
+    .shopping-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid var(--border-color);
+        padding-bottom: 1rem;
+    }
+    
+    .shopping-title {
+        margin: 0;
+        font-size: 1.75rem;
+        font-weight: 800;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+    
+    .shopping-title svg {
+        color: var(--accent-color);
+    }
+    
+    .shopping-item {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.85rem 1rem;
+        border-radius: var(--radius-md);
+        background: var(--bg-color);
+        border: 1px solid var(--border-color);
+        cursor: pointer;
+        user-select: none;
+        transition: transform 0.15s ease, background-color 0.2s ease, border-color 0.2s ease;
+    }
+    
+    .shopping-item:hover {
+        background-color: var(--surface-hover);
+        border-color: var(--accent-color);
+        transform: translateX(3px);
+    }
+    
+    .shopping-item.purchased {
+        opacity: 0.55;
+        text-decoration: line-through;
+        background-color: var(--surface-color);
+    }
+    
+    .shopping-checkbox {
+        width: 22px;
+        height: 22px;
+        border-radius: var(--radius-md);
+        border: 2px solid var(--text-secondary);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease;
+        flex-shrink: 0;
+    }
+    
+    .shopping-item.purchased .shopping-checkbox {
+        background-color: #27ae60;
+        border-color: #27ae60;
+        color: white;
+    }
+    
+    .shopping-checkbox svg {
+        display: none;
+        width: 14px;
+        height: 14px;
+        stroke: white;
+        stroke-width: 3;
+    }
+    
+    .shopping-item.purchased .shopping-checkbox svg {
+        display: block;
+    }
+    
+    .shopping-item-name {
+        font-weight: 500;
+        color: var(--text-primary);
+        font-size: 1rem;
+    }
+    
+    .actions-bar {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-top: 1rem;
+        flex-wrap: wrap;
+    }
+    
+    .actions-group {
+        display: flex;
+        gap: 0.5rem;
+    }
+    
+    /* Print styles */
+    @media print {
+        header, .nav-back, .actions-bar, .no-print {
+            display: none !important;
+        }
+        main {
+            padding: 0 !important;
+        }
+        body {
+            background: white !important;
+            color: black !important;
+        }
+        .shopping-container {
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        .shopping-list-card {
+            border: none !important;
+            box-shadow: none !important;
+            padding: 0 !important;
+        }
+        .shopping-header {
+            border-bottom: 2px solid #333 !important;
+            padding-bottom: 0.5rem !important;
+            margin-bottom: 1.5rem !important;
+        }
+        .shopping-title {
+            font-size: 2rem !important;
+        }
+        .shopping-title svg {
+            display: none !important;
+        }
+        .shopping-item {
+            background: none !important;
+            border: none !important;
+            border-bottom: 1px solid #ddd !important;
+            padding: 0.6rem 0 !important;
+            transform: none !important;
+        }
+        .shopping-item.purchased {
+            text-decoration: line-through !important;
+            opacity: 0.5 !important;
+        }
+        .shopping-checkbox {
+            border: 2px solid #555 !important;
+        }
+        .shopping-item.purchased .shopping-checkbox {
+            background-color: #333 !important;
+            border-color: #333 !important;
+        }
+    }
+</style>
+
+<div class="shopping-container">
+    <a href="{{ app_base }}/" class="nav-back no-print">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+        Back to Recipes
+    </a>
+
+    <div class="shopping-list-card">
+        <div class="shopping-header">
+            <h2 class="shopping-title">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path></svg>
+                Shopping List
+            </h2>
+        </div>
+
+        <ul id="shopping-list-ul" style="list-style-type: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.65rem;">
+            <li style="color: var(--text-secondary); text-align: center; padding: 2rem;">Loading shopping list...</li>
+        </ul>
+
+        <div class="actions-bar no-print">
+            <div class="actions-group">
+                <button class="btn btn-primary" onclick="copyShoppingList()" id="copy-btn">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                    Copy
+                </button>
+                <button class="btn btn-secondary" onclick="printShoppingList()">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                    Print
+                </button>
+            </div>
+            <button class="btn btn-danger" onclick="clearShoppingListUI()">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                Clear List
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const currentUserId = "{% match current_user_id %}{% when Some with (uid) %}{{ uid }}{% when None %}{% endmatch %}";
+
+    window.addEventListener('DOMContentLoaded', loadShoppingList);
+
+    async function loadShoppingList() {
+        const ul = document.getElementById('shopping-list-ul');
+        if (!ul) return;
+
+        let items = [];
+        let loadedFromServer = false;
+
+        // 1. Try loading from server if logged in
+        if (currentUserId) {
+            try {
+                const response = await fetch('{{ app_base }}/api/v1/shopping-list');
+                if (response.ok) {
+                    items = await response.json();
+                    loadedFromServer = true;
+                } else if (response.status === 404) {
+                    // Handled gracefully below as an empty/no-items state
+                }
+            } catch (e) {
+                console.error("Failed to load from server, will fall back to local storage:", e);
+            }
+        }
+
+        // 2. Fall back to local storage if not loaded from server
+        if (!loadedFromServer) {
+            const localData = localStorage.getItem('shopping_list');
+            if (localData) {
+                try {
+                    items = JSON.parse(localData);
+                } catch (e) {
+                    console.error("Failed to parse local storage shopping list:", e);
+                }
+            }
+        }
+
+        renderShoppingListItems(items);
+    }
+
+    function renderShoppingListItems(items) {
+        const ul = document.getElementById('shopping-list-ul');
+        if (!ul) return;
+        
+        ul.innerHTML = '';
+
+        if (!items || items.length === 0) {
+            ul.innerHTML = `
+                <li style="color: var(--text-secondary); text-align: center; padding: 2rem; display: flex; flex-direction: column; align-items: center; gap: 1rem;">
+                    <div style="background: var(--bg-color); width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border-color); color: var(--text-secondary);">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
+                    </div>
+                    <div>
+                        <p style="font-weight: 600; font-size: 1.1rem; margin: 0 0 0.25rem 0; color: var(--text-primary);">No ingredients found</p>
+                        <p style="font-size: 0.9rem; margin: 0; color: var(--text-secondary);">Select recipes on the home page and click "Generate Shopping List".</p>
+                    </div>
+                </li>
+            `;
+            return;
+        }
+
+        items.forEach(item => {
+            const li = document.createElement('li');
+            li.className = 'shopping-item';
+            if (item.checked) {
+                li.className += ' purchased';
+            }
+
+            const checkbox = document.createElement('div');
+            checkbox.className = 'shopping-checkbox';
+            checkbox.innerHTML = `
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+            `;
+
+            const textSpan = document.createElement('span');
+            textSpan.className = 'shopping-item-name';
+            textSpan.textContent = item.name;
+
+            li.appendChild(checkbox);
+            li.appendChild(textSpan);
+            ul.appendChild(li);
+        });
+
+        ul.onclick = async function(e) {
+            const li = e.target.closest('li.shopping-item');
+            if (!li) return;
+            
+            li.classList.toggle('purchased');
+            
+            if (currentUserId) {
+                await persistShoppingListState();
+            } else {
+                persistShoppingListStateLocal();
+            }
+        };
+    }
+
+    function getListItemsFromUI() {
+        const items = [];
+        document.querySelectorAll('#shopping-list-ul li.shopping-item').forEach(li => {
+            const name = li.querySelector('.shopping-item-name').textContent;
+            const checked = li.classList.contains('purchased');
+            items.push({ name, checked });
+        });
+        return items;
+    }
+
+    async function persistShoppingListState() {
+        const items = getListItemsFromUI();
+        try {
+            await fetch('{{ app_base }}/api/v1/shopping-list', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(items)
+            });
+        } catch (e) {
+            console.error("Failed to persist shopping list state on server:", e);
+        }
+    }
+
+    function persistShoppingListStateLocal() {
+        const items = getListItemsFromUI();
+        localStorage.setItem('shopping_list', JSON.stringify(items));
+    }
+
+    async function copyShoppingList() {
+        const items = getListItemsFromUI();
+        if (items.length === 0) return;
+
+        const text = items.map(item => `${item.checked ? '[x]' : '[ ]'} ${item.name}`).join('\n');
+        
+        try {
+            await navigator.clipboard.writeText(text);
+            const btn = document.getElementById('copy-btn');
+            const originalHTML = btn.innerHTML;
+            btn.innerHTML = `
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                Copied!
+            `;
+            setTimeout(() => { btn.innerHTML = originalHTML; }, 2000);
+        } catch (err) {
+            alert('Failed to copy to clipboard.');
+        }
+    }
+
+    function printShoppingList() {
+        window.print();
+    }
+
+    async function clearShoppingListUI() {
+        if (!confirm('Are you sure you want to clear your shopping list?')) {
+            return;
+        }
+
+        renderShoppingListItems([]);
+
+        if (currentUserId) {
+            try {
+                await fetch('{{ app_base }}/api/v1/shopping-list', {
+                    method: 'DELETE'
+                });
+            } catch (e) {
+                console.error("Failed to clear shopping list from server:", e);
+            }
+        } else {
+            localStorage.removeItem('shopping_list');
+        }
+    }
+</script>
+{% endblock %}

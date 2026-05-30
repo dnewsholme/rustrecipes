@@ -7,58 +7,7 @@
 
 {% block head %}
 <style>
-    /* Styling for shopping list modal */
-    .shopping-item {
-        padding: 0.75rem;
-        border-bottom: 1px solid var(--border-color);
-        cursor: pointer;
-        user-select: none;
-        transition: background-color 0.2s, opacity 0.2s;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-    }
-    .shopping-item:hover {
-        background-color: var(--surface-hover);
-    }
-    .shopping-item.purchased {
-        text-decoration: line-through;
-        opacity: 0.6;
-        color: var(--text-secondary);
-    }
 
-    /* Print styles */
-    @media print {
-        body * {
-            visibility: hidden;
-        }
-        #shopping-list-modal, #shopping-list-modal * {
-            visibility: visible;
-        }
-        #shopping-list-modal {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background: white !important;
-            box-shadow: none !important;
-            padding: 0 !important;
-        }
-        #shopping-list-modal .no-print {
-            display: none !important;
-        }
-        #shopping-list-content {
-            border: none !important;
-            background: white !important;
-            padding: 0 !important;
-            overflow: visible !important;
-        }
-        .shopping-item {
-            border-bottom: 1px solid #ddd;
-            color: black;
-        }
-    }
 
     /* Selected recipe glow */
     .recipe-card.selected-glow {
@@ -490,33 +439,14 @@
     </div>
 </div>
 
-<div id="shopping-list-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 2000; align-items: center; justify-content: center; padding: 1rem; backdrop-filter: blur(2px);">
-    <div style="background: var(--surface-color); padding: 2rem; border-radius: var(--radius-lg); width: 100%; max-width: 600px; max-height: 80vh; display: flex; flex-direction: column; gap: 1rem; box-shadow: var(--shadow-lg); border: 1px solid var(--border-color);">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-            <h2 style="margin: 0;">Shopping List</h2>
-            <button onclick="closeShoppingList()" class="no-print" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-secondary);">&times;</button>
-        </div>
-        <div id="shopping-list-content" style="overflow-y: auto; flex-grow: 1; padding: 1rem; background: var(--bg-color); border-radius: var(--radius-md); border: 1px solid var(--border-color);">
-            <ul style="list-style-type: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.5rem;" id="shopping-list-ul">
-            </ul>
-        </div>
-        <div class="no-print" style="display: flex; justify-content: space-between; gap: 1rem; margin-top: 1rem;">
-            <div>
-                <button class="btn btn-primary" onclick="copyShoppingList()" style="margin-right: 0.5rem;">Copy</button>
-                <button class="btn btn-secondary" onclick="printShoppingList()" style="margin-right: 0.5rem;">Print</button>
-                <button class="btn btn-danger" onclick="clearShoppingListUI()">Clear List</button>
-            </div>
-            <button class="btn btn-secondary" onclick="closeShoppingList()">Close</button>
-        </div>
-    </div>
-</div>
+
 
 {% endblock %}
 
 {% block scripts %}
 <script>
     const currentUserId = "{% match current_user_id %}{% when Some with (uid) %}{{ uid }}{% when None %}{% endmatch %}";
-    // Handle import=true or shopping_list=true query parameters
+    // Handle import=true query parameter
     window.addEventListener('DOMContentLoaded', () => {
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get('import') === 'true') {
@@ -528,12 +458,6 @@
                 const newUrl = window.location.pathname;
                 window.history.replaceState({}, '', newUrl);
             }
-        }
-        if (urlParams.get('shopping_list') === 'true') {
-            loadSavedShoppingList();
-            // Clean up URL without reloading
-            const newUrl = window.location.pathname;
-            window.history.replaceState({}, '', newUrl);
         }
     });
 
@@ -770,9 +694,11 @@
 
             if (response.ok) {
                 const data = await response.json();
-                const items = data.ingredients.map(ing => ({ name: ing, checked: false }));
-                renderShoppingListItems(items);
-                document.getElementById('shopping-list-modal').style.display = 'flex';
+                if (!currentUserId) {
+                    const items = data.ingredients.map(ing => ({ name: ing, checked: false }));
+                    localStorage.setItem('shopping_list', JSON.stringify(items));
+                }
+                window.location.href = '{{ app_base }}/shopping-list';
             } else {
                 alert('Failed to generate shopping list.');
             }
@@ -783,28 +709,6 @@
             btn.textContent = originalText;
             btn.disabled = false;
         }
-    }
-
-    function closeShoppingList() {
-        document.getElementById('shopping-list-modal').style.display = 'none';
-    }
-
-    async function copyShoppingList() {
-        const items = document.querySelectorAll('#shopping-list-ul li span:last-child');
-        const text = Array.from(items).map(span => span.textContent).join('\n');
-        try {
-            await navigator.clipboard.writeText(text);
-            const btn = document.querySelector('#shopping-list-modal .btn-primary');
-            const originalText = btn.textContent;
-            btn.textContent = 'Copied!';
-            setTimeout(() => { btn.textContent = originalText; }, 2000);
-        } catch (err) {
-            alert('Failed to copy to clipboard.');
-        }
-    }
-
-    function printShoppingList() {
-        window.print();
     }
 
     searchInput?.addEventListener('input', filterRecipes);
