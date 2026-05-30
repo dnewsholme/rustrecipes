@@ -1,6 +1,6 @@
 # Rust Recipe Manager
 
-A lightning-fast, highly-customizable recipe manager built in Rust. It's designed to be a central hub for all your recipes with advanced features tailored specifically for home cooks and BBQ enthusiasts.
+A fast, self-hosted recipe manager built with Rust, Axum, and Askama. Designed for home cooks and BBQ enthusiasts.
 
 ![Kamado Theme](https://img.shields.io/badge/Theme-Kamado_BBQ-orange?style=flat-square)
 ![Built with Rust](https://img.shields.io/badge/Built_with-Rust-black?style=flat-square&logo=rust)
@@ -32,142 +32,92 @@ A lightning-fast, highly-customizable recipe manager built in Rust. It's designe
 
 ## ✨ Features
 
-- **Blazing Fast**: Powered by Rust, Axum, and Askama templates for a near-instant user experience.
-- **Mobile Optimized UX**:
-  - **Tabbed Interface**: Switch seamlessly between Ingredients, Directions, and Cook Graphs on mobile devices.
-  - **No-Lock Cooking**: Integrated **Wake Lock API** prevents your screen from locking while you cook.
-  - **Space Saving**: Collapsible recipe photos and a streamlined header specifically for small screens.
-- **Integrated Cooking Timer**:
-  - **Quick-Access**: Floating timer panel accessible from any page with a single click.
-  - **Smart Suggestions**: Automatically extracts durations from recipe prep/cook fields and directions for one-tap timer setting.
-  - **Multimedia Alerts**: Looping alarm sound and pulsing visual header indicator when time is up.
-  - **Persistence**: Triggers browser notifications to alert you even if you switch tabs.
-- **Advanced Multi-Tag Filtering**:
-  - **Combinatorial Logic**: Apply multiple tags simultaneously to narrow down your collection (AND logic).
-  - **Dynamic Tag Menu**: The filter menu updates in real-time, only showing tags that exist within the currently filtered results—no more "Zero Results" filters.
-  - **Integrated Tag Search**: Quickly find specific tags within your collection using the built-in search box inside the filter menu.
-- **Favorites System**:
-  - **Quick Mark**: Toggle favorites directly from recipe cards on the home screen or the recipe detail page.
-  - **Dedicated Filter**: Instantly view your top recipes with a one-click "Favorites" filter.
-  - **Admin Security**: Only the logged-in administrator can modify favorites, while guests can still view and filter by them.
-- **Dynamic Ingredient Scaling**: Easily multiply recipe yields (e.g., 0.5x, 2x, 3x) with real-time updates directly in the text.
-- **Smart Unit Conversion**: Seamlessly toggle entire recipes between Original, Metric, and Imperial systems (instantly converts measurements embedded within markdown text!).
-- **Baker's Percentage Mode**: Automatically activated for recipes tagged with `bread` or `dough`. It calculates the total flour weight as 100% and displays all other ingredients as a relative percentage—essential for analyzing hydration levels and salt ratios.
-- **Combustion Inc. Integration**: Upload Combustion Inc. predictive thermometer CSV exports directly to a recipe to visualize your cook's core, surface, and ambient temperatures over time with interactive Chart.js graphs.
-- **Fermentation Calculator**: Intelligent tool for bread bakers. It automatically detects yeast or sourdough starter amounts in your ingredients and estimates proofing times based on your current kitchen temperature.
-- **YouTube Video Integration**: 
-  - **URL Import**: Paste a YouTube link and the app will use Gemini AI to "watch" the video via its transcript and generate a full recipe.
-  - **Integrated Player**: Watch the original video directly inside a dedicated tab in the recipe view—perfect for following along on mobile.
-- **Smart Import from Anywhere**:
-  - **URL Import**: Automatically scrape recipes from URLs using LD+JSON or a robust Gemini AI fallback for sites without structured data.
-  - **Paprika Import**: Bulk import archives (`.paprikarecipes`) from Paprika Recipe Manager.
-  - **AI Photo Import**: Take a photo of a cookbook page, and the built-in Gemini AI Vision integration will automatically extract the title, ingredients, and instructions!
-- **Cooking Temperatures & Safety**: 
-  - **Meat Temp Reference**: A dedicated reference page for internal meat temperatures and doneness levels, covering everything from rare steak to low & slow BBQ brisket.
-  - **USDA Log 7 Calculator**: Interactive calculator for poultry safety. Achieve perfectly juicy chicken at lower temperatures by calculating the required hold time for safe Salmonella lethality.
-- **Multi-User Workspace & Access Controls**:
-  - **SQLite Database Persistence**: Migrated from flat Markdown files to a robust, synchronous SQLite database layer (`recipes.db`).
-  - **Zero-Downtime Data Migration**: Automatically ingests existing `data/recipes/*.md` files into SQLite on boot, associating them with the seeded admin account and marking them public by default to preserve pre-existing share links.
-  - **Self-Service Registration & Multi-User Support**: Anyone can sign up for an account. Passwords are securely hashed with `bcrypt`.
-  - **Public/Private Recipe Visibility**: Toggle individual recipes as "Public" (viewable to anyone via a shared read-only link) or keep them private to your own account.
-  - **Granular Ownership Enforcements**: Mutating operations (editing, deleting, uploading images/CSV) are strictly restricted to the recipe's verified creator.
-- **Secure Admin & OAuth Login**: Authenticate with standard credentials (email and password) or configure **Google OAuth 2.0** for seamless one-tap login.
-- **Developer-Friendly API**: Comprehensive REST API (v1) for programmatic recipe management, enabling future mobile app integrations or custom automation workflows.
-- **Multi-Select Shopping List**:
-  - Select multiple recipes from the home page.
-  - Automatically scale all selected recipes to your desired number of portions.
-  - Combine and convert all ingredients into a unified list (Metric or Imperial).
-- **Streamlined UI & Aesthetics**:
-  - **Minimalist Header**: Clean, icon-only navigation bar that provides more screen real estate for your content.
+- **Mobile-First UI** — Tabbed recipe view, Wake Lock API for cooking, responsive hamburger menu, and card-based admin panel on small screens.
+- **Cooking Timer** — Quick-access floating timer with smart suggestions extracted from recipe text, sound/vibration alerts, and browser notifications.
+- **Cooking Temperatures & USDA Log 7** — Built-in meat temp reference and an interactive hold-time calculator for safe poultry lethality at lower temps.
+- **Multi-Tag Filtering** — Apply multiple tags with AND logic; the filter menu dynamically updates to only show relevant tags.
+- **Favorites** — Mark recipes as favorites from cards or detail pages; filter by favorites on the home screen.
+- **Ingredient Scaling & Unit Conversion** — Scale yields (0.5x–3x) and convert between Original, Metric, and Imperial inline.
+- **Baker's Percentage Mode** — Auto-activates for `bread`/`dough` tagged recipes, showing hydration and ratios relative to flour weight.
+- **Combustion Inc. Integration** — Upload thermometer CSV exports to visualize core, surface, and ambient temps with Chart.js.
+- **Fermentation Calculator** — Estimates proofing times based on yeast/starter amounts and kitchen temperature.
+- **Smart Import** — Scrape recipes from URLs (LD+JSON or Gemini AI fallback), import Paprika archives, or snap a photo of a cookbook page with AI Vision.
+- **YouTube Import** — Paste a YouTube URL to generate a recipe from the transcript via Gemini AI, with an embedded player for follow-along.
+- **Shopping Lists** — Select multiple recipes, scale portions, and generate a combined ingredient list. Lists are persisted server-side with check-off state and can be cleared.
+- **Multi-User & Access Control** — Self-service registration, bcrypt passwords, Google OAuth 2.0, per-user recipe ownership, and public/private visibility toggles.
+- **Admin Panel** — Manage users, reset passwords, and delete accounts from a responsive admin interface.
+- **REST API** — Full CRUD API (`/api/v1`) with token auth for programmatic access. Built-in interactive API guide at `/api`.
 
 ---
 
-## 🔌 API Documentation
+## 🔌 API
 
-The application includes a RESTful API (v1) that allows for programmatic access to your recipes, making it easy to build mobile apps or integrations.
-
-**Base URL**: `/api/v1`
+**Base URL**: `/api/v1` — [Interactive docs at `/api`]
 
 | Endpoint | Method | Description |
 | :--- | :--- | :--- |
-| `/recipes` | `GET` | List all recipes (includes hydration summaries). |
-| `/recipes` | `POST` | Create a new recipe (Requires `API_TOKEN`). |
-| `/recipes/{id}` | `GET` | Get a specific recipe with unit/scale conversion and automatic hydration calculation. |
-| `/recipes/{id}` | `PUT` | Update an existing recipe (Requires `API_TOKEN`). |
-| `/recipes/{id}` | `DELETE` | Delete a recipe (Requires `API_TOKEN`). |
-| `/temps` | `GET` | Get a list of recommended internal meat temperatures. |
-| `/log7` | `GET` | Calculate USDA Log 7 hold time for safe poultry lethality based on `temp`. |
-| `/ferment` | `GET` | Calculate estimated fermentation time based on `type`, `amount`, and `temp`. |
-| `/import` | `POST` | Import a recipe from a URL using AI processing (Requires `API_TOKEN`). |
-| `/shopping-list` | `POST` | Generate a combined, scaled shopping list from multiple recipes. |
+| `/recipes` | `GET` | List all recipes. |
+| `/recipes` | `POST` | Create a recipe. |
+| `/recipes/{id}` | `GET` | Get a recipe (supports unit/scale query params). |
+| `/recipes/{id}` | `PUT` | Update a recipe. |
+| `/recipes/{id}` | `DELETE` | Delete a recipe. |
+| `/temps` | `GET` | Internal meat temperature reference. |
+| `/log7` | `GET` | USDA Log 7 hold-time calculator. |
+| `/ferment` | `GET` | Fermentation time estimator. |
+| `/import` | `POST` | Import a recipe from a URL via AI. |
+| `/shopping-list` | `POST` | Generate a shopping list from selected recipes. |
+| `/shopping-list` | `GET` | Retrieve the saved shopping list. |
+| `/shopping-list` | `PUT` | Save/update shopping list state. |
+| `/shopping-list` | `DELETE` | Clear the saved shopping list. |
 
-### 📖 Interactive API Guide
-The application features a built-in interactive API guide accessible at `/api`. It provides detailed documentation for every endpoint and an interactive "Try it out" playground that allows you to test the API directly from your browser.
-
-**Authentication**:
-For mutable operations (`POST`, `PUT`, `DELETE`, `IMPORT`), you must provide an `API_TOKEN` in the `Authorization` header as a Bearer token. Set this token using the `API_TOKEN` environment variable.
+Mutable endpoints require an `API_TOKEN` via `Authorization: Bearer <token>`.
 
 ---
 
 ## 🔐 Generating an Admin Password Hash
 
-To secure your recipe manager, you need to set the `ADMIN_PASSWORD_HASH` environment variable. This prevents anyone else from editing or importing recipes. 
-
-You can generate this hash using the included utility script:
-
-**If you have Rust installed locally:**
 ```bash
+# With Rust installed locally
 cargo run --bin hash_password "my_secure_password"
-```
 
-**If you are using Docker:**
-```bash
+# Or via Docker
 docker run --rm dnewsholme/recipemanager:latest ./hash_password "my_secure_password"
 ```
 
-Copy the output (e.g., `$2y$12$...`) and use it as the value for `ADMIN_PASSWORD_HASH` when starting your server.
+Copy the output (e.g., `$2y$12$...`) and use it as `ADMIN_PASSWORD_HASH`.
 
 ---
 
-## 🚀 Running Locally (Development)
+## 🚀 Running Locally
 
 **Environment Variables**:
-- `ADMIN_EMAIL`: The default administrator email (defaults to `dbizsley@googlemail.com`). Used for initial seeding and Google OAuth mapping.
-- `ADMIN_PASSWORD_HASH`: Required for secure login. See the section above to generate your hash. If omitted, the default temporary password is "admin".
-- `GOOGLE_CLIENT_ID`: (Optional) Google OAuth Client ID for setting up Google Login.
-- `GOOGLE_CLIENT_SECRET`: (Optional) Google OAuth Client Secret.
-- `GOOGLE_REDIRECT_URI`: (Optional) Redirect URI for Google OAuth (defaults to `<app_base>/login/google/callback`).
-- `API_TOKEN`: (Required for API write access) A secure token for authenticating API requests.
-- `SESSION_SECRET`: (Optional but recommended) A long random string used to cryptographically sign session cookies. If omitted, sessions will reset every time the server restarts.
-- `GEMINI_API_KEY`: Required if you want to use the AI Photo Import or Video URL Import features. You can get a free key from [Google AI Studio](https://aistudio.google.com/app/apikey).
-- `APP_BASE`: (Optional) Set this if you are hosting the app behind a reverse proxy on a subpath (e.g. `APP_BASE="/recipes"`).
 
-To run locally:
-1. Ensure you have Rust and Cargo installed.
-2. Run the following:
+| Variable | Required | Description |
+| :--- | :--- | :--- |
+| `ADMIN_EMAIL` | No | Admin email (default: `dbizsley@googlemail.com`). |
+| `ADMIN_PASSWORD_HASH` | Yes | Bcrypt hash for admin login. Default password is "admin" if omitted. |
+| `API_TOKEN` | Yes | Token for API write access. |
+| `SESSION_SECRET` | Recommended | Signs session cookies. Sessions reset on restart if omitted. |
+| `GEMINI_API_KEY` | No | Enables AI photo/video/URL import via [Google AI Studio](https://aistudio.google.com/app/apikey). |
+| `GOOGLE_CLIENT_ID` | No | Google OAuth 2.0 Client ID. |
+| `GOOGLE_CLIENT_SECRET` | No | Google OAuth 2.0 Client Secret. |
+| `GOOGLE_REDIRECT_URI` | No | OAuth callback URL (defaults to `<app_base>/login/google/callback`). |
+| `APP_BASE` | No | Subpath prefix for reverse proxy setups (e.g., `/recipes`). |
 
 ```bash
-# Clone the repository
 git clone https://github.com/dnewsholme/recipemanager.git
 cd recipemanager
-
-# Run the server locally
 export ADMIN_PASSWORD_HASH='<your_generated_hash>'
 export API_TOKEN='your_api_token_here'
 export SESSION_SECRET='your_random_secret_string'
-export GEMINI_API_KEY="your_api_key_here"
 cargo run
 ```
 
-The application will be available at `http://localhost:3000`.
+Available at `http://localhost:3000`.
 
 ---
 
-## 🐳 Running with Docker (Production)
-
-The application is containerized using a multi-stage Docker build, resulting in an incredibly small and secure runtime image. 
-
-The easiest way to run the application is via Docker. Be sure to map a volume to `/app/data` to ensure your recipes and uploaded images persist across container restarts.
+## 🐳 Docker
 
 ```bash
 docker run -d \
@@ -176,15 +126,13 @@ docker run -d \
   -e ADMIN_PASSWORD_HASH='<your_generated_hash>' \
   -e API_TOKEN='your_api_token_here' \
   -e SESSION_SECRET='your_random_secret_string' \
-  -e GEMINI_API_KEY="your_api_key_here" \
-  -v /path/to/your/local/data:/app/data \
+  -v /path/to/your/data:/app/data \
   dnewsholme/recipemanager:latest
 ```
 
-### Data Directory Structure
-The `/app/data` volume contains:
-- `recipes.db`: The SQLite database containing all users, recipes, and meal plans.
-- `uploads/`: Contains any cover images or Combustion CSV files you have uploaded.
-- `recipes/`: (Legacy) If you are migrating from a previous version, place your legacy `.md` files here. The application will automatically ingest them into `recipes.db` and rename them to `.md.bak` at startup.
+### Data Directory (`/app/data`)
+- `recipes.db` — SQLite database (users, recipes, meal plans).
+- `uploads/` — Cover images and Combustion CSV files.
+- `recipes/` — (Legacy) Place old `.md` files here; they'll be auto-migrated on startup.
 
 ---
