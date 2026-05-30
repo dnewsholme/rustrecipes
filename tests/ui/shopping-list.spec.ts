@@ -32,9 +32,8 @@ test.describe('Shopping List', () => {
     await page.locator('#shopping-unit').selectOption('metric');
     await page.locator('#shopping-list-bar .btn-primary').click();
 
-    // Verify modal
-    const modal = page.locator('#shopping-list-modal');
-    await expect(modal).toBeVisible();
+    // Verify redirect to dedicated page
+    await expect(page).toHaveURL(/\/shopping-list/);
 
     const listItems = page.locator('#shopping-list-ul li');
     await expect(listItems.first()).toBeVisible({ timeout: 5000 });
@@ -55,10 +54,10 @@ test.describe('Shopping List', () => {
     });
     await expect(page.locator('#shopping-list-ul li.shopping-item').first()).not.toHaveClass(/purchased/, { timeout: 2000 });
 
-    // Close modal
-    const closeBtn = page.locator('#shopping-list-modal .btn-secondary').filter({ hasText: 'Close' });
-    await closeBtn.click();
-    await expect(modal).not.toBeVisible();
+    // Click Back to Recipes to return home
+    const backBtn = page.locator('text=Back to Recipes');
+    await backBtn.click();
+    await expect(page).toHaveURL(/\/$/);
   });
 
   test('should save and persist shopping list checked states across page reloads', async ({ page }) => {
@@ -69,9 +68,8 @@ test.describe('Shopping List', () => {
 
     await page.locator('#shopping-list-bar .btn-primary').click();
 
-    // Verify modal and elements loaded
-    const modal = page.locator('#shopping-list-modal');
-    await expect(modal).toBeVisible();
+    // Verify redirected to shopping list page
+    await expect(page).toHaveURL(/\/shopping-list/);
 
     const listItems = page.locator('#shopping-list-ul li');
     await expect(listItems.first()).toBeVisible({ timeout: 5000 });
@@ -88,27 +86,12 @@ test.describe('Shopping List', () => {
     console.log("PUT Response Status:", putResponse.status());
     await expect(firstItem).toHaveClass(/purchased/, { timeout: 2000 });
 
-    // Close the modal
-    const closeBtn = page.locator('#shopping-list-modal .btn-secondary').filter({ hasText: 'Close' });
-    await closeBtn.click();
-    await expect(modal).not.toBeVisible();
-
-    // Reload the page
+    // Reload the page directly
     await page.reload();
 
-    // Click the "Saved Shopping List" header button
-    const savedListBtn = page.locator('#saved-shopping-list-btn');
-    await expect(savedListBtn).toBeVisible();
-    await savedListBtn.click();
-
-    // Verify the modal is visible and the checked state is recovered!
-    await expect(modal).toBeVisible();
+    // Verify the checked state is recovered on reload
     const reloadedFirstItem = page.locator('#shopping-list-ul li.shopping-item').first();
     await expect(reloadedFirstItem).toHaveClass(/purchased/, { timeout: 5000 });
-
-    // Close modal
-    await closeBtn.click();
-    await expect(modal).not.toBeVisible();
   });
 
   test('should clear a shopping list from database and UI', async ({ page }) => {
@@ -119,8 +102,8 @@ test.describe('Shopping List', () => {
 
     await page.locator('#shopping-list-bar .btn-primary').click();
 
-    const modal = page.locator('#shopping-list-modal');
-    await expect(modal).toBeVisible();
+    // Verify redirected to shopping list page
+    await expect(page).toHaveURL(/\/shopping-list/);
 
     const listItems = page.locator('#shopping-list-ul li');
     await expect(listItems.first()).toBeVisible({ timeout: 5000 });
@@ -134,28 +117,16 @@ test.describe('Shopping List', () => {
     const deletePromise = page.waitForResponse(response => 
       response.url().includes('/api/v1/shopping-list') && response.request().method() === 'DELETE'
     );
-    await page.locator('#shopping-list-modal .btn-danger').click();
+    await page.locator('.btn-danger').click();
     await deletePromise;
 
     // Verify UI is updated to show empty list
-    await expect(page.locator('#shopping-list-ul')).toContainText('No ingredients found.');
+    await expect(page.locator('#shopping-list-ul')).toContainText('No ingredients found');
 
-    // Close and reload
-    const closeBtn = page.locator('#shopping-list-modal .btn-secondary').filter({ hasText: 'Close' });
-    await closeBtn.click();
-    await expect(modal).not.toBeVisible();
-
+    // Reload the page
     await page.reload();
 
-    // Click Saved Shopping List to verify it shows no saved shopping list found
-    const savedListBtn = page.locator('#saved-shopping-list-btn');
-    await expect(savedListBtn).toBeVisible();
-    await savedListBtn.click();
-
-    await expect(modal).toBeVisible();
-    await expect(page.locator('#shopping-list-ul')).toContainText('No saved shopping list found.');
-
-    await closeBtn.click();
-    await expect(modal).not.toBeVisible();
+    // Verify it still shows empty
+    await expect(page.locator('#shopping-list-ul')).toContainText('No ingredients found');
   });
 });
