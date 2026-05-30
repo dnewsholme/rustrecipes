@@ -165,6 +165,54 @@ pub fn db_init(
         }
     }
 
+    // Create user_favorites table
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS user_favorites (
+            user_id TEXT NOT NULL,
+            recipe_id TEXT NOT NULL,
+            PRIMARY KEY (user_id, recipe_id),
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY(recipe_id) REFERENCES recipes(id) ON DELETE CASCADE
+        )",
+        [],
+    )?;
+
+    // Migrate legacy global favorites to user_favorites
+    let table_info_res: Result<Vec<String>, rusqlite::Error> = conn
+        .prepare("PRAGMA table_info(recipes)")
+        .and_then(|mut stmt| {
+            let rows = stmt.query_map([], |row| row.get::<_, String>(1))?;
+            let mut cols = Vec::new();
+            for c in rows.flatten() {
+                cols.push(c);
+            }
+            Ok(cols)
+        });
+    let has_favorite_column = match table_info_res {
+        Ok(cols) => cols.iter().any(|col| col == "favorite"),
+        Err(_) => false,
+    };
+    if has_favorite_column {
+        if let Ok(mut stmt) = conn.prepare("SELECT id, owner_id FROM recipes WHERE favorite = 1") {
+            if let Ok(mut rows) = stmt.query([]) {
+                let mut migrate_favs = Vec::new();
+                while let Ok(Some(row)) = rows.next() {
+                    if let (Ok(recipe_id), Ok(owner_id)) =
+                        (row.get::<_, String>(0), row.get::<_, String>(1))
+                    {
+                        migrate_favs.push((owner_id, recipe_id));
+                    }
+                }
+                for (user_id, recipe_id) in migrate_favs {
+                    let _ = conn.execute(
+                        "INSERT OR IGNORE INTO user_favorites (user_id, recipe_id) VALUES (?1, ?2)",
+                        [&user_id, &recipe_id],
+                    );
+                }
+            }
+        }
+    }
+
     // AUTOMATIC DATA MIGRATION FROM FLAT MARKDOWN FILES
     // Clean up any bad legacy migration entries with empty string IDs
     let _ = conn.execute("DELETE FROM recipes WHERE id = ''", []);
@@ -309,7 +357,7 @@ pub fn list_recipes_for_user(user_id: Option<&str>) -> Vec<Recipe> {
         Some(_) => conn.prepare(
             "SELECT r.id, r.title, r.description, r.image, r.source_url, r.tags, r.servings, 
                     r.prep_time, r.cook_time, r.ingredients, r.markdown, r.combustion_csv, 
-                    r.video_url, r.favorite, r.owner_id, r.is_public, u.email 
+                    r.video_url, EXISTS(SELECT 1 FROM user_favorites WHERE user_id = ?1 AND recipe_id = r.id) as favorite, r.owner_id, r.is_public, u.email 
              FROM recipes r
              LEFT JOIN users u ON r.owner_id = u.id
              WHERE r.is_public = 1 OR r.owner_id = ?1",
@@ -317,7 +365,7 @@ pub fn list_recipes_for_user(user_id: Option<&str>) -> Vec<Recipe> {
         None => conn.prepare(
             "SELECT r.id, r.title, r.description, r.image, r.source_url, r.tags, r.servings, 
                     r.prep_time, r.cook_time, r.ingredients, r.markdown, r.combustion_csv, 
-                    r.video_url, r.favorite, r.owner_id, r.is_public, u.email 
+                    r.video_url, 0 as favorite, r.owner_id, r.is_public, u.email 
              FROM recipes r
              LEFT JOIN users u ON r.owner_id = u.id
              WHERE r.is_public = 1",
@@ -381,17 +429,29 @@ pub fn list_recipes_for_user(user_id: Option<&str>) -> Vec<Recipe> {
 }
 
 pub fn read_recipe(id: &str) -> Option<Recipe> {
+    read_recipe_for_user(id, None)
+}
+
+pub fn read_recipe_for_user(id: &str, user_id: Option<&str>) -> Option<Recipe> {
     let conn = rusqlite::Connection::open(get_db_path()).ok()?;
-    let mut stmt = conn
-        .prepare(
+    let mut stmt = match user_id {
+        Some(_) => conn.prepare(
             "SELECT r.id, r.title, r.description, r.image, r.source_url, r.tags, r.servings, 
                     r.prep_time, r.cook_time, r.ingredients, r.markdown, r.combustion_csv, 
-                    r.video_url, r.favorite, r.owner_id, r.is_public, u.email 
+                    r.video_url, EXISTS(SELECT 1 FROM user_favorites WHERE user_id = ?2 AND recipe_id = r.id) as favorite, r.owner_id, r.is_public, u.email 
              FROM recipes r
              LEFT JOIN users u ON r.owner_id = u.id
              WHERE r.id = ?1",
-        )
-        .ok()?;
+        ),
+        None => conn.prepare(
+            "SELECT r.id, r.title, r.description, r.image, r.source_url, r.tags, r.servings, 
+                    r.prep_time, r.cook_time, r.ingredients, r.markdown, r.combustion_csv, 
+                    r.video_url, 0 as favorite, r.owner_id, r.is_public, u.email 
+             FROM recipes r
+             LEFT JOIN users u ON r.owner_id = u.id
+             WHERE r.id = ?1",
+        ),
+    }.ok()?;
 
     let row_to_recipe = |row: &rusqlite::Row| {
         let tags_str: String = row.get(5)?;
@@ -435,7 +495,27 @@ pub fn read_recipe(id: &str) -> Option<Recipe> {
         Ok(recipe)
     };
 
-    stmt.query_row([id], row_to_recipe).ok()
+    let recipe = match user_id {
+        Some(uid) => stmt.query_row(rusqlite::params![id, uid], row_to_recipe),
+        None => stmt.query_row(rusqlite::params![id], row_to_recipe),
+    }
+    .ok();
+
+    if let Some(mut recipe) = recipe {
+        if let Some(img) = &mut recipe.image {
+            if img.starts_with("/uploads/") {
+                *img = img[1..].to_string();
+            }
+        }
+        if let Some(csv) = &mut recipe.combustion_csv {
+            if csv.starts_with("/uploads/") {
+                *csv = csv[1..].to_string();
+            }
+        }
+        Some(recipe)
+    } else {
+        None
+    }
 }
 
 pub fn save_recipe(recipe: &Recipe) -> Result<(), std::io::Error> {
@@ -599,6 +679,43 @@ pub fn process_image(data: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>>
     Ok(buf)
 }
 
+pub fn is_recipe_favorite(user_id: &str, recipe_id: &str) -> bool {
+    let conn = match rusqlite::Connection::open(get_db_path()) {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM user_favorites WHERE user_id = ?1 AND recipe_id = ?2",
+            [user_id, recipe_id],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+    count > 0
+}
+
+pub fn toggle_recipe_favorite(user_id: &str, recipe_id: &str) -> Result<bool, std::io::Error> {
+    let conn = rusqlite::Connection::open(get_db_path())
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+    let is_fav = is_recipe_favorite(user_id, recipe_id);
+    if is_fav {
+        conn.execute(
+            "DELETE FROM user_favorites WHERE user_id = ?1 AND recipe_id = ?2",
+            [user_id, recipe_id],
+        )
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        Ok(false)
+    } else {
+        conn.execute(
+            "INSERT INTO user_favorites (user_id, recipe_id) VALUES (?1, ?2)",
+            [user_id, recipe_id],
+        )
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        Ok(true)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -647,5 +764,71 @@ mod tests {
         assert_eq!(read.is_public, true);
 
         delete_recipe(test_id).unwrap();
+    }
+
+    #[test]
+    fn test_per_user_favorites() {
+        let _ = std::fs::create_dir_all("data");
+        db_init(
+            "$2b$12$xeIhvWgV.yZ2FMHbwZL39.WZSDZWSKIokohV5S7aIwR.spHXuW72G",
+            "dbizsley@googlemail.com",
+        )
+        .unwrap();
+
+        let user1_id = "user1-id";
+        let user2_id = "user2-id";
+        let recipe_id = "fav-recipe-id";
+
+        let conn = rusqlite::Connection::open(get_db_path()).unwrap();
+        let _ = conn.execute(
+            "DELETE FROM user_favorites WHERE recipe_id = ?1",
+            [recipe_id],
+        );
+        let _ = conn.execute("DELETE FROM recipes WHERE id = ?1", [recipe_id]);
+        let _ = conn.execute(
+            "DELETE FROM users WHERE id = ?1 OR id = ?2",
+            [user1_id, user2_id],
+        );
+
+        // Insert mock users
+        conn.execute(
+            "INSERT INTO users (id, email, password_hash) VALUES (?1, 'u1@ex.com', 'hash')",
+            [user1_id],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO users (id, email, password_hash) VALUES (?1, 'u2@ex.com', 'hash')",
+            [user2_id],
+        )
+        .unwrap();
+        // Insert mock recipe
+        conn.execute(
+            "INSERT INTO recipes (id, title, markdown, owner_id) VALUES (?1, 'Title', 'MD', ?2)",
+            [recipe_id, user1_id],
+        )
+        .unwrap();
+
+        assert_eq!(is_recipe_favorite(user1_id, recipe_id), false);
+        assert_eq!(is_recipe_favorite(user2_id, recipe_id), false);
+
+        let state = toggle_recipe_favorite(user1_id, recipe_id).unwrap();
+        assert_eq!(state, true);
+        assert_eq!(is_recipe_favorite(user1_id, recipe_id), true);
+        assert_eq!(is_recipe_favorite(user2_id, recipe_id), false);
+
+        let state = toggle_recipe_favorite(user1_id, recipe_id).unwrap();
+        assert_eq!(state, false);
+        assert_eq!(is_recipe_favorite(user1_id, recipe_id), false);
+
+        // Cleanup
+        let _ = conn.execute(
+            "DELETE FROM user_favorites WHERE recipe_id = ?1",
+            [recipe_id],
+        );
+        let _ = conn.execute("DELETE FROM recipes WHERE id = ?1", [recipe_id]);
+        let _ = conn.execute(
+            "DELETE FROM users WHERE id = ?1 OR id = ?2",
+            [user1_id, user2_id],
+        );
     }
 }

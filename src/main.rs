@@ -399,8 +399,8 @@ async fn view_recipe(
     jar: PrivateCookieJar,
     Path(id): Path<String>,
 ) -> Result<Html<String>, (StatusCode, &'static str)> {
-    if let Some(recipe) = storage::read_recipe(&id) {
-        let user_id = get_session_user_id(&jar).await;
+    let user_id = get_session_user_id(&jar).await;
+    if let Some(recipe) = storage::read_recipe_for_user(&id, user_id.as_deref()) {
         let user_email = if let Some(uid) = &user_id {
             storage::find_user_by_id(uid).map(|u| u.email)
         } else {
@@ -518,13 +518,18 @@ async fn toggle_favorite(jar: PrivateCookieJar, Path(id): Path<String>) -> impl 
         None => return Err((StatusCode::UNAUTHORIZED, "Unauthorized")),
     };
 
-    if let Some(mut recipe) = storage::read_recipe(&id) {
-        if recipe.owner_id != user_id && !is_admin_session(&jar) {
+    if let Some(recipe) = storage::read_recipe_for_user(&id, Some(&user_id)) {
+        let is_owner = recipe.owner_id == user_id;
+        if !recipe.is_public && !is_owner && !is_admin_session(&jar) {
             return Err((StatusCode::FORBIDDEN, "Forbidden"));
         }
-        recipe.favorite = !recipe.favorite;
-        let _ = storage::save_recipe(&recipe);
-        Ok(Json(serde_json::json!({ "favorite": recipe.favorite })))
+        match storage::toggle_recipe_favorite(&user_id, &id) {
+            Ok(new_state) => Ok(Json(serde_json::json!({ "favorite": new_state }))),
+            Err(_) => Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to toggle favorite",
+            )),
+        }
     } else {
         Err((StatusCode::NOT_FOUND, "Recipe not found"))
     }

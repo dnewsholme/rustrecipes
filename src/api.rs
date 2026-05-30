@@ -459,7 +459,13 @@ async fn get_meal_plan(
         None => return Err(StatusCode::UNAUTHORIZED),
     };
 
+    tracing::info!("get_meal_plan called for user_id={}", user_id);
     let meals = storage::read_meal_plan(&user_id);
+    tracing::info!(
+        "Returning {} meal plan items for user_id={}",
+        meals.len(),
+        user_id
+    );
     let mut items = Vec::new();
     for meal in meals {
         let title = if meal.recipe_id.starts_with("manual:") {
@@ -477,7 +483,16 @@ async fn get_meal_plan(
         });
     }
 
-    Ok(Json(MealPlanResponse { meals: items }))
+    let mut headers = axum::http::HeaderMap::new();
+    headers.insert(
+        axum::http::header::CACHE_CONTROL,
+        "no-store, no-cache, must-revalidate, private"
+            .parse()
+            .unwrap(),
+    );
+    headers.insert(axum::http::header::VARY, "Cookie".parse().unwrap());
+
+    Ok((headers, Json(MealPlanResponse { meals: items })))
 }
 
 async fn add_to_meal_plan(
