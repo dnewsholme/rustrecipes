@@ -77,7 +77,7 @@
                     </svg>
                 </a>
                 {% endif %}
-                <button id="theme-toggle" class="btn btn-secondary theme-toggle-btn" aria-label="Toggle Dark Mode">
+                <button id="theme-toggle" class="btn btn-secondary theme-toggle-btn mobile-collapsible" aria-label="Toggle Dark Mode">
                     <svg id="theme-icon-dark" style="display: none;" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
                     <svg id="theme-icon-light" style="display: none;" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
                 </button>
@@ -142,6 +142,9 @@
                                         <line x1="10" y1="22" x2="14" y2="22"></line>
                                     </svg>
                                 </button>
+                                <button class="btn btn-secondary theme-toggle-btn" aria-label="Toggle Dark Mode" onclick="document.getElementById('theme-toggle').click(); closeMobileMenu();">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+                                </button>
                                 {% if is_admin %}
                                 <a href="{{ app_base }}/admin/users" class="btn btn-secondary theme-toggle-btn" title="Manage Users" onclick="closeMobileMenu();">
                                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -200,9 +203,12 @@
     <div id="temps-panel" style="display: none; position: fixed; top: 80px; right: 20px; width: 380px; max-width: calc(100vw - 40px); max-height: 80vh; overflow-y: auto; background: var(--surface-color); border: 1px solid var(--border-color); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); z-index: 6000; padding: 1.5rem;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem;">
             <h3 style="margin: 0; font-size: 1.1rem; font-weight: 700;">Cooking Temps</h3>
-            <div class="unit-toggle" style="background: var(--surface-hover); padding: 0.15rem; border-radius: var(--radius-md); display: flex; gap: 0.15rem;">
-                <button onclick="setGlobalUnit('celsius')" class="btn btn-secondary unit-btn active" id="unit-celsius-toggle" style="padding: 0.2rem 0.5rem; font-size: 0.75rem;">°C</button>
-                <button onclick="setGlobalUnit('fahrenheit')" class="btn btn-secondary unit-btn" id="unit-fahrenheit-toggle" style="padding: 0.2rem 0.5rem; font-size: 0.75rem;">°F</button>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <div class="unit-toggle" style="background: var(--surface-hover); padding: 0.15rem; border-radius: var(--radius-md); display: flex; gap: 0.15rem;">
+                    <button onclick="setGlobalUnit('celsius')" class="btn btn-secondary unit-btn active" id="unit-celsius-toggle" style="padding: 0.2rem 0.5rem; font-size: 0.75rem;">°C</button>
+                    <button onclick="setGlobalUnit('fahrenheit')" class="btn btn-secondary unit-btn" id="unit-fahrenheit-toggle" style="padding: 0.2rem 0.5rem; font-size: 0.75rem;">°F</button>
+                </div>
+                <button onclick="toggleTempsPanel()" style="background: none; border: none; cursor: pointer; color: var(--text-secondary); padding: 0.25rem; display: flex; align-items: center;" title="Close"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
             </div>
         </div>
         
@@ -320,6 +326,7 @@
             
             // Close timer if open
             timerPanel.style.display = 'none';
+            closeMobileMenu();
             updateLog7Calculator();
         }
 
@@ -741,6 +748,13 @@
         document.addEventListener('click', (e) => {
             if (mobileMenuPanel?.classList.contains('open') && !e.target.closest('#mobile-menu-panel') && !e.target.closest('#mobile-menu-btn')) {
                 closeMobileMenu();
+            }
+            // Close temps/timer panels when clicking outside
+            if (tempsPanel.style.display === 'block' && !e.target.closest('#temps-panel') && !e.target.closest('#temps-toggle-btn') && !e.target.closest('.mobile-menu-panel')) {
+                tempsPanel.style.display = 'none';
+            }
+            if (timerPanel.style.display === 'block' && !isAlarming && !e.target.closest('#timer-panel') && !e.target.closest('#timer-toggle-btn')) {
+                timerPanel.style.display = 'none';
             }
         });
 
