@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 
-{% block title %}Admin Login{% endblock %}
+{% block title %}Login{% endblock %}
 
 {% block header_actions %}
 {% endblock %}
 
 {% block content %}
 <div style="max-width: 400px; margin: 4rem auto; padding: 2rem; background: var(--surface-color); border: 1px solid var(--border-color); border-radius: var(--radius-lg); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);">
-    <h2 style="text-align: center; margin-bottom: 2rem; color: var(--text-color);">Admin Login</h2>
+    <h2 style="text-align: center; margin-bottom: 2rem; color: var(--text-color);">Login</h2>
     
     {% match error %}
         {% when Some with (msg) %}

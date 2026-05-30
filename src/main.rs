@@ -27,6 +27,7 @@ struct GoogleOauthConfig {
     client_id: String,
     client_secret: String,
     redirect_uri: String,
+    #[allow(dead_code)]
     admin_email: String,
 }
 
@@ -980,6 +981,63 @@ async fn admin_users_delete(
     }
 }
 
+#[derive(Deserialize)]
+struct ResetPasswordFormData {
+    password: String,
+}
+
+async fn admin_users_reset_password(
+    State(state): State<AppState>,
+    jar: PrivateCookieJar,
+    Path(id): Path<String>,
+    Form(form): Form<ResetPasswordFormData>,
+) -> impl IntoResponse {
+    if !is_admin_session(&jar) {
+        return (
+            StatusCode::FORBIDDEN,
+            "Forbidden. Only administrators can perform this action.",
+        )
+            .into_response();
+    }
+
+    if form.password.trim().is_empty() {
+        return (StatusCode::BAD_REQUEST, "Password cannot be empty.").into_response();
+    }
+
+    let user_to_reset = match storage::find_user_by_id(&id) {
+        Some(u) => u,
+        None => return (StatusCode::NOT_FOUND, "User not found.").into_response(),
+    };
+
+    if user_to_reset.password_hash.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            "Cannot reset password for users who registered via Google OAuth.",
+        )
+            .into_response();
+    }
+
+    let hashed = match bcrypt::hash(&form.password, bcrypt::DEFAULT_COST) {
+        Ok(h) => h,
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to hash password.",
+            )
+                .into_response();
+        }
+    };
+
+    match storage::update_user_password(&id, &hashed) {
+        Ok(_) => Redirect::to(&format!("{}/admin/users", state.app_base)).into_response(),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to update password in database.",
+        )
+            .into_response(),
+    }
+}
+
 async fn register_form(State(state): State<AppState>, jar: PrivateCookieJar) -> impl IntoResponse {
     if get_session_user_id(&jar).await.is_some() {
         return Redirect::to(&format!("{}/", state.app_base)).into_response();
@@ -1332,27 +1390,15 @@ async fn login_google_callback(
     let user = match storage::find_user_by_email(&user_info.email) {
         Some(u) => u,
         None => {
-            if user_info.email.to_lowercase() == config.admin_email.to_lowercase() {
-                let user_id = uuid::Uuid::new_v4().to_string();
-                let new_user = models::User {
-                    id: user_id.clone(),
-                    email: user_info.email.trim().to_string(),
-                    password_hash: "".to_string(),
-                    created_at: "".to_string(),
-                };
-                let _ = storage::save_user(&new_user);
-                new_user
-            } else {
-                warn!("Unauthorized Google OAuth attempt: {}", user_info.email);
-                return (
-                    jar,
-                    Redirect::to(&format!(
-                        "{}/login?error=Unauthorized+email+address",
-                        state.app_base
-                    )),
-                )
-                    .into_response();
-            }
+            let user_id = uuid::Uuid::new_v4().to_string();
+            let new_user = models::User {
+                id: user_id.clone(),
+                email: user_info.email.trim().to_string(),
+                password_hash: "".to_string(),
+                created_at: "".to_string(),
+            };
+            let _ = storage::save_user(&new_user);
+            new_user
         }
     };
 
@@ -1450,6 +1496,10 @@ async fn main() {
         .route("/upload", post(upload_image))
         .route("/admin/users", get(admin_users_list))
         .route("/admin/users/delete/{id}", post(admin_users_delete))
+        .route(
+            "/admin/users/reset-password/{id}",
+            post(admin_users_reset_password),
+        )
         .route_layer(middleware::from_fn_with_state(state.clone(), require_admin));
 
     let static_assets = Router::new()

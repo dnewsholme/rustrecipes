@@ -714,6 +714,17 @@ pub fn delete_user(id: &str) -> Result<(), std::io::Error> {
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
 }
 
+pub fn update_user_password(id: &str, password_hash: &str) -> Result<(), std::io::Error> {
+    let conn = rusqlite::Connection::open(get_db_path())
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    conn.execute(
+        "UPDATE users SET password_hash = ?1 WHERE id = ?2",
+        [password_hash, id],
+    )
+    .map(|_| ())
+    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+}
+
 pub fn process_image(data: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let img = image::load_from_memory(data)?;
 
@@ -919,6 +930,11 @@ mod tests {
 
         let users = list_users();
         assert!(users.iter().any(|u| u.id == test_user_id));
+
+        // Verify password reset works
+        update_user_password(test_user_id, "new-hash").unwrap();
+        let updated_user = find_user_by_id(test_user_id).unwrap();
+        assert_eq!(updated_user.password_hash, "new-hash");
 
         delete_user(test_user_id).unwrap();
 
