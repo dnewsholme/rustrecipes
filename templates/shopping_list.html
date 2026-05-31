@@ -322,7 +322,7 @@
         if (!ul) return;
         
         ul.innerHTML = '';
-        const filteredItems = getFilteredItems();
+        const filteredItems = [...getFilteredItems()].sort((a, b) => (a.checked ? 1 : 0) - (b.checked ? 1 : 0));
 
         if (allShoppingItems.length === 0) {
             ul.innerHTML = `
@@ -391,6 +391,9 @@
             } else {
                 persistShoppingListStateLocal();
             }
+
+            // Re-render UI to automatically sort ticked items to the bottom
+            filterAndRenderUI();
         };
     }
 

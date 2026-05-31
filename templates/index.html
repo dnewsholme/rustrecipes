@@ -426,7 +426,14 @@
     </div>
 
     <div style="display: flex; gap: 0.5rem; flex-wrap: nowrap; align-items: center;">
-        <button class="btn btn-primary" onclick="generateShoppingList()" style="padding: 0.5rem 1rem;">Generate Shopping List</button>
+        <button id="generate-shopping-list-btn" class="btn btn-primary" onclick="generateShoppingList()" style="padding: 0.5rem 1rem; display: flex; align-items: center; gap: 0.25rem; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);">
+            <svg id="generate-shopping-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <path d="M16 10a4 4 0 0 1-8 0"></path>
+            </svg>
+            <span id="generate-shopping-text">Generate Shopping List</span>
+        </button>
         
         {% if current_user_id.is_some() %}
         <button id="add-planned-meals-btn" class="btn" onclick="addToPlannedMeals()" style="padding: 0.5rem 1rem; display: flex; align-items: center; gap: 0.25rem; background: darkorange; border-color: darkorange; color: white; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);" onmouseover="if(!this.classList.contains('success-state')) { this.style.backgroundColor='orange'; this.style.borderColor='orange'; }" onmouseout="if(!this.classList.contains('success-state')) { this.style.backgroundColor='darkorange'; this.style.borderColor='darkorange'; }">
@@ -681,10 +688,17 @@
         const portions = parseInt(document.getElementById('shopping-portions').value) || 4;
         const unitSystem = document.getElementById('shopping-unit').value;
 
-        const btn = document.querySelector('#shopping-list-bar .btn-primary');
-        const originalText = btn.textContent;
-        btn.textContent = 'Generating...';
+        const btn = document.getElementById('generate-shopping-list-btn');
+        const icon = document.getElementById('generate-shopping-icon');
+        const text = document.getElementById('generate-shopping-text');
+
+        if (!btn || !icon || !text) return;
+
+        const originalHTML = btn.innerHTML;
+        
+        // Disable button during requests
         btn.disabled = true;
+        btn.style.opacity = '0.8';
 
         try {
             const response = await fetch('{{ app_base }}/api/v1/shopping-list', {
@@ -703,16 +717,56 @@
                     const items = data.ingredients.map(ing => ({ name: ing, checked: false }));
                     localStorage.setItem('shopping_list', JSON.stringify(items));
                 }
-                window.location.href = '{{ app_base }}/shopping-list';
+
+                // Trigger beautiful success animation & state
+                btn.classList.add('success-state');
+                btn.style.backgroundColor = '#10b981';
+                btn.style.borderColor = '#10b981';
+                btn.style.color = 'white';
+                btn.style.boxShadow = '0 4px 14px 0 rgba(16, 185, 129, 0.4)';
+                btn.style.transform = 'scale(1.05)';
+                btn.style.opacity = '1';
+                
+                // Show a checkmark svg instead
+                icon.outerHTML = `
+                    <svg id="generate-shopping-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="animation: scaleIn 0.3s ease-out;">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                `;
+                text.textContent = 'Shopping List Generated!';
+                
+                // Return to normal size
+                setTimeout(() => {
+                    btn.style.transform = 'scale(1)';
+                }, 150);
+
+                // Delay navigation by 800ms so they can enjoy the gorgeous emerald transition!
+                setTimeout(() => {
+                    window.location.href = '{{ app_base }}/shopping-list';
+                }, 850);
+
+                // Restore original button state after 2.5 seconds in case they hit the Back button
+                setTimeout(() => {
+                    btn.classList.remove('success-state');
+                    btn.style.backgroundColor = '';
+                    btn.style.borderColor = '';
+                    btn.style.color = '';
+                    btn.style.boxShadow = '';
+                    btn.style.transform = '';
+                    btn.innerHTML = originalHTML;
+                    btn.disabled = false;
+                }, 2500);
+
             } else {
                 alert('Failed to generate shopping list.');
+                btn.disabled = false;
+                btn.style.opacity = '1';
             }
         } catch (e) {
             console.error(e);
             alert('An error occurred.');
-        } finally {
-            btn.textContent = originalText;
             btn.disabled = false;
+            btn.style.opacity = '1';
         }
     }
 
