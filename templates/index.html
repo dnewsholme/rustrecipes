@@ -16,6 +16,11 @@
         transform: translateY(-2px);
     }
 
+    @keyframes scaleIn {
+        0% { transform: scale(0); opacity: 0; }
+        100% { transform: scale(1); opacity: 1; }
+    }
+
     /* Meal Planner Styles */
     .meal-planner-item {
         cursor: pointer;
@@ -424,8 +429,8 @@
         <button class="btn btn-primary" onclick="generateShoppingList()" style="padding: 0.5rem 1rem;">Generate Shopping List</button>
         
         {% if current_user_id.is_some() %}
-        <button class="btn" onclick="addToPlannedMeals()" style="padding: 0.5rem 1rem; display: flex; align-items: center; gap: 0.25rem; background: darkorange; border-color: darkorange; color: white; transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='orange'; this.style.borderColor='orange';" onmouseout="this.style.backgroundColor='darkorange'; this.style.borderColor='darkorange';">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <button id="add-planned-meals-btn" class="btn" onclick="addToPlannedMeals()" style="padding: 0.5rem 1rem; display: flex; align-items: center; gap: 0.25rem; background: darkorange; border-color: darkorange; color: white; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);" onmouseover="if(!this.classList.contains('success-state')) { this.style.backgroundColor='orange'; this.style.borderColor='orange'; }" onmouseout="if(!this.classList.contains('success-state')) { this.style.backgroundColor='darkorange'; this.style.borderColor='darkorange'; }">
+            <svg id="add-meals-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
                 <line x1="16" y1="2" x2="16" y2="6"></line>
                 <line x1="8" y1="2" x2="8" y2="6"></line>
@@ -433,7 +438,7 @@
                 <line x1="12" y1="14" x2="12" y2="20"></line>
                 <line x1="9" y1="17" x2="15" y2="17"></line>
             </svg>
-            Add to Planned Meals
+            <span id="add-meals-text">Add to Planned Meals</span>
         </button>
         {% endif %}
     </div>
@@ -781,6 +786,18 @@
         const selected = Array.from(document.querySelectorAll('.recipe-select-checkbox:checked')).map(cb => cb.value);
         if (selected.length === 0) return;
         
+        const btn = document.getElementById('add-planned-meals-btn');
+        const icon = document.getElementById('add-meals-icon');
+        const text = document.getElementById('add-meals-text');
+        
+        if (!btn || !icon || !text) return;
+
+        const originalHTML = btn.innerHTML;
+        
+        // Disable button during requests
+        btn.disabled = true;
+        btn.style.opacity = '0.8';
+
         try {
             const response = await fetch('{{ app_base }}/api/v1/meal-plan', {
                 method: 'POST',
@@ -790,12 +807,47 @@
             if (response.ok) {
                 // Reload planner
                 await loadPlannedMeals();
+                
+                // Trigger success animation & state
+                btn.classList.add('success-state');
+                btn.style.backgroundColor = '#10b981';
+                btn.style.borderColor = '#10b981';
+                btn.style.color = 'white';
+                btn.style.transform = 'scale(1.05)';
+                btn.style.opacity = '1';
+                
+                // Show a checkmark svg instead
+                icon.outerHTML = `
+                    <svg id="add-meals-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="animation: scaleIn 0.3s ease-out;">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                `;
+                text.textContent = 'Added to Planned Meals!';
+                
+                // Return to normal size
+                setTimeout(() => {
+                    btn.style.transform = 'scale(1)';
+                }, 150);
+
+                // Restore original button after 2.5 seconds
+                setTimeout(() => {
+                    btn.classList.remove('success-state');
+                    btn.style.backgroundColor = 'darkorange';
+                    btn.style.borderColor = 'darkorange';
+                    btn.innerHTML = originalHTML;
+                    btn.disabled = false;
+                }, 2500);
+
             } else {
                 alert('Failed to add to planned meals.');
+                btn.disabled = false;
+                btn.style.opacity = '1';
             }
         } catch (e) {
             console.error(e);
             alert('An error occurred.');
+            btn.disabled = false;
+            btn.style.opacity = '1';
         }
     }
 
