@@ -377,13 +377,21 @@
             const li = e.target.closest('li.shopping-item');
             if (!li) return;
             
+            const visibleLis = Array.from(ul.querySelectorAll('li.shopping-item'));
+            const clickedIndex = visibleLis.indexOf(li);
+            if (clickedIndex === -1) return;
+
             li.classList.toggle('purchased');
-            
-            const name = li.querySelector('.shopping-item-name').textContent;
             const checked = li.classList.contains('purchased');
-            const item = allShoppingItems.find(i => i.name === name);
-            if (item) {
-                item.checked = checked;
+            
+            const filteredItems = [...getFilteredItems()].sort((a, b) => (a.checked ? 1 : 0) - (b.checked ? 1 : 0));
+            const clickedItem = filteredItems[clickedIndex];
+            
+            if (clickedItem) {
+                const sourceItem = allShoppingItems.find(i => i.name === clickedItem.name);
+                if (sourceItem) {
+                    sourceItem.checked = checked;
+                }
             }
             
             if (currentUserId) {
