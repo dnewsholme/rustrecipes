@@ -205,7 +205,7 @@ main {
   border: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
-  height: 500px;
+  height: 540px;
 }
 
 .recipe-card:hover {
@@ -348,7 +348,6 @@ main {
   color: var(--text-secondary);
   font-size: 0.875rem;
   margin-bottom: 1.25rem;
-  flex-grow: 1;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   line-clamp: 2;
