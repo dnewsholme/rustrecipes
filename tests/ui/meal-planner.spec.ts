@@ -54,9 +54,8 @@ test.describe('Meal Planner', () => {
     const bar = page.locator('#shopping-list-bar');
     await expect(bar).toBeVisible();
 
-    // Verify button has orange style
     const addBtn = page.locator('button:has-text("Add to Planned Meals")');
-    await expect(addBtn).toHaveCSS('background-color', 'rgb(255, 140, 0)'); // rgb for darkorange (255, 140, 0)
+    await expect(addBtn).toHaveCSS('background-color', 'rgb(249, 115, 22)'); // rgb for theme's accent-color (#f97316)
     await addBtn.click();
 
     // Selection persists! Verify action bar is still visible

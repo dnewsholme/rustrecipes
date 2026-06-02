@@ -169,8 +169,7 @@
         </div>
         <div
             style="width: 100%; display: flex; gap: 0.5rem; flex-wrap: wrap; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem; margin-bottom: 0.25rem;">
-            <button class="tag-filter-btn" data-tag="has-video" onclick="toggleTagFilter('has-video')"
-                style="background: var(--bg-color); border: 1px solid var(--border-color); padding: 0.35rem 0.85rem; border-radius: 20px; font-size: 0.85rem; color: var(--text-secondary); cursor: pointer; transition: var(--transition); display: flex; align-items: center; gap: 0.4rem;">
+            <button class="tag-filter-btn" data-tag="has-video" onclick="toggleTagFilter('has-video')">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                     stroke-linecap="round" stroke-linejoin="round">
                     <path d="m22 8-6 4 6 4V8Z"></path>
@@ -178,8 +177,7 @@
                 </svg>
                 With Video
             </button>
-            <button class="tag-filter-btn" data-tag="has-combustion" onclick="toggleTagFilter('has-combustion')"
-                style="background: var(--bg-color); border: 1px solid var(--border-color); padding: 0.35rem 0.85rem; border-radius: 20px; font-size: 0.85rem; color: var(--text-secondary); cursor: pointer; transition: var(--transition); display: flex; align-items: center; gap: 0.4rem;">
+            <button class="tag-filter-btn" data-tag="has-combustion" onclick="toggleTagFilter('has-combustion')">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                     stroke-linecap="round" stroke-linejoin="round">
                     <path
@@ -188,8 +186,7 @@
                 </svg>
                 Combustion Data
             </button>
-            <button class="tag-filter-btn" data-tag="is-favorite" onclick="toggleTagFilter('is-favorite')"
-                style="background: var(--bg-color); border: 1px solid var(--border-color); padding: 0.35rem 0.85rem; border-radius: 20px; font-size: 0.85rem; color: var(--text-secondary); cursor: pointer; transition: var(--transition); display: flex; align-items: center; gap: 0.4rem;">
+            <button class="tag-filter-btn" data-tag="is-favorite" onclick="toggleTagFilter('is-favorite')">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                     stroke-linecap="round" stroke-linejoin="round">
                     <path
@@ -199,7 +196,6 @@
                 Favorites
             </button>
             <button class="action-filter-btn" id="show-public-btn" onclick="toggleShowPublicFilter()"
-                style="background: var(--bg-color); border: 1px solid var(--border-color); padding: 0.35rem 0.85rem; border-radius: 20px; font-size: 0.85rem; color: var(--text-secondary); cursor: pointer; transition: var(--transition); display: flex; align-items: center; gap: 0.4rem;"
                 title="Show Public Recipes">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                     stroke-linecap="round" stroke-linejoin="round">
@@ -211,8 +207,7 @@
         </div>
         <div id="user-tags-container" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
             {% for tag in all_tags %}
-            <button class="tag-filter-btn" data-tag="{{ tag }}" onclick="toggleTagFilter('{{ tag }}')"
-                style="background: var(--bg-color); border: 1px solid var(--border-color); padding: 0.35rem 0.85rem; border-radius: 20px; font-size: 0.85rem; color: var(--text-secondary); cursor: pointer; transition: var(--transition);">
+            <button class="tag-filter-btn" data-tag="{{ tag }}" onclick="toggleTagFilter('{{ tag }}')">
                 #{{ tag }}
             </button>
             {% endfor %}
@@ -406,7 +401,7 @@
     {% endfor %}
 </div>
 
-<div id="shopping-list-bar" style="display: none; position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--surface-color); padding: 1rem 2rem; border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); border: 1px solid var(--border-color); z-index: 1000; align-items: center; gap: 1rem; flex-wrap: wrap; justify-content: center;">
+<div id="shopping-list-bar" class="shopping-list-bar">
     <div style="display: flex; align-items: center; gap: 0.5rem;">
         <span id="selected-recipes-count" style="font-weight: 600;">0 recipes selected</span>
         <button id="deselect-all-btn" class="btn btn-secondary" onclick="deselectAllRecipes()" style="padding: 0.25rem 0.5rem; font-size: 0.8rem; border-radius: var(--radius-sm);">Deselect All</button>
@@ -426,7 +421,7 @@
     </div>
 
     <div style="display: flex; gap: 0.5rem; flex-wrap: nowrap; align-items: center;">
-        <button id="generate-shopping-list-btn" class="btn btn-primary" onclick="generateShoppingList()" style="padding: 0.5rem 1rem; display: flex; align-items: center; gap: 0.25rem; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);">
+        <button id="generate-shopping-list-btn" class="btn btn-primary action-bar-btn" onclick="generateShoppingList()">
             <svg id="generate-shopping-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
                 <line x1="3" y1="6" x2="21" y2="6"></line>
@@ -436,7 +431,7 @@
         </button>
         
         {% if current_user_id.is_some() %}
-        <button id="add-planned-meals-btn" class="btn" onclick="addToPlannedMeals()" style="padding: 0.5rem 1rem; display: flex; align-items: center; gap: 0.25rem; background: darkorange; border-color: darkorange; color: white; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);" onmouseover="if(!this.classList.contains('success-state')) { this.style.backgroundColor='orange'; this.style.borderColor='orange'; }" onmouseout="if(!this.classList.contains('success-state')) { this.style.backgroundColor='darkorange'; this.style.borderColor='darkorange'; }">
+        <button id="add-planned-meals-btn" class="btn btn-meals action-bar-btn" onclick="addToPlannedMeals()">
             <svg id="add-meals-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
                 <line x1="16" y1="2" x2="16" y2="6"></line>
@@ -558,15 +553,7 @@
         const btn = document.getElementById('show-public-btn');
         if (!btn) return;
         showPublic = !showPublic;
-        if (showPublic) {
-            btn.style.background = 'var(--accent-color)';
-            btn.style.color = 'white';
-            btn.style.borderColor = 'var(--accent-color)';
-        } else {
-            btn.style.background = 'var(--bg-color)';
-            btn.style.color = 'var(--text-secondary)';
-            btn.style.borderColor = 'var(--border-color)';
-        }
+        btn.classList.toggle('active', showPublic);
         filterRecipes();
     }
 
@@ -577,16 +564,12 @@
         if (activeTags.has(tag)) {
             activeTags.delete(tag);
             if (targetBtn) {
-                targetBtn.style.background = 'var(--bg-color)';
-                targetBtn.style.color = 'var(--text-secondary)';
-                targetBtn.style.borderColor = 'var(--border-color)';
+                targetBtn.classList.remove('active');
             }
         } else {
             activeTags.add(tag);
             if (targetBtn) {
-                targetBtn.style.background = 'var(--accent-color)';
-                targetBtn.style.color = 'white';
-                targetBtn.style.borderColor = 'var(--accent-color)';
+                targetBtn.classList.add('active');
             }
         }
         filterRecipes();
@@ -606,15 +589,11 @@
         
         const spBtn = document.getElementById('show-public-btn');
         if (spBtn) {
-            spBtn.style.background = 'var(--bg-color)';
-            spBtn.style.color = 'var(--text-secondary)';
-            spBtn.style.borderColor = 'var(--border-color)';
+            spBtn.classList.remove('active');
         }
 
         document.querySelectorAll('.tag-filter-btn').forEach(btn => {
-            btn.style.background = 'var(--bg-color)';
-            btn.style.color = 'var(--text-secondary)';
-            btn.style.borderColor = 'var(--border-color)';
+            btn.classList.remove('active');
         });
         filterRecipes();
     }
@@ -720,10 +699,6 @@
 
                 // Trigger beautiful success animation & state
                 btn.classList.add('success-state');
-                btn.style.backgroundColor = '#10b981';
-                btn.style.borderColor = '#10b981';
-                btn.style.color = 'white';
-                btn.style.boxShadow = '0 4px 14px 0 rgba(16, 185, 129, 0.4)';
                 btn.style.transform = 'scale(1.05)';
                 btn.style.opacity = '1';
                 
@@ -748,10 +723,6 @@
                 // Restore original button state after 2.5 seconds in case they hit the Back button
                 setTimeout(() => {
                     btn.classList.remove('success-state');
-                    btn.style.backgroundColor = '';
-                    btn.style.borderColor = '';
-                    btn.style.color = '';
-                    btn.style.boxShadow = '';
                     btn.style.transform = '';
                     btn.innerHTML = originalHTML;
                     btn.disabled = false;
@@ -864,9 +835,6 @@
                 
                 // Trigger success animation & state
                 btn.classList.add('success-state');
-                btn.style.backgroundColor = '#10b981';
-                btn.style.borderColor = '#10b981';
-                btn.style.color = 'white';
                 btn.style.transform = 'scale(1.05)';
                 btn.style.opacity = '1';
                 
@@ -886,8 +854,8 @@
                 // Restore original button after 2.5 seconds
                 setTimeout(() => {
                     btn.classList.remove('success-state');
-                    btn.style.backgroundColor = 'darkorange';
-                    btn.style.borderColor = 'darkorange';
+                    btn.style.transform = '';
+                    btn.style.opacity = '';
                     btn.innerHTML = originalHTML;
                     btn.disabled = false;
                 }, 2500);
