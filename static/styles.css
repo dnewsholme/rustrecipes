@@ -205,6 +205,7 @@ main {
   border: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
+  height: 500px;
 }
 
 .recipe-card:hover {
@@ -550,10 +551,26 @@ main {
 .CodeMirror-cursor {
   border-left: 1px solid var(--text-primary) !important;
 }
+.tag-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.65rem;
+  border-radius: 9999px;
+  background-color: var(--surface-hover);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+  text-decoration: none;
+}
+
 .tag-badge:hover {
   background-color: var(--accent-color) !important;
   color: white !important;
   border-color: var(--accent-color) !important;
+  transform: translateY(-1px);
 }
 
 /* Header optimization */
