@@ -48,6 +48,22 @@
                 </svg>
                 RustRecipes
             </a>
+
+            <!-- Concept B: Integrated Search Center -->
+            <div class="header-search-container">
+                <svg class="header-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <input type="search" id="recipe-search" class="header-search-input" placeholder="Search recipes or tags (Ctrl+K)" aria-label="Search recipes">
+                <button class="header-clear-btn" id="clear-search-btn" title="Clear Search" style="display: none;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+
             <nav class="header-nav">
                 <!-- Utilities Group -->
                 <button id="temps-toggle-btn" class="nav-icon-btn mobile-collapsible" title="Cooking Temperatures">
@@ -774,6 +790,49 @@
                 // Not on index page, redirect with param
                 window.location.href = '{{ app_base }}/?import=true';
             }
+        }
+
+        // Global Search Input Event Listeners and Shortcuts
+        const globalSearchInput = document.getElementById('recipe-search');
+        const clearSearchBtn = document.getElementById('clear-search-btn');
+
+        if (globalSearchInput) {
+            // Show clear button when query is present
+            globalSearchInput.addEventListener('input', () => {
+                if (clearSearchBtn) {
+                    clearSearchBtn.style.display = globalSearchInput.value.trim() !== '' ? 'block' : 'none';
+                }
+            });
+
+            // Handle redirect when searching from other pages
+            globalSearchInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    const query = globalSearchInput.value.trim();
+                    // If filterRecipes does not exist on the current page, redirect to home page with query
+                    if (typeof filterRecipes === 'undefined') {
+                        window.location.href = `{{ app_base }}/?search=${encodeURIComponent(query)}`;
+                    }
+                }
+            });
+
+            // Handle global clear button click
+            if (clearSearchBtn) {
+                clearSearchBtn.addEventListener('click', () => {
+                    globalSearchInput.value = '';
+                    clearSearchBtn.style.display = 'none';
+                    if (typeof clearFilters !== 'undefined') {
+                        clearFilters();
+                    }
+                });
+            }
+
+            // Keyboard shortcut (Ctrl+K or Cmd+K) to focus search input
+            document.addEventListener('keydown', (e) => {
+                if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+                    e.preventDefault();
+                    globalSearchInput.focus();
+                }
+            });
         }
 
 
