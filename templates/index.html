@@ -228,17 +228,92 @@
         data-search='{{ recipe.title }} {{ recipe.tags.join(" ") }} {{ recipe.ingredients.join(" ") }} {% match recipe.description %}{% when Some with (d) %}{{ d }}{% when None %}{% endmatch %} {% if recipe.has_video() %}has-video{% endif %} {% if recipe.has_combustion() %}has-combustion{% endif %} {% if recipe.favorite %}is-favorite{% endif %}'
         data-tags='{{ recipe.tags.join(",") }}{% if recipe.has_video() %},has-video{% endif %}{% if recipe.has_combustion() %},has-combustion{% endif %}{% if recipe.favorite %},is-favorite{% endif %}'>
         
-        <div style="position: absolute; top: 10px; left: 10px; z-index: 10;">
-            <input type="checkbox" class="recipe-select-checkbox" value="{{ recipe.id }}" onchange="handleRecipeSelection()" onclick="event.stopPropagation()" style="width: 20px; height: 20px; cursor: pointer; accent-color: var(--accent-color); background: var(--surface-color); box-shadow: var(--shadow-sm);">
+        <!-- Image & Floating Controls Wrapper -->
+        <div class="recipe-card-img-wrapper">
+            <div class="recipe-card-select-wrapper">
+                <input type="checkbox" class="recipe-select-checkbox" value="{{ recipe.id }}" onchange="handleRecipeSelection()" onclick="event.stopPropagation()" style="width: 20px; height: 20px; cursor: pointer; accent-color: var(--accent-color); background: var(--surface-color); box-shadow: var(--shadow-sm);">
+            </div>
+            
+            <button onclick="toggleFavorite('{{ recipe.id }}', this, event)"
+                class="favorite-heart-btn floating-heart {% if recipe.favorite %}is-favorite{% endif %} {% if current_user_id.is_some() %}is-admin{% endif %}"
+                {% if !current_user_id.is_some() %}disabled{% endif %}
+                title="{% if current_user_id.is_some() %}Toggle Favorite{% else %}Favorite{% endif %}">
+                <svg width="18" height="18" viewBox="0 0 24 24"
+                    fill="{% if recipe.favorite %}currentColor{% else %}none{% endif %}" stroke="currentColor"
+                    stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path
+                        d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z">
+                    </path>
+                </svg>
+            </button>
+
+            {% match recipe.image %}
+            {% when Some with (img) %}
+            <img src="{% if img.starts_with("http") %}{{ img }}{% else %}{{ app_base }}/{{ img }}{% endif %}"
+                alt="{{ recipe.title }}" class="recipe-card-img" loading="lazy" decoding="async">
+            {% when None %}
+            <div class="recipe-card-img" style="display:flex; align-items:center; justify-content:center; color:#64748b;">No Image</div>
+            {% endmatch %}
+
+            <!-- Glassmorphic Metadata Overlay -->
+            <div class="recipe-glass-meta">
+                <!-- Servings -->
+                {% match recipe.servings %}
+                {% when Some with (s) %}
+                <div class="recipe-glass-meta-item" title="Servings">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="9" cy="7" r="4"></circle>
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                    </svg>
+                    <span>{{ s }}</span>
+                </div>
+                {% when None %}
+                {% endmatch %}
+
+                <!-- Cook Time / Prep Time -->
+                {% match recipe.cook_time %}
+                {% when Some with (t) %}
+                <div class="recipe-glass-meta-item" title="Cook Time">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 8h1a4 4 0 0 1 0 8h-1"></path>
+                        <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path>
+                        <line x1="6" y1="1" x2="6" y2="4"></line>
+                        <line x1="10" y1="1" x2="10" y2="4"></line>
+                        <line x1="14" y1="1" x2="14" y2="4"></line>
+                    </svg>
+                    <span>{{ t }}</span>
+                </div>
+                {% when None %}
+                    {% match recipe.prep_time %}
+                    {% when Some with (t) %}
+                    <div class="recipe-glass-meta-item" title="Prep Time">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <polyline points="12 6 12 12 16 14"></polyline>
+                        </svg>
+                        <span>{{ t }}</span>
+                    </div>
+                    {% when None %}
+                    {% endmatch %}
+                {% endmatch %}
+
+                <!-- Hydration -->
+                {% match recipe.hydration() %}
+                {% when Some with (h) %}
+                <div class="recipe-glass-meta-item" title="Hydration">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path>
+                    </svg>
+                    <span>{{ (h * 100.0).round() }}%</span>
+                </div>
+                {% when None %}
+                {% endmatch %}
+            </div>
         </div>
-        {% match recipe.image %}
-        {% when Some with (img) %}
-        <img src="{% if img.starts_with("http") %}{{ img }}{% else %}{{ app_base }}/{{ img }}{% endif %}"
-            alt="{{ recipe.title }}" class="recipe-card-img" loading="lazy" decoding="async">
-        {% when None %}
-        <div class="recipe-card-img" style="display:flex; align-items:center; justify-content:center; color:#64748b;">No
-            Image</div>
-        {% endmatch %}
+
+        <!-- Card Content -->
         <div class="recipe-card-content">
             <h3 class="recipe-title"
                 style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem;">
@@ -250,7 +325,6 @@
                         <span title="Combustion Data" style="display: inline-flex;">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#e67e22"
                                 stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                                <title>Combustion Data</title>
                                 <path
                                     d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z">
                                 </path>
@@ -261,7 +335,6 @@
                         <span title="Video Embed" style="display: inline-flex;">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#e74c3c"
                                 stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                                <title>Video Embed</title>
                                 <path d="m22 8-6 4 6 4V8Z"></path>
                                 <rect width="14" height="12" x="2" y="6" rx="2" ry="2"></rect>
                             </svg>
@@ -271,7 +344,6 @@
                         <span title="Fermentation Calculator" style="display: inline-flex;">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#27ae60"
                                 stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                                <title>Fermentation Calculator</title>
                                 <path d="M12 2v2"></path>
                                 <path d="m4.93 4.93 1.41 1.41"></path>
                                 <path d="M20 12h2"></path>
@@ -286,37 +358,25 @@
                         {% endif %}
                     </div>
                 </div>
-                <div style="display: flex; align-items: center; gap: 0.25rem;">
-                    <button onclick="toggleFavorite('{{ recipe.id }}', this, event)"
-                        class="favorite-heart-btn {% if recipe.favorite %}is-favorite{% endif %} {% if current_user_id.is_some() %}is-admin{% endif %}"
-                        {% if !current_user_id.is_some() %}disabled{% endif %}
-                        title="{% if current_user_id.is_some() %}Toggle Favorite{% else %}Favorite{% endif %}">
-                        <svg width="20" height="20" viewBox="0 0 24 24"
-                            fill="{% if recipe.favorite %}currentColor{% else %}none{% endif %}" stroke="currentColor"
-                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path
-                                d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z">
-                            </path>
-                        </svg>
-                    </button>
-                    {% match recipe.source_url %}
-                    {% when Some with (url) %}
-                    {% if !url.trim().is_empty() %}
-                    <a href="{{ url }}" target="_blank" rel="noopener noreferrer"
-                        style="color: var(--text-secondary); display: inline-flex; align-items: center; padding: 0.25rem;"
-                        title="Original Source">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-                            <polyline points="15 3 21 3 21 9"></polyline>
-                            <line x1="10" y1="14" x2="21" y2="3"></line>
-                        </svg>
-                    </a>
-                    {% endif %}
-                    {% when None %}
-                    {% endmatch %}
-                </div>
+                
+                {% match recipe.source_url %}
+                {% when Some with (url) %}
+                {% if !url.trim().is_empty() %}
+                <a href="{{ url }}" target="_blank" rel="noopener noreferrer"
+                    style="color: var(--text-secondary); display: inline-flex; align-items: center; padding: 0.25rem;"
+                    title="Original Source">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                        <polyline points="15 3 21 3 21 9"></polyline>
+                        <line x1="10" y1="14" x2="21" y2="3"></line>
+                    </svg>
+                </a>
+                {% endif %}
+                {% when None %}
+                {% endmatch %}
             </h3>
+            
             <div class="recipe-desc">
                 {% match recipe.description %}
                 {% when Some with (desc) %}
@@ -324,82 +384,33 @@
                 {% when None %}
                 {% endmatch %}
             </div>
-            <div style="display: flex; gap: 0.75rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
-                {% match recipe.servings %}
-                {% when Some with (s) %}
-                <span
-                    style="font-size: 0.85rem; color: var(--text-secondary); display: flex; align-items: center; gap: 0.25rem;">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                        <circle cx="9" cy="7" r="4"></circle>
-                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                    </svg>
-                    {{ s }}
-                </span>
-                {% when None %}
-                {% endmatch %}
-                {% match recipe.prep_time %}
-                {% when Some with (t) %}
-                <span
-                    style="font-size: 0.85rem; color: var(--text-secondary); display: flex; align-items: center; gap: 0.25rem;">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <polyline points="12 6 12 12 16 14"></polyline>
-                    </svg>
-                    {{ t }}
-                </span>
-                {% when None %}
-                {% endmatch %}
-                {% match recipe.cook_time %}
-                {% when Some with (t) %}
-                <span
-                    style="font-size: 0.85rem; color: var(--text-secondary); display: flex; align-items: center; gap: 0.25rem;">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M18 8h1a4 4 0 0 1 0 8h-1"></path>
-                        <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path>
-                        <line x1="6" y1="1" x2="6" y2="4"></line>
-                        <line x1="10" y1="1" x2="10" y2="4"></line>
-                        <line x1="14" y1="1" x2="14" y2="4"></line>
-                    </svg>
-                    {{ t }}
-                </span>
-                {% when None %}
-                {% endmatch %}
-                {% match recipe.hydration() %}
-                {% when Some with (h) %}
-                <span
-                    style="font-size: 0.85rem; color: var(--text-secondary); display: flex; align-items: center; gap: 0.25rem;" title="Hydration">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path>
-                    </svg>
-                    {{ (h * 100.0).round() }}%
-                </span>
-                {% when None %}
-                {% endmatch %}
-                {% match recipe.owner_email %}
-                {% when Some with (email) %}
-                <span
-                    style="font-size: 0.85rem; color: var(--text-secondary); display: flex; align-items: center; gap: 0.25rem;" title="Owner">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                        <circle cx="12" cy="7" r="4"></circle>
-                    </svg>
-                    {{ email }}
-                </span>
-                {% when None %}
-                {% endmatch %}
+
+            {% match recipe.owner_email %}
+            {% when Some with (email) %}
+            <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.25rem;" title="Owner">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="12" cy="7" r="4"></circle>
+                </svg>
+                <span>{{ email }}</span>
             </div>
-            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            {% when None %}
+            {% endmatch %}
+
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1.25rem;">
                 {% for tag in recipe.tags %}
                 <span class="tag-badge" onclick="filterByTag('{{ tag }}', event)">#{{ tag }}</span>
                 {% endfor %}
             </div>
+
+            <!-- View Recipe Action -->
+            <a href="{{ app_base }}/recipe/{{ recipe.id }}" class="recipe-view-btn">
+                <span>View Recipe</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                    <polyline points="12 5 19 12 12 19"></polyline>
+                </svg>
+            </a>
         </div>
     </div>
     {% endfor %}
