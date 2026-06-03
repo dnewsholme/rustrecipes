@@ -3,6 +3,10 @@ import { test, expect } from '@playwright/test';
 test.describe('Header Navigation & User Settings Dropdown (Desktop)', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
+    const isMobile = await page.evaluate(() => window.innerWidth <= 768);
+    if (isMobile) {
+      test.skip();
+    }
   });
 
   test('should display desktop header layout correctly', async ({ page }) => {
