@@ -148,7 +148,7 @@
                         </a>
 
                         <!-- Cooking Temperatures -->
-                        <button class="dropdown-item" onclick="toggleTempsPanel(); document.getElementById('profile-dropdown').classList.remove('show');">
+                        <button class="dropdown-item" onclick="event.stopPropagation(); toggleTempsPanel(); document.getElementById('profile-dropdown').classList.remove('show');">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4v10.54a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0Z"></path></svg>
                             Cooking Temperatures
                         </button>
