@@ -205,7 +205,7 @@ main {
   border: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
-  height: 540px;
+  height: 520px;
 }
 
 .recipe-card:hover {
@@ -217,7 +217,7 @@ main {
 .recipe-card-img-wrapper {
   position: relative;
   width: 100%;
-  height: 220px;
+  height: 190px;
   overflow: hidden;
 }
 
@@ -323,9 +323,13 @@ main {
 
 .recipe-card-content {
   padding: 1.25rem;
+  padding-bottom: 4rem;
   flex-grow: 1;
   display: flex;
   flex-direction: column;
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .recipe-title {
@@ -361,7 +365,6 @@ main {
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  width: 100%;
   padding: 0.625rem;
   border-radius: var(--radius-md);
   background: linear-gradient(135deg, var(--accent-color) 0%, var(--accent-hover) 100%);
@@ -373,7 +376,10 @@ main {
   border: none;
   cursor: pointer;
   box-shadow: 0 4px 12px rgba(249, 115, 22, 0.15);
-  margin-top: auto;
+  position: absolute;
+  bottom: 1.25rem;
+  left: 1.25rem;
+  right: 1.25rem;
 }
 
 .recipe-view-btn:hover {
