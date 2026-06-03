@@ -923,6 +923,7 @@ async fn login_submit(
                 .http_only(true)
                 .secure(false)
                 .same_site(SameSite::Lax)
+                .max_age(time::Duration::days(30))
                 .build();
             let updated_jar = jar.add(cookie);
             return (updated_jar, Redirect::to(&format!("{}/", state.app_base))).into_response();
@@ -1178,6 +1179,7 @@ async fn register_submit(
         .http_only(true)
         .secure(false)
         .same_site(SameSite::Lax)
+        .max_age(time::Duration::days(30))
         .build();
     let updated_jar = jar.add(cookie);
     (updated_jar, Redirect::to(&format!("{}/", state.app_base))).into_response()
@@ -1439,6 +1441,7 @@ async fn login_google_callback(
         .http_only(true)
         .secure(false)
         .same_site(SameSite::Lax)
+        .max_age(time::Duration::days(30))
         .build();
     let updated_jar = jar.add(cookie);
     (updated_jar, Redirect::to(&format!("{}/", state.app_base))).into_response()
