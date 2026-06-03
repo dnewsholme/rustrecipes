@@ -38,13 +38,16 @@
         <div class="container header-content">
             <a href="{{ app_base }}/" class="logo">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <ellipse cx="12" cy="12" rx="8" ry="10" />
-                  <line x1="4" y1="12" x2="20" y2="12" />
-                  <path d="M8 20.5l-2 2.5" />
-                  <path d="M16 20.5l2 2.5" />
-                  <line x1="6" y1="20" x2="18" y2="20" />
-                  <path d="M10 6h4v2h-4z" fill="currentColor" />
-                  <circle cx="12" cy="8" r="1.5" />
+                  <!-- Outer ceramic egg body -->
+                  <path d="M12 3a7 7 0 0 0-7 7v4c0 3.87 3.13 7 7 7s7-3.13 7-7v-4a7 7 0 0 0-7-7z" />
+                  <!-- Horizontal hinge band dividing lid and base -->
+                  <line x1="4.5" y1="11" x2="19.5" y2="11" />
+                  <!-- Lid handle -->
+                  <path d="M9 8h6" stroke-width="2.5" />
+                  <!-- Bottom air intake vent -->
+                  <rect x="10" y="15" width="4" height="2" rx="0.5" />
+                  <!-- Stand legs -->
+                  <path d="M7 21l-2 2M17 21l2 2" />
                 </svg>
                 RustRecipes
             </a>
