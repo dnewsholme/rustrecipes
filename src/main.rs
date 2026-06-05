@@ -952,15 +952,26 @@ async fn login_submit(
     Html(template.render().unwrap()).into_response()
 }
 
-async fn logout(State(state): State<AppState>, jar: PrivateCookieJar) -> impl IntoResponse {
+async fn logout(State(state): State<AppState>) -> Response {
     let cookie_path = if state.app_base.is_empty() {
         "/"
     } else {
         state.app_base
     };
-    let cookie = Cookie::build("admin_session").path(cookie_path).build();
-    let updated_jar = jar.remove(cookie);
-    (updated_jar, Redirect::to(&format!("{}/", state.app_base)))
+    // Clearing a signed cookie does not require the private jar — we just need to
+    // instruct the browser to expire it immediately. Using a raw Set-Cookie header
+    // with Max-Age=0 is always reliable, regardless of whether the server key matches.
+    let clear_cookie = format!(
+        "admin_session=; Path={}; Max-Age=0; HttpOnly; SameSite=Lax",
+        cookie_path
+    );
+    let mut response = Redirect::to(&format!("{}/", state.app_base)).into_response();
+    if let Ok(val) = axum::http::HeaderValue::from_str(&clear_cookie) {
+        response
+            .headers_mut()
+            .insert(axum::http::header::SET_COOKIE, val);
+    }
+    response
 }
 
 async fn admin_users_list(
