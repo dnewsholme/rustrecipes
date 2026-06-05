@@ -11,6 +11,7 @@ export async function login(page: Page) {
   // Wait for redirect to home
   try {
     await expect(page).toHaveURL('/', { timeout: 5000 });
+    await page.waitForLoadState('load');
     const cookies = await page.context().cookies();
     console.log('Cookies after login:', JSON.stringify(cookies, null, 2));
   } catch (e) {

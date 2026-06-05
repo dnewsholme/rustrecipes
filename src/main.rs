@@ -3,6 +3,7 @@ mod api;
 mod conversions;
 mod importer;
 mod models;
+mod passkeys;
 mod storage;
 
 use askama::Template;
@@ -13,7 +14,7 @@ use axum::{
     http::StatusCode,
     middleware::{self, Next},
     response::{Html, IntoResponse, Json, Redirect, Response},
-    routing::{get, post},
+    routing::{delete, get, post},
 };
 use axum_extra::extract::cookie::{Cookie, Key, PrivateCookieJar, SameSite};
 use serde::{Deserialize, Serialize};
@@ -37,6 +38,17 @@ struct AppState {
     password_hash: String,
     app_base: &'static str,
     google_oauth: Option<GoogleOauthConfig>,
+    webauthn: std::sync::Arc<webauthn_rs::Webauthn>,
+    reg_states: std::sync::Arc<
+        std::sync::Mutex<
+            std::collections::HashMap<String, webauthn_rs::prelude::PasskeyRegistration>,
+        >,
+    >,
+    auth_states: std::sync::Arc<
+        std::sync::Mutex<
+            std::collections::HashMap<String, webauthn_rs::prelude::PasskeyAuthentication>,
+        >,
+    >,
 }
 
 impl FromRef<AppState> for Key {
@@ -343,8 +355,7 @@ fn is_admin_session(jar: &PrivateCookieJar) -> bool {
             return true;
         }
         if !val.is_empty() {
-            let admin_email = std::env::var("ADMIN_EMAIL")
-                .unwrap_or_else(|_| "dbizsley@googlemail.com".to_string());
+            let admin_email = std::env::var("ADMIN_EMAIL").expect("ADMIN_EMAIL must be set");
             if let Some(user) = storage::find_user_by_email(&admin_email) {
                 return val == user.id;
             }
@@ -365,8 +376,7 @@ async fn get_session_user_id(jar: &PrivateCookieJar) -> Option<String> {
     if let Some(c) = jar.get("admin_session") {
         let val = c.value();
         if val == "true" {
-            let admin_email = std::env::var("ADMIN_EMAIL")
-                .unwrap_or_else(|_| "dbizsley@googlemail.com".to_string());
+            let admin_email = std::env::var("ADMIN_EMAIL").expect("ADMIN_EMAIL must be set");
             if let Some(user) = storage::find_user_by_email(&admin_email) {
                 return Some(user.id);
             }
@@ -898,8 +908,7 @@ async fn login_submit(
     jar: PrivateCookieJar,
     Form(form): Form<LoginFormData>,
 ) -> impl IntoResponse {
-    let admin_email =
-        std::env::var("ADMIN_EMAIL").unwrap_or_else(|_| "dbizsley@googlemail.com".to_string());
+    let admin_email = std::env::var("ADMIN_EMAIL").expect("ADMIN_EMAIL must be set");
     let email_lookup = match &form.email {
         Some(e) if !e.trim().is_empty() => {
             if e.trim().to_lowercase() == "admin" {
@@ -1450,6 +1459,11 @@ async fn login_google_callback(
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
+
+    let admin_email = std::env::var("ADMIN_EMAIL").unwrap_or_else(|_| {
+        error!("ADMIN_EMAIL environment variable is not set!");
+        panic!("Missing required environment variable: ADMIN_EMAIL");
+    });
     // Ensure data directories exist (important for volume mounts)
     let _ = std::fs::create_dir_all("data/recipes");
     let _ = std::fs::create_dir_all("data/uploads");
@@ -1509,15 +1523,28 @@ async fn main() {
         None
     };
 
+    let rp_id = std::env::var("WEBAUTHN_RP_ID").unwrap_or_else(|_| "localhost".to_string());
+    let rp_origin_str =
+        std::env::var("WEBAUTHN_RP_ORIGIN").unwrap_or_else(|_| "http://localhost:3000".to_string());
+    let rp_origin = url::Url::parse(&rp_origin_str).expect("Invalid WEBAUTHN_RP_ORIGIN URL");
+    let webauthn_builder = webauthn_rs::WebauthnBuilder::new(&rp_id, &rp_origin)
+        .expect("Failed to create WebauthnBuilder");
+    let webauthn_builder = webauthn_builder.rp_name("Recipe Manager");
+    let webauthn = std::sync::Arc::new(webauthn_builder.build().expect("Failed to build Webauthn"));
+
+    let reg_states = std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new()));
+    let auth_states = std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new()));
+
     let state = AppState {
         key,
         password_hash,
         app_base,
         google_oauth,
+        webauthn,
+        reg_states,
+        auth_states,
     };
 
-    let admin_email =
-        std::env::var("ADMIN_EMAIL").unwrap_or_else(|_| "dbizsley@googlemail.com".to_string());
     storage::db_init(&state.password_hash, &admin_email).unwrap();
 
     let protected_routes = Router::new()
@@ -1533,6 +1560,19 @@ async fn main() {
         .route(
             "/admin/users/reset-password/{id}",
             post(admin_users_reset_password),
+        )
+        .route("/api/v1/auth/passkeys", get(passkeys::passkeys_list))
+        .route(
+            "/api/v1/auth/passkeys/register/start",
+            post(passkeys::passkeys_register_start),
+        )
+        .route(
+            "/api/v1/auth/passkeys/register/finish",
+            post(passkeys::passkeys_register_finish),
+        )
+        .route(
+            "/api/v1/auth/passkeys/{id}",
+            delete(passkeys::passkeys_delete),
         )
         .route_layer(middleware::from_fn_with_state(state.clone(), require_admin));
 
@@ -1556,6 +1596,14 @@ async fn main() {
         .route("/api", get(api_guide))
         .route("/api/", get(api_guide))
         .route("/shopping-list", get(shopping_list_page))
+        .route(
+            "/api/v1/auth/passkeys/login/start",
+            post(passkeys::passkeys_login_start),
+        )
+        .route(
+            "/api/v1/auth/passkeys/login/finish",
+            post(passkeys::passkeys_login_finish),
+        )
         .merge(static_assets);
 
     let app = Router::new()
@@ -1580,15 +1628,30 @@ mod oauth_tests {
     use tower::ServiceExt;
 
     async fn build_test_app(google_config: Option<GoogleOauthConfig>) -> Router {
+        unsafe {
+            std::env::set_var("ADMIN_EMAIL", "admin@example.com");
+        }
         let _ = std::fs::remove_file("data/recipes.db"); // Deterministic db state
+        let rp_id = "localhost".to_string();
+        let rp_origin = url::Url::parse("http://localhost:3000").unwrap();
+        let webauthn_builder = webauthn_rs::WebauthnBuilder::new(&rp_id, &rp_origin).unwrap();
+        let webauthn = std::sync::Arc::new(webauthn_builder.build().unwrap());
+        let reg_states =
+            std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new()));
+        let auth_states =
+            std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new()));
+
         let state = AppState {
             key: axum_extra::extract::cookie::Key::generate(),
             password_hash: "".to_string(),
             app_base: "",
             google_oauth: google_config,
+            webauthn,
+            reg_states,
+            auth_states,
         };
 
-        storage::db_init(&state.password_hash, "dbizsley@googlemail.com").unwrap();
+        storage::db_init(&state.password_hash, "admin@example.com").unwrap();
 
         let static_assets = Router::new()
             .nest_service("/static", ServeDir::new("static"))

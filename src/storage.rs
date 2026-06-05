@@ -50,6 +50,19 @@ pub fn db_init(
         [],
     )?;
 
+    // Create user_passkeys table
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS user_passkeys (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            passkey_json TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        )",
+        [],
+    )?;
+
     // Create recipes table
     conn.execute(
         "CREATE TABLE IF NOT EXISTS recipes (
@@ -818,6 +831,10 @@ pub fn delete_user(id: &str) -> Result<(), std::io::Error> {
     tx.execute("DELETE FROM recipes WHERE owner_id = ?1", [id])
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
 
+    // Delete user's passkeys
+    tx.execute("DELETE FROM user_passkeys WHERE user_id = ?1", [id])
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
     // Delete the user
     tx.execute("DELETE FROM users WHERE id = ?1", [id])
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
@@ -832,6 +849,52 @@ pub fn update_user_password(id: &str, password_hash: &str) -> Result<(), std::io
     conn.execute(
         "UPDATE users SET password_hash = ?1 WHERE id = ?2",
         [password_hash, id],
+    )
+    .map(|_| ())
+    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+}
+
+pub fn save_passkey(passkey: &crate::models::UserPasskey) -> Result<(), std::io::Error> {
+    let conn = rusqlite::Connection::open(get_db_path())
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    conn.execute(
+        "INSERT OR REPLACE INTO user_passkeys (id, user_id, name, passkey_json, created_at) VALUES (?1, ?2, ?3, ?4, COALESCE(NULLIF(?5, ''), datetime('now', 'localtime')))",
+        (&passkey.id, &passkey.user_id, &passkey.name, &passkey.passkey_json, &passkey.created_at),
+    )
+    .map(|_| ())
+    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+}
+
+pub fn find_passkeys_by_user_id(user_id: &str) -> Vec<crate::models::UserPasskey> {
+    let conn = match rusqlite::Connection::open(get_db_path()) {
+        Ok(c) => c,
+        Err(_) => return Vec::new(),
+    };
+    let mut stmt = match conn.prepare("SELECT id, user_id, name, passkey_json, created_at FROM user_passkeys WHERE user_id = ?1 ORDER BY created_at DESC") {
+        Ok(s) => s,
+        Err(_) => return Vec::new(),
+    };
+    let passkey_iter = stmt.query_map([user_id], |row| {
+        Ok(crate::models::UserPasskey {
+            id: row.get(0)?,
+            user_id: row.get(1)?,
+            name: row.get(2)?,
+            passkey_json: row.get(3)?,
+            created_at: row.get(4)?,
+        })
+    });
+    match passkey_iter {
+        Ok(iter) => iter.flatten().collect(),
+        Err(_) => Vec::new(),
+    }
+}
+
+pub fn delete_passkey_by_id(id: &str, user_id: &str) -> Result<(), std::io::Error> {
+    let conn = rusqlite::Connection::open(get_db_path())
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    conn.execute(
+        "DELETE FROM user_passkeys WHERE id = ?1 AND user_id = ?2",
+        [id, user_id],
     )
     .map(|_| ())
     .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
@@ -902,11 +965,11 @@ mod tests {
 
         db_init(
             "$2b$12$xeIhvWgV.yZ2FMHbwZL39.WZSDZWSKIokohV5S7aIwR.spHXuW72G",
-            "dbizsley@googlemail.com",
+            "admin@example.com",
         )
         .unwrap();
 
-        let admin_id = find_user_by_email("dbizsley@googlemail.com").unwrap().id;
+        let admin_id = find_user_by_email("admin@example.com").unwrap().id;
 
         let test_id = "test-recipe-123";
         let recipe = Recipe {
@@ -946,7 +1009,7 @@ mod tests {
         let _ = std::fs::create_dir_all("data");
         db_init(
             "$2b$12$xeIhvWgV.yZ2FMHbwZL39.WZSDZWSKIokohV5S7aIwR.spHXuW72G",
-            "dbizsley@googlemail.com",
+            "admin@example.com",
         )
         .unwrap();
 
@@ -961,7 +1024,7 @@ mod tests {
         let _ = std::fs::create_dir_all("data");
         db_init(
             "$2b$12$xeIhvWgV.yZ2FMHbwZL39.WZSDZWSKIokohV5S7aIwR.spHXuW72G",
-            "dbizsley@googlemail.com",
+            "admin@example.com",
         )
         .unwrap();
 
@@ -1027,7 +1090,7 @@ mod tests {
         let _ = std::fs::create_dir_all("data");
         db_init(
             "$2b$12$xeIhvWgV.yZ2FMHbwZL39.WZSDZWSKIokohV5S7aIwR.spHXuW72G",
-            "dbizsley@googlemail.com",
+            "admin@example.com",
         )
         .unwrap();
 

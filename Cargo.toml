@@ -23,7 +23,7 @@ tokio = { version = "1.52.1", features = ["full"] }
 tower-http = { version = "0.6.8", features = ["fs", "trace", "set-header"] }
 tracing = "0.1.41"
 tracing-subscriber = "0.3.23"
-uuid = { version = "1.23.1", features = ["v4"] }
+uuid = { version = "1.23.1", features = ["v4", "v5"] }
 zip = "8.6.0"
 yt-transcript-rs = "0.1.0"
 axum-extra = { version = "0.12.6", features = ["cookie", "cookie-private"] }
@@ -34,6 +34,8 @@ lazy_static = "1.5.0"
 tower = "0.5.3"
 rusqlite = { version = "0.32.0", features = ["bundled"] }
 time = "0.3.47"
+webauthn-rs = "0.5.0"
+url = "2.5.0"
 
 [dev-dependencies]
 http-body-util = "0.1.2"

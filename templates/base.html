@@ -153,6 +153,14 @@
                             Cooking Temperatures
                         </button>
 
+                        <!-- Manage Passkeys (if logged in) -->
+                        {% if current_user_id.is_some() %}
+                        <button class="dropdown-item" id="manage-passkeys-btn" onclick="event.stopPropagation(); openPasskeysModal(); document.getElementById('profile-dropdown').classList.remove('show');">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                            Manage Passkeys
+                        </button>
+                        {% endif %}
+
                         <!-- Manage Users (Admin Only) -->
                         {% if is_admin %}
                         <a href="{{ app_base }}/admin/users" class="dropdown-item">
@@ -225,6 +233,43 @@
             <div id="suggestion-list" style="display: flex; gap: 0.5rem; flex-wrap: wrap;"></div>
         </div>
     </div>
+
+    <!-- Passkeys Management Modal -->
+    {% if current_user_id.is_some() %}
+    <div id="passkeys-modal" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 450px; max-width: calc(100vw - 40px); background: var(--surface-color); border: 1px solid var(--border-color); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); z-index: 6100; padding: 2rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem;">
+            <h3 style="margin: 0; font-size: 1.25rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem; color: var(--text-color);">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                Manage Passkeys
+            </h3>
+            <button onclick="closePasskeysModal()" style="background: none; border: none; cursor: pointer; color: var(--text-secondary); padding: 0.25rem; display: flex; align-items: center;" title="Close">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+        </div>
+
+        <div id="passkeys-modal-error" style="display: none; background: rgba(239, 68, 68, 0.1); border: 1px solid var(--danger); color: var(--danger); padding: 0.75rem; border-radius: var(--radius-md); font-size: 0.85rem; margin-bottom: 1.25rem; font-weight: 500;"></div>
+        <div id="passkeys-modal-success" style="display: none; background: rgba(16, 185, 129, 0.1); border: 1px solid var(--accent-color); color: var(--accent-color); padding: 0.75rem; border-radius: var(--radius-md); font-size: 0.85rem; margin-bottom: 1.25rem; font-weight: 500;"></div>
+
+        <!-- Keys List -->
+        <div style="margin-bottom: 2rem;">
+            <h4 style="margin: 0 0 0.75rem 0; font-size: 0.95rem; font-weight: 600; color: var(--text-color);">Your Registered Keys</h4>
+            <div id="passkeys-list-container" style="display: flex; flex-direction: column; gap: 0.75rem; max-height: 200px; overflow-y: auto;">
+                <div style="font-size: 0.85rem; color: var(--text-secondary); text-align: center; padding: 1rem 0;">Loading keys...</div>
+            </div>
+        </div>
+
+        <!-- Add Key Form -->
+        <div style="border-top: 1px solid var(--border-color); padding-top: 1.5rem;">
+            <h4 style="margin: 0 0 0.75rem 0; font-size: 0.95rem; font-weight: 600; color: var(--text-color);">Register a New Key</h4>
+            <div style="display: flex; gap: 0.75rem;">
+                <input type="text" id="new-key-name" placeholder="e.g. My Phone, Macbook" class="form-control" style="flex: 1; padding: 0.6rem 0.75rem; font-size: 0.9rem;">
+                <button onclick="registerNewPasskey()" class="btn btn-primary" id="register-key-btn" style="padding: 0.6rem 1.25rem; font-size: 0.9rem;">Register Key</button>
+            </div>
+        </div>
+    </div>
+    <div id="passkeys-modal-backdrop" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); z-index: 6050;" onclick="closePasskeysModal()"></div>
+    {% endif %}
+
     <div id="temps-panel" style="display: none; position: fixed; top: 80px; right: 20px; width: 380px; max-width: calc(100vw - 40px); max-height: 80vh; overflow-y: auto; background: var(--surface-color); border: 1px solid var(--border-color); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); z-index: 6000; padding: 1.5rem;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem;">
             <h3 style="margin: 0; font-size: 1.1rem; font-weight: 700;">Cooking Temps</h3>
@@ -840,6 +885,195 @@
                 }
             });
         }
+
+        // Passkey (WebAuthn) Management Logic
+        {% if current_user_id.is_some() %}
+        function bufferToBase64url(buffer) {
+            const bytes = new Uint8Array(buffer);
+            let binary = '';
+            for (let i = 0; i < bytes.byteLength; i++) {
+                binary += String.fromCharCode(bytes[i]);
+            }
+            const base64 = window.btoa(binary);
+            return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+        }
+
+        function base64urlToBuffer(base64url) {
+            const padding = '='.repeat((4 - (base64url.length % 4)) % 4);
+            const base64 = (base64url + padding).replace(/-/g, '+').replace(/_/g, '/');
+            const raw = window.atob(base64);
+            const uint8Array = new Uint8Array(raw.length);
+            for (let i = 0; i < raw.length; ++i) {
+                uint8Array[i] = raw.charCodeAt(i);
+            }
+            return uint8Array.buffer;
+        }
+
+        function decodeCreationOptions(options) {
+            if (typeof PublicKeyCredential.parseCreationOptionsFromJSON === 'function') {
+                return PublicKeyCredential.parseCreationOptionsFromJSON(options);
+            }
+            const pk = { ...options };
+            pk.challenge = base64urlToBuffer(pk.challenge);
+            pk.user.id = base64urlToBuffer(pk.user.id);
+            if (pk.excludeCredentials) {
+                pk.excludeCredentials = pk.excludeCredentials.map(cred => ({
+                    ...cred,
+                    id: base64urlToBuffer(cred.id)
+                }));
+            }
+            return pk;
+        }
+
+        function serializeCredential(credential) {
+            if (typeof credential.toJSON === 'function') {
+                return credential.toJSON();
+            }
+            const response = credential.response;
+            return {
+                id: credential.id,
+                rawId: bufferToBase64url(credential.rawId),
+                type: credential.type,
+                response: {
+                    clientDataJSON: bufferToBase64url(response.clientDataJSON),
+                    attestationObject: bufferToBase64url(response.attestationObject),
+                    transports: typeof response.getTransports === 'function' ? response.getTransports() : []
+                }
+            };
+        }
+
+        function openPasskeysModal() {
+            document.getElementById('passkeys-modal').style.display = 'block';
+            document.getElementById('passkeys-modal-backdrop').style.display = 'block';
+            clearPasskeyAlerts();
+            fetchPasskeys();
+        }
+
+        function closePasskeysModal() {
+            document.getElementById('passkeys-modal').style.display = 'none';
+            document.getElementById('passkeys-modal-backdrop').style.display = 'none';
+            document.getElementById('new-key-name').value = '';
+            clearPasskeyAlerts();
+        }
+
+        function clearPasskeyAlerts() {
+            const err = document.getElementById('passkeys-modal-error');
+            const succ = document.getElementById('passkeys-modal-success');
+            err.style.display = 'none';
+            err.textContent = '';
+            succ.style.display = 'none';
+            succ.textContent = '';
+        }
+
+        function showPasskeyAlert(msg, isSuccess = false) {
+            clearPasskeyAlerts();
+            if (isSuccess) {
+                const succ = document.getElementById('passkeys-modal-success');
+                succ.textContent = msg;
+                succ.style.display = 'block';
+            } else {
+                const err = document.getElementById('passkeys-modal-error');
+                err.textContent = msg;
+                err.style.display = 'block';
+            }
+        }
+
+        async function fetchPasskeys() {
+            const container = document.getElementById('passkeys-list-container');
+            container.innerHTML = '<div style="font-size: 0.85rem; color: var(--text-secondary); text-align: center; padding: 1rem 0;">Loading keys...</div>';
+            try {
+                const res = await fetch('{{ app_base }}/api/v1/auth/passkeys');
+                if (!res.ok) throw new Error('Failed to load passkeys');
+                const keys = await res.json();
+                
+                if (keys.length === 0) {
+                    container.innerHTML = '<div style="font-size: 0.85rem; color: var(--text-secondary); text-align: center; padding: 1rem 0;">No registered passkeys yet.</div>';
+                    return;
+                }
+
+                container.innerHTML = keys.map(key => `
+                    <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-color); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 0.75rem 1rem;">
+                        <div>
+                            <div style="font-size: 0.9rem; font-weight: 600; color: var(--text-color);">${escapePasskeyHtml(key.name)}</div>
+                            <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.15rem;">Registered: ${key.created_at}</div>
+                        </div>
+                        <button onclick="deletePasskey('${key.id}')" class="delete-passkey-item-btn" style="background: none; border: none; cursor: pointer; color: var(--danger); padding: 0.25rem; display: flex; align-items: center;" title="Delete Key">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                        </button>
+                    </div>
+                `).join('');
+            } catch (err) {
+                container.innerHTML = `<div style="font-size: 0.85rem; color: var(--danger); text-align: center; padding: 1rem 0;">Error loading keys: ${err.message}</div>`;
+            }
+        }
+
+        function escapePasskeyHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        async function deletePasskey(keyId) {
+            if (!confirm('Are you sure you want to delete this passkey?')) return;
+            try {
+                const res = await fetch(`{{ app_base }}/api/v1/auth/passkeys/${keyId}`, { method: 'DELETE' });
+                if (!res.ok) throw new Error(await res.text());
+                showPasskeyAlert('Passkey deleted successfully', true);
+                fetchPasskeys();
+            } catch (err) {
+                showPasskeyAlert(`Error deleting key: ${err.message}`);
+            }
+        }
+
+        async function registerNewPasskey() {
+            const newKeyNameInput = document.getElementById('new-key-name');
+            const keyName = newKeyNameInput.value.trim();
+            if (!keyName) {
+                showPasskeyAlert('Please provide a name for the passkey');
+                return;
+            }
+
+            const regBtn = document.getElementById('register-key-btn');
+            regBtn.disabled = true;
+            regBtn.textContent = 'Registering...';
+            clearPasskeyAlerts();
+
+            try {
+                const startRes = await fetch('{{ app_base }}/api/v1/auth/passkeys/register/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key_name: keyName })
+                });
+                if (!startRes.ok) throw new Error(await startRes.text());
+                const startData = await startRes.json();
+
+                const publicKey = decodeCreationOptions(startData.challenge.publicKey);
+                const credential = await navigator.credentials.create({ publicKey });
+                if (!credential) throw new Error('WebAuthn credential creation failed');
+
+                const finishRes = await fetch('{{ app_base }}/api/v1/auth/passkeys/register/finish', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        reg_id: startData.reg_id,
+                        key_name: keyName,
+                        credential: serializeCredential(credential)
+                    })
+                });
+                if (!finishRes.ok) throw new Error(await finishRes.text());
+
+                showPasskeyAlert('New passkey registered successfully!', true);
+                newKeyNameInput.value = '';
+                fetchPasskeys();
+            } catch (err) {
+                console.error('Registration error:', err);
+                showPasskeyAlert(`Registration failed: ${err.message}`);
+            } finally {
+                regBtn.disabled = false;
+                regBtn.textContent = 'Register Key';
+            }
+        }
+        {% endif %}
 
 
     </script>

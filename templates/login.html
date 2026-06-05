@@ -17,6 +17,8 @@
         {% when None %}
     {% endmatch %}
 
+    <div id="client-error-alert" style="display: none; background: rgba(239, 68, 68, 0.1); color: #ef4444; padding: 1rem; border-radius: var(--radius-md); margin-bottom: 1.5rem; text-align: center; font-size: 0.9rem; font-weight: 500;"></div>
+
     <form action="{{ app_base }}/login" method="POST">
         <div style="margin-bottom: 1.25rem;">
             <label for="email" style="display: block; font-size: 0.9rem; font-weight: 500; margin-bottom: 0.5rem; color: var(--text-color);">Email Address / Username</label>
@@ -27,7 +29,130 @@
             <input type="password" id="password" name="password" class="form-control" required style="width: 100%; box-sizing: border-box;">
         </div>
         <button type="submit" class="btn btn-primary" style="width: 100%; justify-content: center;">Log In</button>
+        <button type="button" onclick="loginWithPasskey()" class="btn btn-secondary" id="passkey-login-btn" style="width: 100%; justify-content: center; margin-top: 0.75rem; display: flex; align-items: center; gap: 0.5rem; font-weight: 600;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+            Sign in with Passkey
+        </button>
     </form>
+
+<script>
+    function bufferToBase64url(buffer) {
+        const bytes = new Uint8Array(buffer);
+        let binary = '';
+        for (let i = 0; i < bytes.byteLength; i++) {
+            binary += String.fromCharCode(bytes[i]);
+        }
+        const base64 = window.btoa(binary);
+        return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+    }
+
+    function base64urlToBuffer(base64url) {
+        const padding = '='.repeat((4 - (base64url.length % 4)) % 4);
+        const base64 = (base64url + padding).replace(/-/g, '+').replace(/_/g, '/');
+        const raw = window.atob(base64);
+        const uint8Array = new Uint8Array(raw.length);
+        for (let i = 0; i < raw.length; ++i) {
+            uint8Array[i] = raw.charCodeAt(i);
+        }
+        return uint8Array.buffer;
+    }
+
+    function decodeRequestOptions(options) {
+        if (typeof PublicKeyCredential.parseRequestOptionsFromJSON === 'function') {
+            return PublicKeyCredential.parseRequestOptionsFromJSON(options);
+        }
+        const pk = { ...options };
+        pk.challenge = base64urlToBuffer(pk.challenge);
+        if (pk.allowCredentials) {
+            pk.allowCredentials = pk.allowCredentials.map(cred => ({
+                ...cred,
+                id: base64urlToBuffer(cred.id)
+            }));
+        }
+        return pk;
+    }
+
+    function serializeAssertion(credential) {
+        if (typeof credential.toJSON === 'function') {
+            return credential.toJSON();
+        }
+        const response = credential.response;
+        return {
+            id: credential.id,
+            rawId: bufferToBase64url(credential.rawId),
+            type: credential.type,
+            response: {
+                clientDataJSON: bufferToBase64url(response.clientDataJSON),
+                authenticatorData: bufferToBase64url(response.authenticatorData),
+                signature: bufferToBase64url(response.signature),
+                userHandle: response.userHandle ? bufferToBase64url(response.userHandle) : null
+            }
+        };
+    }
+
+    async function loginWithPasskey() {
+        const emailInput = document.getElementById('email');
+        const email = emailInput.value.trim();
+        const errorAlert = document.getElementById('client-error-alert');
+        errorAlert.style.display = 'none';
+        errorAlert.textContent = '';
+
+        if (!email) {
+            errorAlert.textContent = 'Please enter your email address/username first';
+            errorAlert.style.display = 'block';
+            emailInput.focus();
+            return;
+        }
+
+        const loginBtn = document.getElementById('passkey-login-btn');
+        loginBtn.disabled = true;
+        const originalText = loginBtn.innerHTML;
+        loginBtn.textContent = 'Authenticating...';
+
+        try {
+            const startRes = await fetch('{{ app_base }}/api/v1/auth/passkeys/login/start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email })
+            });
+            
+            if (!startRes.ok) {
+                const text = await startRes.text();
+                throw new Error(text || 'Failed to start authentication');
+            }
+            
+            const startData = await startRes.json();
+
+            const publicKey = decodeRequestOptions(startData.challenge.publicKey);
+            const credential = await navigator.credentials.get({ publicKey });
+            if (!credential) throw new Error('WebAuthn authentication failed');
+
+            const finishRes = await fetch('{{ app_base }}/api/v1/auth/passkeys/login/finish', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    auth_id: startData.auth_id,
+                    email,
+                    credential: serializeAssertion(credential)
+                })
+            });
+
+            if (!finishRes.ok) {
+                const text = await finishRes.text();
+                throw new Error(text || 'Failed to verify passkey signature');
+            }
+
+            window.location.href = '{{ app_base }}/';
+        } catch (err) {
+            console.error('Passkey authentication error:', err);
+            errorAlert.textContent = `Passkey login failed: ${err.message}`;
+            errorAlert.style.display = 'block';
+        } finally {
+            loginBtn.disabled = false;
+            loginBtn.innerHTML = originalText;
+        }
+    }
+</script>
 
     <div style="text-align: center; margin-top: 1.5rem; font-size: 0.85rem; color: var(--text-secondary);">
         Don't have an account? 

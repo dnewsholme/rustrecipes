@@ -163,8 +163,7 @@ async fn get_recipe(
 ) -> impl IntoResponse {
     let user_id = get_session_user_id(&jar);
     let is_admin = if let Some(ref uid) = user_id {
-        let admin_email =
-            std::env::var("ADMIN_EMAIL").unwrap_or_else(|_| "dbizsley@googlemail.com".to_string());
+        let admin_email = std::env::var("ADMIN_EMAIL").expect("ADMIN_EMAIL must be set");
         if let Some(admin_user) = storage::find_user_by_email(&admin_email) {
             uid == &admin_user.id
         } else {
@@ -222,8 +221,7 @@ async fn generate_shopping_list(
 ) -> impl IntoResponse {
     let user_id = get_session_user_id(&jar);
     let is_admin = if let Some(ref uid) = user_id {
-        let admin_email =
-            std::env::var("ADMIN_EMAIL").unwrap_or_else(|_| "dbizsley@googlemail.com".to_string());
+        let admin_email = std::env::var("ADMIN_EMAIL").expect("ADMIN_EMAIL must be set");
         if let Some(admin_user) = storage::find_user_by_email(&admin_email) {
             uid == &admin_user.id
         } else {
@@ -543,8 +541,7 @@ fn get_session_user_id(jar: &axum_extra::extract::cookie::PrivateCookieJar) -> O
     if let Some(c) = jar.get("admin_session") {
         let val = c.value();
         if val == "true" {
-            let admin_email = std::env::var("ADMIN_EMAIL")
-                .unwrap_or_else(|_| "dbizsley@googlemail.com".to_string());
+            let admin_email = std::env::var("ADMIN_EMAIL").expect("ADMIN_EMAIL must be set");
             if let Some(user) = storage::find_user_by_email(&admin_email) {
                 return Some(user.id);
             }
@@ -682,12 +679,28 @@ mod tests {
 
     fn test_state() -> AppState {
         let _ = std::fs::create_dir_all("data");
-        let _ = storage::db_init("", "dbizsley@googlemail.com");
+        unsafe {
+            std::env::set_var("ADMIN_EMAIL", "admin@example.com");
+        }
+        let _ = storage::db_init("", "admin@example.com");
+
+        let rp_id = "localhost".to_string();
+        let rp_origin = url::Url::parse("http://localhost:3000").unwrap();
+        let webauthn_builder = webauthn_rs::WebauthnBuilder::new(&rp_id, &rp_origin).unwrap();
+        let webauthn = std::sync::Arc::new(webauthn_builder.build().unwrap());
+        let reg_states =
+            std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new()));
+        let auth_states =
+            std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new()));
+
         AppState {
             key: axum_extra::extract::cookie::Key::generate(),
             password_hash: "".to_string(),
             app_base: "",
             google_oauth: None,
+            webauthn,
+            reg_states,
+            auth_states,
         }
     }
 
@@ -738,7 +751,7 @@ mod tests {
         }
         let app = router(state.clone()).with_state(state);
 
-        let owner_id = storage::find_user_by_email("dbizsley@googlemail.com")
+        let owner_id = storage::find_user_by_email("admin@example.com")
             .map(|u| u.id)
             .unwrap_or_else(|| "admin".to_string());
 

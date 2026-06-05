@@ -178,3 +178,12 @@ pub struct ShoppingItem {
     pub name: String,
     pub checked: bool,
 }
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct UserPasskey {
+    pub id: String,
+    pub user_id: String,
+    pub name: String,
+    pub passkey_json: String,
+    pub created_at: String,
+}

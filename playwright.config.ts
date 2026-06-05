@@ -12,7 +12,7 @@ export default defineConfig({
     timeout: process.env.CI ? 10000 : 10000
   },
   use: {
-    baseURL: process.env.BASE_URL || 'http://127.0.0.1:3000',
+    baseURL: process.env.BASE_URL || 'http://localhost:3000',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     navigationTimeout: process.env.CI ? 30000 : 15000,
@@ -50,7 +50,7 @@ export default defineConfig({
   /* Run your local dev server before starting the tests */
   webServer: {
     command: (process.env.CI || process.env.USE_BINARY) ? (process.env.BINARY_PATH || './target/debug/recipemanager') : 'cargo run --bin recipemanager',
-    url: 'http://127.0.0.1:3000',
+    url: 'http://localhost:3000',
     reuseExistingServer: true,
     timeout: 120 * 1000,
   },

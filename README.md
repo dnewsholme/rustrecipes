@@ -94,7 +94,7 @@ Copy the output (e.g., `$2y$12$...`) and use it as `ADMIN_PASSWORD_HASH`.
 
 | Variable | Required | Description |
 | :--- | :--- | :--- |
-| `ADMIN_EMAIL` | No | Admin email (default: `dbizsley@googlemail.com`). |
+| `ADMIN_EMAIL` | **Yes** | Email address of the admin account. The application will not start if this is unset. |
 | `ADMIN_PASSWORD_HASH` | Yes | Bcrypt hash for admin login. Default password is "admin" if omitted. |
 | `API_TOKEN` | Yes | Token for API write access. |
 | `SESSION_SECRET` | Recommended | Signs session cookies. Sessions reset on restart if omitted. |
