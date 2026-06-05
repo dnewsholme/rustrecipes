@@ -11,6 +11,7 @@ This document serves as an onboarding guide and architectural reference for AI a
 *   **HTML Templates**: Server-side rendered using [Askama](https://github.com/djc/askama).
 *   **Frontend**: Vanilla HTML5, CSS3 (`static/styles.css`), and JavaScript.
 *   **E2E Testing**: [Playwright](https://playwright.dev/) TypeScript tests targeting loopback addresses.
+*   **API Endpoints**: The application should use rest api endpoints for functionality where possible, and these API endpoints should be secured using bearer tokens if they contain user or admin specific data (or both).
 
 ---
 

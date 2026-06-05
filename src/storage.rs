@@ -87,6 +87,20 @@ pub fn db_init(
         [],
     )?;
 
+    // Create user_recipe_notes table
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS user_recipe_notes (
+            user_id TEXT NOT NULL,
+            recipe_id TEXT NOT NULL,
+            notes TEXT NOT NULL,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY(user_id, recipe_id),
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY(recipe_id) REFERENCES recipes(id) ON DELETE CASCADE
+        )",
+        [],
+    )?;
+
     // Seed default admin user if no users exist
     let mut stmt = conn.prepare("SELECT COUNT(*) FROM users")?;
     let count: i64 = stmt.query_row([], |row| row.get(0))?;
@@ -898,6 +912,40 @@ pub fn delete_passkey_by_id(id: &str, user_id: &str) -> Result<(), std::io::Erro
     )
     .map(|_| ())
     .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+}
+
+pub fn get_recipe_notes(user_id: &str, recipe_id: &str) -> Option<String> {
+    let conn = rusqlite::Connection::open(get_db_path()).ok()?;
+    let mut stmt = conn
+        .prepare("SELECT notes FROM user_recipe_notes WHERE user_id = ?1 AND recipe_id = ?2")
+        .ok()?;
+    stmt.query_row([user_id, recipe_id], |row| row.get(0)).ok()
+}
+
+pub fn save_recipe_notes(
+    user_id: &str,
+    recipe_id: &str,
+    notes: &str,
+) -> Result<(), std::io::Error> {
+    let conn = rusqlite::Connection::open(get_db_path())
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+    if notes.trim().is_empty() {
+        conn.execute(
+            "DELETE FROM user_recipe_notes WHERE user_id = ?1 AND recipe_id = ?2",
+            [user_id, recipe_id],
+        )
+        .map(|_| ())
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+    } else {
+        conn.execute(
+            "INSERT INTO user_recipe_notes (user_id, recipe_id, notes) VALUES (?1, ?2, ?3) \
+             ON CONFLICT(user_id, recipe_id) DO UPDATE SET notes = excluded.notes, updated_at = datetime('now', 'localtime')",
+            [user_id, recipe_id, notes],
+        )
+        .map(|_| ())
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+    }
 }
 
 pub fn process_image(data: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {

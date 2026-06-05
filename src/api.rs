@@ -18,6 +18,10 @@ pub fn router(state: AppState) -> Router<AppState> {
             "/recipes/{id}",
             get(get_recipe).put(update_recipe).delete(delete_recipe),
         )
+        .route(
+            "/recipes/{id}/notes",
+            get(get_recipe_notes_api).post(save_recipe_notes_api),
+        )
         .route("/ferment", get(calculate_fermentation))
         .route("/temps", get(get_cooking_temps))
         .route("/spices", get(get_spices))
@@ -57,6 +61,8 @@ async fn require_api_token(
         || path == "/api/v1/shopping-list"
         || path.starts_with("/meal-plan")
         || path.starts_with("/api/v1/meal-plan")
+        || (path.starts_with("/recipes/") && path.ends_with("/notes"))
+        || (path.starts_with("/api/v1/recipes/") && path.ends_with("/notes"))
     {
         return Ok(next.run(req).await);
     }
@@ -185,6 +191,87 @@ async fn get_recipe(
                     query.bakers.unwrap_or(false),
                 );
                 Json(converted).into_response()
+            } else {
+                StatusCode::FORBIDDEN.into_response()
+            }
+        }
+        None => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
+#[derive(Deserialize)]
+struct SaveNotesRequest {
+    notes: String,
+}
+
+#[derive(Serialize)]
+struct NotesResponse {
+    notes: String,
+}
+
+async fn get_recipe_notes_api(
+    jar: axum_extra::extract::cookie::PrivateCookieJar,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    let user_id = match get_session_user_id(&jar) {
+        Some(uid) => uid,
+        None => return StatusCode::UNAUTHORIZED.into_response(),
+    };
+
+    let is_admin = {
+        let admin_email = std::env::var("ADMIN_EMAIL").expect("ADMIN_EMAIL must be set");
+        if let Some(admin_user) = storage::find_user_by_email(&admin_email) {
+            user_id == admin_user.id
+        } else {
+            false
+        }
+    };
+
+    match storage::read_recipe_for_user(&id, Some(&user_id)) {
+        Some(recipe) => {
+            let is_owner = user_id == recipe.owner_id;
+            if recipe.is_public || is_owner || is_admin {
+                let notes = storage::get_recipe_notes(&user_id, &id).unwrap_or_default();
+                Json(NotesResponse { notes }).into_response()
+            } else {
+                StatusCode::FORBIDDEN.into_response()
+            }
+        }
+        None => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
+async fn save_recipe_notes_api(
+    jar: axum_extra::extract::cookie::PrivateCookieJar,
+    Path(id): Path<String>,
+    Json(payload): Json<SaveNotesRequest>,
+) -> impl IntoResponse {
+    let user_id = match get_session_user_id(&jar) {
+        Some(uid) => uid,
+        None => return StatusCode::UNAUTHORIZED.into_response(),
+    };
+
+    let is_admin = {
+        let admin_email = std::env::var("ADMIN_EMAIL").expect("ADMIN_EMAIL must be set");
+        if let Some(admin_user) = storage::find_user_by_email(&admin_email) {
+            user_id == admin_user.id
+        } else {
+            false
+        }
+    };
+
+    match storage::read_recipe_for_user(&id, Some(&user_id)) {
+        Some(recipe) => {
+            let is_owner = user_id == recipe.owner_id;
+            if recipe.is_public || is_owner || is_admin {
+                if let Err(e) = storage::save_recipe_notes(&user_id, &id, &payload.notes) {
+                    error!("Failed to save recipe notes: {:?}", e);
+                    return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                }
+                Json(NotesResponse {
+                    notes: payload.notes,
+                })
+                .into_response()
             } else {
                 StatusCode::FORBIDDEN.into_response()
             }
