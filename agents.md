@@ -50,7 +50,7 @@ WebAuthn (Passkeys) mandates a secure context. During local development, loopbac
 ### Running Locally
 To launch the dev server with live-reloads:
 ```bash
-cargo run --bin recipemanager
+ADMIN_EMAIL=admin@example.com cargo run --bin recipemanager
 ```
 
 ### Running Tests

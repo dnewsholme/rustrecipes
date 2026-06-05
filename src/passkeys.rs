@@ -272,13 +272,19 @@ pub async fn passkeys_login_finish(
         .finish_passkey_authentication(&req.credential, &authentication)
     {
         Ok(_auth_result) => {
-            let jar = jar.add(
-                Cookie::build(("admin_session", user.id.clone()))
-                    .path("/")
-                    .max_age(time::Duration::days(30))
-                    .same_site(SameSite::Lax)
-                    .http_only(true),
-            );
+            let cookie_path = if state.app_base.is_empty() {
+                "/"
+            } else {
+                state.app_base
+            };
+            let cookie = Cookie::build(("admin_session", user.id.clone()))
+                .path(cookie_path)
+                .http_only(true)
+                .secure(false)
+                .same_site(SameSite::Lax)
+                .max_age(time::Duration::days(30))
+                .build();
+            let jar = jar.add(cookie);
 
             #[derive(Serialize)]
             struct LoginFinishResponse {

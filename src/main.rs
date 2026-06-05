@@ -958,19 +958,30 @@ async fn logout(State(state): State<AppState>) -> Response {
     } else {
         state.app_base
     };
-    // Clearing a signed cookie does not require the private jar — we just need to
-    // instruct the browser to expire it immediately. Using a raw Set-Cookie header
-    // with Max-Age=0 is always reliable, regardless of whether the server key matches.
-    let clear_cookie = format!(
+    let mut response = Redirect::to(&format!("{}/", state.app_base)).into_response();
+
+    // 1. Clear cookie at the current app base path
+    let clear_cookie_base = format!(
         "admin_session=; Path={}; Max-Age=0; HttpOnly; SameSite=Lax",
         cookie_path
     );
-    let mut response = Redirect::to(&format!("{}/", state.app_base)).into_response();
-    if let Ok(val) = axum::http::HeaderValue::from_str(&clear_cookie) {
+    if let Ok(val) = axum::http::HeaderValue::from_str(&clear_cookie_base) {
         response
             .headers_mut()
-            .insert(axum::http::header::SET_COOKIE, val);
+            .append(axum::http::header::SET_COOKIE, val);
     }
+
+    // 2. If the app base path is not root, also clear cookie at root path "/"
+    // to clean up any legacy cookies or cookies set by previous buggy passkey logins.
+    if cookie_path != "/" {
+        let clear_cookie_root = "admin_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax";
+        if let Ok(val) = axum::http::HeaderValue::from_str(clear_cookie_root) {
+            response
+                .headers_mut()
+                .append(axum::http::header::SET_COOKIE, val);
+        }
+    }
+
     response
 }
 
