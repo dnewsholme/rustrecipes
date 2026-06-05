@@ -129,6 +129,7 @@ struct RegisterTemplate {
 #[template(path = "users.html")]
 struct UsersTemplate {
     users: Vec<crate::models::User>,
+    passkey_counts: std::collections::HashMap<String, usize>,
     app_base: &'static str,
     app_version: String,
     current_user_id: Option<String>,
@@ -982,8 +983,16 @@ async fn admin_users_list(
     };
 
     let users = storage::list_users();
+    let passkey_counts: std::collections::HashMap<String, usize> = users
+        .iter()
+        .map(|u| {
+            let count = storage::find_passkeys_by_user_id(&u.id).len();
+            (u.id.clone(), count)
+        })
+        .collect();
     let template = UsersTemplate {
         users,
+        passkey_counts,
         app_base: state.app_base,
         app_version: APP_VERSION.to_string(),
         current_user_id: user_id,
