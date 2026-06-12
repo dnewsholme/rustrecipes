@@ -143,4 +143,55 @@ test.describe('Meal Planner', () => {
     await expect(plannedItems).toHaveCount(0);
     await expect(mealList).toContainText('No meals planned yet');
   });
+
+  test('should allow removing a single item from the planner', async ({ page }) => {
+    // 1. Add a recipe to the planned meals
+    const checkboxes = page.locator('.recipe-select-checkbox');
+    await checkboxes.first().waitFor();
+    const recipeCard = page.locator('.recipe-card').first();
+    const recipeTitle = await recipeCard.locator('h3').innerText();
+    await checkboxes.first().check();
+    await page.locator('button:has-text("Add to Planned Meals")').click();
+
+    // 2. Expand planner and add a manual entry
+    const content = page.locator('#meal-planner-content');
+    const toggleBtn = page.locator('#toggle-meal-planner-collapse');
+    if (await content.isHidden()) {
+      await toggleBtn.click();
+    }
+    const manualInput = page.locator('#manual-meal-input');
+    await manualInput.fill('Burger Night');
+    await manualInput.press('Enter');
+
+    // 3. Verify both exist
+    const plannedItems = page.locator('#meal-planner-list li.meal-planner-item');
+    await expect(plannedItems).toHaveCount(2);
+
+    // 4. Click the remove button on the manual entry ("Burger Night")
+    const manualItem = plannedItems.filter({ hasText: 'Burger Night' });
+    const removeBtn = manualItem.locator('.meal-remove-btn');
+    await removeBtn.click();
+
+    // 5. Verify manual entry is gone but recipe remains
+    await expect(plannedItems).toHaveCount(1);
+    await expect(plannedItems.first()).toContainText(recipeTitle);
+    await expect(manualItem).not.toBeVisible();
+
+    // 6. Reload page to verify persistence
+    await page.reload();
+    if (await content.isHidden()) {
+      await toggleBtn.click();
+    }
+    await expect(plannedItems).toHaveCount(1);
+    await expect(plannedItems.first()).toContainText(recipeTitle);
+
+    // 7. Click remove button on the remaining recipe
+    const recipeItem = plannedItems.filter({ hasText: recipeTitle });
+    await recipeItem.locator('.meal-remove-btn').click();
+
+    // 8. Verify the planner is now empty
+    await expect(plannedItems).toHaveCount(0);
+    const mealList = page.locator('#meal-planner-list');
+    await expect(mealList).toContainText('No meals planned yet');
+  });
 });

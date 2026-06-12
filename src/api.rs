@@ -6,7 +6,7 @@ use axum::{
     http::{HeaderMap, StatusCode},
     middleware::Next,
     response::{IntoResponse, Json},
-    routing::{get, post},
+    routing::{delete, get, post},
 };
 use serde::{Deserialize, Serialize};
 use tracing::{error, warn};
@@ -40,6 +40,7 @@ pub fn router(state: AppState) -> Router<AppState> {
                 .post(add_to_meal_plan)
                 .delete(clear_meal_plan),
         )
+        .route("/meal-plan/{id}", delete(delete_meal_plan_item))
         .route("/meal-plan/toggle", post(toggle_meal_plan))
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
@@ -749,6 +750,30 @@ async fn clear_meal_plan(
     };
 
     if storage::save_meal_plan(&user_id, &[]).is_err() {
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    Ok(StatusCode::OK)
+}
+
+async fn delete_meal_plan_item(
+    jar: axum_extra::extract::cookie::PrivateCookieJar,
+    Path(recipe_id): Path<String>,
+) -> Result<impl IntoResponse, StatusCode> {
+    let user_id = match get_session_user_id(&jar) {
+        Some(uid) => uid,
+        None => return Err(StatusCode::UNAUTHORIZED),
+    };
+
+    let mut meals = storage::read_meal_plan(&user_id);
+    let original_len = meals.len();
+    meals.retain(|m| m.recipe_id != recipe_id);
+
+    if meals.len() == original_len {
+        return Err(StatusCode::NOT_FOUND);
+    }
+
+    if storage::save_meal_plan(&user_id, &meals).is_err() {
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     }
 

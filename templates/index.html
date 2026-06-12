@@ -60,6 +60,24 @@
         border-color: var(--accent-color);
         background: var(--accent-color);
     }
+    .meal-remove-btn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: var(--text-secondary);
+        padding: 0.25rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        border-radius: var(--radius-sm);
+        transition: all 0.2s;
+    }
+    .meal-remove-btn:hover {
+        color: var(--danger) !important;
+        background: rgba(239, 68, 68, 0.1);
+    }
 </style>
 {% endblock %}
 
@@ -825,7 +843,7 @@
                             let recipeLink = '';
                             if (!meal.recipe_id.startsWith('manual:')) {
                                 recipeLink = `
-                                    <a href="{{ app_base }}/recipe/${meal.recipe_id}" onclick="event.stopPropagation()" class="meal-recipe-link" style="color: var(--text-secondary); margin-left: auto; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: var(--radius-sm); transition: var(--transition);" onmouseover="this.style.color='var(--accent-color)'" onmouseout="this.style.color='var(--text-secondary)'" title="View Recipe">
+                                    <a href="{{ app_base }}/recipe/${meal.recipe_id}" onclick="event.stopPropagation()" class="meal-recipe-link" style="color: var(--text-secondary); display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: var(--radius-sm); transition: var(--transition);" onmouseover="this.style.color='var(--accent-color)'" onmouseout="this.style.color='var(--text-secondary)'" title="View Recipe">
                                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                             <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
                                             <polyline points="15 3 21 3 21 9"></polyline>
@@ -841,7 +859,15 @@
                                         <span class="meal-checkbox" style="flex-shrink: 0;">${checkIcon}</span>
                                         <span class="meal-title" style="font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${meal.title}</span>
                                     </div>
-                                    ${recipeLink}
+                                    <div style="display: flex; align-items: center; gap: 0.5rem; margin-left: auto; flex-shrink: 0;">
+                                        ${recipeLink}
+                                        <button onclick="event.stopPropagation(); removePlannedMeal('${meal.recipe_id}')" class="meal-remove-btn" title="Remove from Planner">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                                            </svg>
+                                        </button>
+                                    </div>
                                 </div>
                             `;
                             ul.appendChild(li);
@@ -938,6 +964,22 @@
                 await loadPlannedMeals();
             } else {
                 alert('Failed to toggle planned meal.');
+            }
+        } catch (e) {
+            console.error(e);
+            alert('An error occurred.');
+        }
+    }
+
+    async function removePlannedMeal(recipeId) {
+        try {
+            const response = await fetch(`{{ app_base }}/api/v1/meal-plan/${encodeURIComponent(recipeId)}`, {
+                method: 'DELETE'
+            });
+            if (response.ok) {
+                await loadPlannedMeals();
+            } else {
+                alert('Failed to remove planned meal.');
             }
         } catch (e) {
             console.error(e);
