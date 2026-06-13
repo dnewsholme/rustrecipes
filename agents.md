@@ -44,6 +44,11 @@ WebAuthn (Passkeys) mandates a secure context. During local development, loopbac
 *   Use `max_age(time::Duration::days(30))` for login session cookies to enable persistent logouts across browser restarts.
 *   The cookie name is `admin_session`. The application automatically intercepts the username `"admin"` and resolves it to the administrator's actual email (retrieved via the required `ADMIN_EMAIL` environment variable — the app will panic at startup if this is not set).
 
+### 4. Security & Secret Management (API Keys, Passwords, and Emails)
+*   **No Hardcoded Secrets**: Do not hardcode, save, or commit any API keys, actual passwords, personal/sensitive emails, or session secrets anywhere in the project files (including source code, templates, mock files, shell scripts, or documentation).
+*   **Runtime Configuration**: Always access credentials dynamically at runtime using environment variables (e.g., `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `GEMINI_API_KEY`, `SESSION_SECRET`).
+*   **Local Development & Testing**: For local development or running tests, feed in generic placeholder values (such as `admin@example.com` or dummy keys) via environment parameters, ensuring no private data gets committed to the repository history.
+
 ---
 
 ## 🚀 Common Commands
