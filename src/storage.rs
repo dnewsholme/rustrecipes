@@ -495,7 +495,7 @@ pub fn list_recipes_for_user(user_id: Option<&str>) -> Vec<Recipe> {
         let parser = Parser::new(&recipe.markdown);
         let mut html_output = String::new();
         html::push_html(&mut html_output, parser);
-        recipe.html = Some(html_output);
+        recipe.html = Some(ammonia::clean(&html_output));
 
         Ok(recipe)
     };
@@ -575,7 +575,7 @@ pub fn read_recipe_for_user(id: &str, user_id: Option<&str>) -> Option<Recipe> {
         let parser = Parser::new(&recipe.markdown);
         let mut html_output = String::new();
         html::push_html(&mut html_output, parser);
-        recipe.html = Some(html_output);
+        recipe.html = Some(ammonia::clean(&html_output));
 
         Ok(recipe)
     };

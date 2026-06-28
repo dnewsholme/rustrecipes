@@ -20,10 +20,56 @@ pub enum ImportError {
     AiFailed(String),
 }
 
+fn is_safe_ip(ip: std::net::IpAddr) -> bool {
+    match ip {
+        std::net::IpAddr::V4(ipv4) => {
+            !ipv4.is_loopback()
+                && !ipv4.is_private()
+                && !ipv4.is_link_local()
+                && !ipv4.is_unspecified()
+                && !ipv4.is_broadcast()
+        }
+        std::net::IpAddr::V6(ipv6) => !ipv6.is_loopback() && !ipv6.is_unspecified(),
+    }
+}
+
+async fn validate_url_host(url_str: &str) -> Result<(), ImportError> {
+    let parsed = url::Url::parse(url_str)
+        .map_err(|e| ImportError::FetchFailed(format!("Invalid URL: {}", e)))?;
+    let host = parsed
+        .host_str()
+        .ok_or_else(|| ImportError::FetchFailed("Missing host in URL".to_string()))?;
+    let port = parsed
+        .port()
+        .unwrap_or_else(|| if parsed.scheme() == "https" { 443 } else { 80 });
+
+    let addr_str = format!("{}:{}", host, port);
+    let addrs = tokio::net::lookup_host(&addr_str)
+        .await
+        .map_err(|e| ImportError::FetchFailed(format!("DNS lookup failed for {}: {}", host, e)))?;
+
+    for addr in addrs {
+        if !is_safe_ip(addr.ip()) {
+            warn!(
+                "Blocked fetch request to unsafe host IP: {} (from host {})",
+                addr.ip(),
+                host
+            );
+            return Err(ImportError::FetchFailed(
+                "Access to private/local networks is forbidden".to_string(),
+            ));
+        }
+    }
+
+    Ok(())
+}
+
 pub async fn import_recipe_from_url(url: &str) -> Result<Recipe, ImportError> {
     if url.contains("youtube.com") || url.contains("youtu.be") {
         return import_recipe_from_youtube(url).await;
     }
+
+    validate_url_host(url).await?;
     let mut headers = reqwest::header::HeaderMap::new();
     headers.insert("accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8".parse().unwrap());
     headers.insert("accept-language", "en-US,en;q=0.9".parse().unwrap());

@@ -785,7 +785,11 @@ async fn import_photo(
                 Ok(d) => d,
                 Err(e) => {
                     warn!("Failed to process photo: {:?}", e);
-                    data.to_vec()
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        "Uploaded file is not a valid image format",
+                    )
+                        .into_response();
                 }
             };
 
@@ -837,7 +841,11 @@ async fn upload_image(mut multipart: Multipart) -> impl IntoResponse {
             Ok(d) => d,
             Err(e) => {
                 warn!("Failed to process upload: {:?}", e);
-                bytes.to_vec()
+                return Json(UploadResponse {
+                    data: None,
+                    error: Some("Uploaded file is not a valid image format".to_string()),
+                })
+                .into_response();
             }
         };
 
@@ -849,7 +857,8 @@ async fn upload_image(mut multipart: Multipart) -> impl IntoResponse {
             return Json(UploadResponse {
                 data: Some(UploadData { file_path: url }),
                 error: None,
-            });
+            })
+            .into_response();
         }
     }
 
@@ -857,6 +866,7 @@ async fn upload_image(mut multipart: Multipart) -> impl IntoResponse {
         data: None,
         error: Some("Upload failed".to_string()),
     })
+    .into_response()
 }
 
 async fn require_admin(
@@ -931,7 +941,7 @@ async fn login_submit(
             let cookie = Cookie::build(("admin_session", user.id))
                 .path(cookie_path)
                 .http_only(true)
-                .secure(false)
+                .secure(is_cookie_secure())
                 .same_site(SameSite::Lax)
                 .max_age(time::Duration::days(30))
                 .build();
@@ -1217,7 +1227,7 @@ async fn register_submit(
     let cookie = Cookie::build(("admin_session", user_id))
         .path(cookie_path)
         .http_only(true)
-        .secure(false)
+        .secure(is_cookie_secure())
         .same_site(SameSite::Lax)
         .max_age(time::Duration::days(30))
         .build();
@@ -1247,7 +1257,7 @@ async fn login_google(State(state): State<AppState>, jar: PrivateCookieJar) -> i
     let state_cookie = Cookie::build(("oauth_state", state_token.clone()))
         .path(cookie_path)
         .http_only(true)
-        .secure(false)
+        .secure(is_cookie_secure())
         .same_site(SameSite::Lax)
         .build();
 
@@ -1479,7 +1489,7 @@ async fn login_google_callback(
     let cookie = Cookie::build(("admin_session", user.id))
         .path(cookie_path)
         .http_only(true)
-        .secure(false)
+        .secure(is_cookie_secure())
         .same_site(SameSite::Lax)
         .max_age(time::Duration::days(30))
         .build();
@@ -1641,6 +1651,8 @@ async fn main() {
         .merge(public_routes.with_state(state.clone()))
         .merge(protected_routes.with_state(state.clone()))
         .nest("/api/v1", api::router(state.clone()).with_state(state))
+        .layer(axum::middleware::from_fn(add_security_headers))
+        .layer(axum::middleware::from_fn(csrf_header_check))
         .layer(TraceLayer::new_for_http())
         .layer(DefaultBodyLimit::max(1024 * 1024 * 250)); // 250 MB limit
 
@@ -1648,6 +1660,72 @@ async fn main() {
     info!("Server starting at http://{}", addr);
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
+}
+
+fn is_cookie_secure() -> bool {
+    std::env::var("COOKIE_SECURE")
+        .map(|v| v.to_lowercase() == "true")
+        .unwrap_or(true)
+}
+
+async fn add_security_headers(req: Request, next: Next) -> Response {
+    let mut response = next.run(req).await;
+    let headers = response.headers_mut();
+    headers.insert(
+        "X-Frame-Options",
+        axum::http::HeaderValue::from_static("SAMEORIGIN"),
+    );
+    headers.insert(
+        "X-Content-Type-Options",
+        axum::http::HeaderValue::from_static("nosniff"),
+    );
+    headers.insert(
+        "Referrer-Policy",
+        axum::http::HeaderValue::from_static("strict-origin-when-cross-origin"),
+    );
+    headers.insert("Content-Security-Policy", axum::http::HeaderValue::from_static(
+        "default-src 'self'; img-src 'self' data: https: http:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; frame-src 'self' https://www.youtube-nocookie.com https://www.youtube.com; connect-src 'self' https://cdn.jsdelivr.net;"
+    ));
+    response
+}
+
+async fn csrf_header_check(req: Request, next: Next) -> Result<Response, StatusCode> {
+    if req.method() == axum::http::Method::POST
+        || req.method() == axum::http::Method::PUT
+        || req.method() == axum::http::Method::DELETE
+    {
+        let headers = req.headers();
+        let origin = headers
+            .get(axum::http::header::ORIGIN)
+            .and_then(|v| v.to_str().ok());
+        let referer = headers
+            .get(axum::http::header::REFERER)
+            .and_then(|v| v.to_str().ok());
+
+        let allowed_domains = ["localhost", "127.0.0.1"];
+
+        let mut matched = false;
+        if let Some(o) = origin {
+            if allowed_domains.iter().any(|d| o.contains(d)) {
+                matched = true;
+            }
+        } else if let Some(r) = referer {
+            if allowed_domains.iter().any(|d| r.contains(d)) {
+                matched = true;
+            }
+        } else {
+            // For simple clients or APIs without headers (like standard token actions) we let it proceed
+            matched = true;
+        }
+
+        if !matched {
+            warn!(
+                "Blocked potential CSRF request. Origin and Referer did not match allowed host domains."
+            );
+            return Err(StatusCode::FORBIDDEN);
+        }
+    }
+    Ok(next.run(req).await)
 }
 
 #[cfg(test)]

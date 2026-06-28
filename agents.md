@@ -9,6 +9,7 @@ This document serves as an onboarding guide and architectural reference for AI a
 *   **Backend**: Written in **Rust** using the [Axum](https://github.com/tokio-rs/axum) web framework.
 *   **Database**: **SQLite** (via `rusqlite`), managed locally in `data/recipemanager.db`.
 *   **HTML Templates**: Server-side rendered using [Askama](https://github.com/djc/askama).
+*   **HTML Sanitization**: Sanitized using the [Ammonia](https://github.com/rust-ammonia/ammonia) library to prevent stored XSS injection.
 *   **Frontend**: Vanilla HTML5, CSS3 (`static/styles.css`), and JavaScript.
 *   **E2E Testing**: [Playwright](https://playwright.dev/) TypeScript tests targeting loopback addresses.
 *   **API Endpoints**: The application should use rest api endpoints for functionality where possible, and these API endpoints should be secured using bearer tokens if they contain user or admin specific data (or both).
@@ -48,6 +49,15 @@ WebAuthn (Passkeys) mandates a secure context. During local development, loopbac
 *   **No Hardcoded Secrets**: Do not hardcode, save, or commit any API keys, actual passwords, personal/sensitive emails, or session secrets anywhere in the project files (including source code, templates, mock files, shell scripts, or documentation).
 *   **Runtime Configuration**: Always access credentials dynamically at runtime using environment variables (e.g., `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `GEMINI_API_KEY`, `SESSION_SECRET`).
 *   **Local Development & Testing**: For local development or running tests, feed in generic placeholder values (such as `admin@example.com` or dummy keys) via environment parameters, ensuring no private data gets committed to the repository history.
+*   **Emails**: When you need to create a new user for testing purposes, use the local domain `example.com` (e.g., [EMAIL_ADDRESS]`). Do not use real email addresses.
+*   **SQL Injection**: The site is protected against SQL injection since all database queries in `src/storage.rs` use prepared statements with parameterized placeholders.
+*   **XSS Mitigation**: HTML parsed from Markdown recipe instructions is sanitized using the `ammonia` library before database storage and rendering to prevent Stored XSS.
+*   **CSRF Protection**: The application implements custom header-checking middleware (`csrf_header_check`) on mutating HTTP requests (`POST`, `PUT`, `DELETE`) to ensure the `Origin` or `Referer` headers match approved host domains (e.g. `localhost`).
+*   **SSRF Protection**: Outbound recipe imports from external URLs resolve DNS names first using `tokio::net::lookup_host` and reject hosts pointing to private, loopback, or broadcast ranges.
+*   **Security Headers**: Defensive HTTP headers (`X-Frame-Options`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, and a secure `Content-Security-Policy`) are applied on all HTTP responses via custom middleware.
+*   **Session Management**: Session cookies are persistent, HttpOnly, and have a maximum age of 30 days. They are dynamically flagged as `Secure` in production environments via environment configuration.
+*   **Password Reset**: The site does not have a password reset mechanism. Users are expected to manage their passkeys and can delete them from the UI if needed. If a user loses access to all their passkeys, they will need to contact the administrator to have their account reset.
+*   **User Management**: User management is handled through the admin interface. The admin can add, edit, and delete users, as well as reset user passwords (which effectively requires deleting and recreating the user or their passkeys).
 
 ---
 

@@ -280,7 +280,7 @@ pub async fn passkeys_login_finish(
             let cookie = Cookie::build(("admin_session", user.id.clone()))
                 .path(cookie_path)
                 .http_only(true)
-                .secure(false)
+                .secure(crate::is_cookie_secure())
                 .same_site(SameSite::Lax)
                 .max_age(time::Duration::days(30))
                 .build();
