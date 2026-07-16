@@ -1684,7 +1684,7 @@ async fn add_security_headers(req: Request, next: Next) -> Response {
         axum::http::HeaderValue::from_static("strict-origin-when-cross-origin"),
     );
     headers.insert("Content-Security-Policy", axum::http::HeaderValue::from_static(
-        "default-src 'self'; img-src 'self' data: https: http:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; frame-src 'self' https://www.youtube-nocookie.com https://www.youtube.com; connect-src 'self' https://cdn.jsdelivr.net;"
+        "default-src 'self'; img-src 'self' data: https: http:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com https://maxcdn.bootstrapcdn.com; font-src 'self' https://fonts.gstatic.com https://maxcdn.bootstrapcdn.com; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; frame-src 'self' https://www.youtube-nocookie.com https://www.youtube.com; connect-src 'self' https://cdn.jsdelivr.net;"
     ));
     response
 }
