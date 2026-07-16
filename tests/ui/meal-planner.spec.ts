@@ -194,4 +194,48 @@ test.describe('Meal Planner', () => {
     const mealList = page.locator('#meal-planner-list');
     await expect(mealList).toContainText('No meals planned yet');
   });
+
+  test('should show matches recipes in autocomplete when typing custom meal name and link them if selected', async ({ page }) => {
+    // 1. Get the first recipe's title
+    const recipeCard = page.locator('.recipe-card').first();
+    const recipeTitle = await recipeCard.locator('h3').innerText();
+    const truncatedTitle = recipeTitle.substring(0, Math.min(recipeTitle.length, 5));
+
+    // 2. Expand planner
+    const content = page.locator('#meal-planner-content');
+    const toggleBtn = page.locator('#toggle-meal-planner-collapse');
+    if (await content.isHidden()) {
+      await toggleBtn.click();
+    }
+
+    // 3. Type into manual input field to trigger suggestions
+    const manualInput = page.locator('#manual-meal-input');
+    await manualInput.focus();
+    await manualInput.fill(truncatedTitle);
+
+    // 4. Verify suggestions dropdown is visible and contains matching recipe title
+    const suggestionsDiv = page.locator('#manual-meal-suggestions');
+    await expect(suggestionsDiv).toBeVisible();
+    
+    const suggestionItem = suggestionsDiv.locator('div', { hasText: recipeTitle });
+    await expect(suggestionItem).toBeVisible();
+
+    // 5. Click the suggestion item
+    await suggestionItem.click();
+
+    // 6. Suggestions dropdown should be hidden
+    await expect(suggestionsDiv).not.toBeVisible();
+
+    // 7. Click add button to submit the selected suggestion
+    const addBtn = page.locator('#meal-planner-content button:has-text("Add")');
+    await addBtn.click();
+
+    // 8. Verify the item is added to planned list and has recipe link (verifies it registered the recipe, not a manual entry)
+    const plannedItems = page.locator('#meal-planner-list li.meal-planner-item');
+    await expect(plannedItems).toHaveCount(1);
+    await expect(plannedItems.first()).toContainText(recipeTitle);
+    
+    const recipeLink = plannedItems.first().locator('a.meal-recipe-link');
+    await expect(recipeLink).toBeVisible();
+  });
 });

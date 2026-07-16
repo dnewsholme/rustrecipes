@@ -138,7 +138,10 @@
             <!-- Loaded dynamically -->
         </ul>
         <div style="display: flex; gap: 0.5rem; align-items: center; border-top: 1px solid var(--border-color); padding-top: 1rem;">
-            <input type="text" id="manual-meal-input" class="form-control" placeholder="Add custom meal (e.g. Order Pizza, Leftovers)..." style="flex-grow: 1; font-size: 0.95rem; padding: 0.5rem 0.8rem; border-radius: var(--radius-md);" onkeydown="if(event.key==='Enter') addManualMeal()">
+            <div style="position: relative; flex-grow: 1;">
+                <input type="text" id="manual-meal-input" class="form-control" placeholder="Add custom meal (e.g. Order Pizza, Leftovers)..." style="width: 100%; font-size: 0.95rem; padding: 0.5rem 0.8rem; border-radius: var(--radius-md);" onkeydown="if(event.key==='Enter') addManualMeal()" oninput="delete this.dataset.selectedRecipeId; showMealSuggestions()" onfocus="showMealSuggestions()">
+                <div id="manual-meal-suggestions" style="display: none; position: absolute; top: 100%; left: 0; right: 0; background: var(--surface-color); border: 1px solid var(--border-color); border-radius: var(--radius-md); box-shadow: var(--shadow-md); z-index: 100; max-height: 200px; overflow-y: auto; margin-top: 4px;"></div>
+            </div>
             <button class="btn btn-primary" onclick="addManualMeal()" style="padding: 0.5rem 1.2rem; font-size: 0.95rem; border-radius: var(--radius-md); flex-shrink: 0;">Add</button>
         </div>
     </div>
@@ -987,20 +990,107 @@
         }
     }
 
+    function showMealSuggestions() {
+        const input = document.getElementById('manual-meal-input');
+        const query = input.value.trim().toLowerCase();
+        const suggestionsDiv = document.getElementById('manual-meal-suggestions');
+        if (!suggestionsDiv) return;
+
+        if (!query) {
+            suggestionsDiv.style.display = 'none';
+            return;
+        }
+
+        const cards = document.querySelectorAll('.recipe-card');
+        const matches = [];
+        cards.forEach(card => {
+            const link = card.querySelector('.recipe-title a');
+            if (link) {
+                const title = link.textContent.trim();
+                if (title.toLowerCase().includes(query)) {
+                    const checkbox = card.querySelector('.recipe-select-checkbox');
+                    const id = checkbox ? checkbox.value : '';
+                    matches.push({ id, title });
+                }
+            }
+        });
+
+        if (matches.length === 0) {
+            suggestionsDiv.style.display = 'none';
+            return;
+        }
+
+        suggestionsDiv.innerHTML = '';
+        matches.slice(0, 5).forEach(match => {
+            const item = document.createElement('div');
+            item.style.padding = '0.5rem 0.8rem';
+            item.style.cursor = 'pointer';
+            item.style.transition = 'background 0.2s';
+            item.style.fontSize = '0.95rem';
+            item.style.color = 'var(--text-primary)';
+            item.textContent = match.title;
+
+            item.onmouseover = () => {
+                item.style.background = 'var(--bg-color)';
+            };
+            item.onmouseout = () => {
+                item.style.background = 'none';
+            };
+            item.onclick = () => {
+                input.value = match.title;
+                input.dataset.selectedRecipeId = match.id;
+                suggestionsDiv.style.display = 'none';
+            };
+            suggestionsDiv.appendChild(item);
+        });
+
+        suggestionsDiv.style.display = 'block';
+    }
+
+    // Hide suggestions dropdown if clicked outside
+    document.addEventListener('click', function(e) {
+        const suggestionsDiv = document.getElementById('manual-meal-suggestions');
+        const input = document.getElementById('manual-meal-input');
+        if (suggestionsDiv && input && !input.contains(e.target) && !suggestionsDiv.contains(e.target)) {
+            suggestionsDiv.style.display = 'none';
+        }
+    });
+
     async function addManualMeal() {
         const input = document.getElementById('manual-meal-input');
         if (!input) return;
         const value = input.value.trim();
         if (!value) return;
+
+        let recipeId = input.dataset.selectedRecipeId || null;
+        if (!recipeId) {
+            // Find exact match by title on the page
+            const cards = document.querySelectorAll('.recipe-card');
+            for (const card of cards) {
+                const link = card.querySelector('.recipe-title a');
+                if (link && link.textContent.trim().toLowerCase() === value.toLowerCase()) {
+                    const checkbox = card.querySelector('.recipe-select-checkbox');
+                    if (checkbox) {
+                        recipeId = checkbox.value;
+                    }
+                    break;
+                }
+            }
+        }
+
+        const idToSend = recipeId ? recipeId : ("manual:" + value);
         
         try {
             const response = await fetch('{{ app_base }}/api/v1/meal-plan', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ recipe_ids: ["manual:" + value] })
+                body: JSON.stringify({ recipe_ids: [idToSend] })
             });
             if (response.ok) {
                 input.value = '';
+                delete input.dataset.selectedRecipeId;
+                const suggestionsDiv = document.getElementById('manual-meal-suggestions');
+                if (suggestionsDiv) suggestionsDiv.style.display = 'none';
                 await loadPlannedMeals();
             } else {
                 alert('Failed to add manual meal.');
