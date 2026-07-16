@@ -1701,16 +1701,26 @@ async fn csrf_header_check(req: Request, next: Next) -> Result<Response, StatusC
         let referer = headers
             .get(axum::http::header::REFERER)
             .and_then(|v| v.to_str().ok());
-
-        let allowed_domains = ["localhost", "127.0.0.1"];
+        let host = headers
+            .get(axum::http::header::HOST)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
 
         let mut matched = false;
+
+        let is_allowed = |val: &str| {
+            (!host.is_empty() && val.contains(host))
+                || val.contains("localhost")
+                || val.contains("127.0.0.1")
+                || val.contains("[::1]")
+        };
+
         if let Some(o) = origin {
-            if allowed_domains.iter().any(|d| o.contains(d)) {
+            if is_allowed(o) {
                 matched = true;
             }
         } else if let Some(r) = referer {
-            if allowed_domains.iter().any(|d| r.contains(d)) {
+            if is_allowed(r) {
                 matched = true;
             }
         } else {
@@ -1720,7 +1730,8 @@ async fn csrf_header_check(req: Request, next: Next) -> Result<Response, StatusC
 
         if !matched {
             warn!(
-                "Blocked potential CSRF request. Origin and Referer did not match allowed host domains."
+                "Blocked potential CSRF request. Origin ({:?}) and Referer ({:?}) did not match allowed host domains (Host header: {:?}).",
+                origin, referer, host
             );
             return Err(StatusCode::FORBIDDEN);
         }
