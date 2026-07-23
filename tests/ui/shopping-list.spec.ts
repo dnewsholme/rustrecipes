@@ -255,9 +255,31 @@ test.describe('Shopping List', () => {
 
     // Verify actual ingredients are also rendered
     const ing1 = page.locator('.ingredient-item', { hasText: '1 tbsp soy sauce' });
-    const ing2 = page.locator('.ingredient-item', { hasText: '500g chicken' });
+    const ing2 = page.locator('.ingredient-item', { hasText: '500 g chicken' });
     await expect(ing1).toBeVisible();
     await expect(ing2).toBeVisible();
+
+    // Click 2x scale button
+    await page.locator('button.scale-btn', { hasText: '2x' }).click();
+    await page.waitForTimeout(500); // Wait for API conversion
+
+    // Verify section headers STILL display correctly after scale conversion
+    await expect(header1).toBeVisible();
+    await expect(header2).toBeVisible();
+    // And ingredients are scaled (e.g. 1 tbsp soy sauce -> 2 tbsp soy sauce)
+    await expect(page.locator('.ingredient-item', { hasText: '2 tbsp soy sauce' })).toBeVisible();
+
+    // Click Enter Cook Mode
+    await page.locator('#start-cook-mode-btn').click();
+    
+    // Verify cook mode headers are visible and formatted correctly
+    const cookHeader1 = page.locator('.cook-ingredient-section-header', { hasText: 'Marinade' });
+    const cookHeader2 = page.locator('.cook-ingredient-section-header', { hasText: 'For the Main' });
+    await expect(cookHeader1).toBeVisible();
+    await expect(cookHeader2).toBeVisible();
+
+    // Exit cook mode
+    await page.locator('button:has-text("Exit")').click();
 
     // 3. Go back to home page to generate shopping list
     await page.goto('/');

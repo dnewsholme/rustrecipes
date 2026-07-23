@@ -469,7 +469,7 @@
             <ul style="list-style-type: none; padding: 0;">
                 {% for ingredient in recipe.ingredients %}
                 {% if crate::conversions::is_ingredient_header(ingredient) %}
-                <li class="ingredient-section-header" style="font-weight: 700; font-size: 1.05rem; margin-top: 1.25rem; margin-bottom: 0.4rem; padding-bottom: 0.25rem; color: var(--accent-color); border-bottom: 1px solid var(--border-color);">
+                <li class="ingredient-section-header" style="font-weight: 700; font-size: 1.2rem; margin-top: 1.25rem; margin-bottom: 0.4rem; padding-bottom: 0.25rem; color: var(--accent-color); border-bottom: 1px solid var(--border-color);">
                     {{ crate::conversions::format_ingredient_header(ingredient) }}
                 </li>
                 {% else %}
@@ -703,6 +703,50 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom"></script>
 <script>
+    function isIngredientHeader(line) {
+        let trimmed = line.trim();
+        if (trimmed.startsWith("- ") || trimmed.startsWith("* ") || trimmed.startsWith("+ ")) {
+            trimmed = trimmed.substring(2).trim();
+        } else if (trimmed.startsWith("-") && !trimmed.startsWith("--")) {
+            trimmed = trimmed.substring(1).trim();
+        }
+
+        if (trimmed.length === 0) {
+            return false;
+        }
+        return trimmed.startsWith('#')
+            || (trimmed.startsWith("--") && trimmed.endsWith("--"))
+            || (trimmed.startsWith('[') && trimmed.endsWith(']'))
+            || (trimmed.startsWith("--") && trimmed.length > 2)
+            || trimmed.endsWith(':');
+    }
+
+    function formatIngredientHeader(line) {
+        let trimmed = line.trim();
+        if (trimmed.startsWith("- ") || trimmed.startsWith("* ") || trimmed.startsWith("+ ")) {
+            trimmed = trimmed.substring(2).trim();
+        } else if (trimmed.startsWith("-") && !trimmed.startsWith("--")) {
+            trimmed = trimmed.substring(1).trim();
+        }
+
+        while (trimmed.startsWith('#')) {
+            trimmed = trimmed.substring(1).trim();
+        }
+        if (trimmed.startsWith("--")) {
+            trimmed = trimmed.substring(2).trim();
+        }
+        if (trimmed.endsWith("--")) {
+            trimmed = trimmed.substring(0, trimmed.length - 2).trim();
+        }
+        if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+            trimmed = trimmed.substring(1, trimmed.length - 1).trim();
+        }
+        if (trimmed.endsWith(':')) {
+            trimmed = trimmed.substring(0, trimmed.length - 1).trim();
+        }
+        return trimmed;
+    }
+
     function switchTab(tabId, btn) {
         document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -1163,10 +1207,22 @@
                 ingredientsList.innerHTML = '';
                 data.ingredients.forEach(ing => {
                     const li = document.createElement('li');
-                    li.className = 'ingredient-item';
-                    li.style.padding = '0.5rem 0';
-                    li.style.borderBottom = '1px solid var(--border-color)';
-                    li.textContent = ing; 
+                    if (isIngredientHeader(ing)) {
+                        li.className = 'ingredient-section-header';
+                        li.style.fontWeight = '700';
+                        li.style.fontSize = '1.2rem';
+                        li.style.marginTop = '1.25rem';
+                        li.style.marginBottom = '0.4rem';
+                        li.style.paddingBottom = '0.25rem';
+                        li.style.color = 'var(--accent-color)';
+                        li.style.borderBottom = '1px solid var(--border-color)';
+                        li.textContent = formatIngredientHeader(ing);
+                    } else {
+                        li.className = 'ingredient-item';
+                        li.style.padding = '0.5rem 0';
+                        li.style.borderBottom = '1px solid var(--border-color)';
+                        li.textContent = ing;
+                    }
                     ingredientsList.appendChild(li);
                 });
             }
@@ -1310,7 +1366,22 @@
         const cookIngsList = document.getElementById('cook-ingredients-list');
         if (cookIngsList) {
             cookIngsList.innerHTML = '';
-            document.querySelectorAll('#ingredients-tab ul li.ingredient-item').forEach((item) => {
+            document.querySelectorAll('#ingredients-tab ul li').forEach((item) => {
+                if (item.classList.contains('ingredient-section-header')) {
+                    const text = item.textContent.trim();
+                    const li = document.createElement('li');
+                    li.className = 'cook-ingredient-section-header';
+                    li.style.fontWeight = '700';
+                    li.style.fontSize = '1.15rem';
+                    li.style.marginTop = '1.25rem';
+                    li.style.marginBottom = '0.5rem';
+                    li.style.paddingBottom = '0.25rem';
+                    li.style.color = 'var(--accent-color)';
+                    li.style.borderBottom = '1px solid var(--border-color)';
+                    li.textContent = text;
+                    cookIngsList.appendChild(li);
+                    return;
+                }
                 const text = item.textContent.trim();
                 const li = document.createElement('li');
                 li.className = 'cook-ingredient-row';

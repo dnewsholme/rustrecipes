@@ -675,7 +675,13 @@ pub fn generate_combined_shopping_list(
 }
 
 pub fn is_ingredient_header(line: &str) -> bool {
-    let trimmed = line.trim();
+    let mut trimmed = line.trim();
+    if trimmed.starts_with("- ") || trimmed.starts_with("* ") || trimmed.starts_with("+ ") {
+        trimmed = trimmed[2..].trim();
+    } else if trimmed.starts_with("-") && !trimmed.starts_with("--") {
+        trimmed = trimmed[1..].trim();
+    }
+
     if trimmed.is_empty() {
         return false;
     }
@@ -688,6 +694,12 @@ pub fn is_ingredient_header(line: &str) -> bool {
 
 pub fn format_ingredient_header(line: &str) -> String {
     let mut trimmed = line.trim();
+    if trimmed.starts_with("- ") || trimmed.starts_with("* ") || trimmed.starts_with("+ ") {
+        trimmed = trimmed[2..].trim();
+    } else if trimmed.starts_with("-") && !trimmed.starts_with("--") {
+        trimmed = trimmed[1..].trim();
+    }
+
     while trimmed.starts_with('#') {
         trimmed = trimmed[1..].trim();
     }
