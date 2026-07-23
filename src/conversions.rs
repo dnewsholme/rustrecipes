@@ -203,6 +203,9 @@ pub fn calculate_totals(ingredients: &[String], scale: f64) -> RecipeTotals {
     };
 
     for ingredient in ingredients {
+        if is_ingredient_header(ingredient) {
+            continue;
+        }
         let lower_text = ingredient.to_lowercase();
         let mut replacements = Vec::new();
         if let Some(cap) = START_AMOUNT_REGEX.captures(ingredient)
@@ -422,7 +425,13 @@ pub fn convert_recipe(
     recipe.ingredients = recipe
         .ingredients
         .iter()
-        .map(|i| replace_text(i, true))
+        .map(|i| {
+            if is_ingredient_header(i) {
+                i.clone()
+            } else {
+                replace_text(i, true)
+            }
+        })
         .collect();
     recipe.markdown = replace_text(&recipe.markdown, false);
 
@@ -628,6 +637,9 @@ pub fn generate_combined_shopping_list(
         let converted = convert_recipe(recipe, Some(unit_system), None, Some(scale), false);
 
         for ingredient in converted.ingredients {
+            if is_ingredient_header(&ingredient) {
+                continue;
+            }
             if let Some(cap) = START_AMOUNT_REGEX.captures(&ingredient) {
                 let num_str = cap.get(1).map_or("", |m| m.as_str());
                 let unit_str = cap.get(2).map_or("", |m| m.as_str());
@@ -660,4 +672,36 @@ pub fn generate_combined_shopping_list(
     result.extend(uncombined);
 
     result
+}
+
+pub fn is_ingredient_header(line: &str) -> bool {
+    let trimmed = line.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+    trimmed.starts_with('#')
+        || (trimmed.starts_with("--") && trimmed.ends_with("--"))
+        || (trimmed.starts_with('[') && trimmed.ends_with(']'))
+        || (trimmed.starts_with("--") && trimmed.len() > 2)
+        || trimmed.ends_with(':')
+}
+
+pub fn format_ingredient_header(line: &str) -> String {
+    let mut trimmed = line.trim();
+    while trimmed.starts_with('#') {
+        trimmed = trimmed[1..].trim();
+    }
+    if trimmed.starts_with("--") {
+        trimmed = trimmed[2..].trim();
+    }
+    if trimmed.ends_with("--") {
+        trimmed = trimmed[..trimmed.len() - 2].trim();
+    }
+    if trimmed.starts_with('[') && trimmed.ends_with(']') {
+        trimmed = trimmed[1..trimmed.len() - 1].trim();
+    }
+    if trimmed.ends_with(':') {
+        trimmed = trimmed[..trimmed.len() - 1].trim();
+    }
+    trimmed.to_string()
 }

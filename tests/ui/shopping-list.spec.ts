@@ -237,4 +237,50 @@ test.describe('Shopping List', () => {
     await expect(page.locator('#shopping-list-ul')).toContainText('Cumin');
     await expect(page.locator('#shopping-list-ul')).toContainText('Apples');
   });
+
+  test('should show ingredient section headers on recipe page but exclude them in shopping list', async ({ page }) => {
+    // 1. Create headers recipe
+    await createRecipeFromFixture(page, 'tests/fixtures/headers-recipe.md');
+    await page.goto('/');
+
+    // 2. Go to recipe detail page and verify section headers display correctly
+    await page.locator('.recipe-card', { hasText: 'Headers Recipe' }).locator('a', { hasText: 'View Recipe' }).click();
+    await page.waitForURL(/\/recipe\/test-headers-recipe/);
+
+    // Verify section headers are rendered with styled headers class
+    const header1 = page.locator('.ingredient-section-header', { hasText: 'Marinade' });
+    const header2 = page.locator('.ingredient-section-header', { hasText: 'For the Main' });
+    await expect(header1).toBeVisible();
+    await expect(header2).toBeVisible();
+
+    // Verify actual ingredients are also rendered
+    const ing1 = page.locator('.ingredient-item', { hasText: '1 tbsp soy sauce' });
+    const ing2 = page.locator('.ingredient-item', { hasText: '500g chicken' });
+    await expect(ing1).toBeVisible();
+    await expect(ing2).toBeVisible();
+
+    // 3. Go back to home page to generate shopping list
+    await page.goto('/');
+
+    // Check Headers Recipe checkbox
+    const recipeCard = page.locator('.recipe-card', { hasText: 'Headers Recipe' });
+    const checkbox = recipeCard.locator('.recipe-select-checkbox');
+    await checkbox.check();
+
+    // Generate list
+    await page.locator('#shopping-portions').fill('1');
+    await page.locator('#shopping-list-bar .btn-primary').click();
+
+    // Verify redirect to dedicated page
+    await expect(page).toHaveURL(/\/shopping-list/);
+
+    // Verify actual ingredients are present
+    const listUl = page.locator('#shopping-list-ul');
+    await expect(listUl).toContainText('soy sauce');
+    await expect(listUl).toContainText('chicken');
+
+    // Verify section headers are OMITTED from the shopping list items
+    await expect(listUl).not.toContainText('Marinade');
+    await expect(listUl).not.toContainText('For the Main');
+  });
 });

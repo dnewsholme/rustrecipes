@@ -468,8 +468,14 @@
             </div>
             <ul style="list-style-type: none; padding: 0;">
                 {% for ingredient in recipe.ingredients %}
+                {% if crate::conversions::is_ingredient_header(ingredient) %}
+                <li class="ingredient-section-header" style="font-weight: 700; font-size: 1.05rem; margin-top: 1.25rem; margin-bottom: 0.4rem; padding-bottom: 0.25rem; color: var(--accent-color); border-bottom: 1px solid var(--border-color);">
+                    {{ crate::conversions::format_ingredient_header(ingredient) }}
+                </li>
+                {% else %}
                 <li class="ingredient-item" style="padding: 0.5rem 0; border-bottom: 1px solid var(--border-color);">{{
                     ingredient }}</li>
+                {% endif %}
                 {% endfor %}
             </ul>
         </div>

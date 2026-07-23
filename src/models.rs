@@ -68,6 +68,9 @@ impl Recipe {
         let mut found_yeast = false;
 
         for ing in &self.ingredients {
+            if crate::conversions::is_ingredient_header(ing) {
+                continue;
+            }
             let lower = ing.to_lowercase();
             if lower.contains("nutritional") {
                 continue;
