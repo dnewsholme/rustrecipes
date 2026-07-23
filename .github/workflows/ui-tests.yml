@@ -46,6 +46,7 @@ jobs:
       run: npx playwright test --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
       env:
         CI: true
+        COOKIE_SECURE: "false"
         ADMIN_EMAIL: admin@example.com
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         ADMIN_PASSWORD_HASH: ${{ secrets.ADMIN_PASSWORD_HASH }}
