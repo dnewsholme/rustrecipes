@@ -366,8 +366,6 @@ fn is_admin_session(jar: &PrivateCookieJar) -> bool {
         // Distinguish between missing and invalid
         if jar.iter().any(|c| c.name() == "admin_session") {
             warn!("Admin session cookie present but failed to verify signature (invalid key?)");
-        } else {
-            warn!("Admin session cookie missing from request");
         }
         false
     }
@@ -1000,6 +998,7 @@ async fn admin_users_list(
     jar: PrivateCookieJar,
 ) -> impl IntoResponse {
     if !is_admin_session(&jar) {
+        warn!("Admin session cookie missing from request");
         return (
             StatusCode::FORBIDDEN,
             "Forbidden. Only administrators can access this page.",
@@ -1040,6 +1039,7 @@ async fn admin_users_delete(
     Path(id): Path<String>,
 ) -> impl IntoResponse {
     if !is_admin_session(&jar) {
+        warn!("Admin session cookie missing from request");
         return (
             StatusCode::FORBIDDEN,
             "Forbidden. Only administrators can perform this action.",
@@ -1074,6 +1074,7 @@ async fn admin_users_reset_password(
     Form(form): Form<ResetPasswordFormData>,
 ) -> impl IntoResponse {
     if !is_admin_session(&jar) {
+        warn!("Admin session cookie missing from request");
         return (
             StatusCode::FORBIDDEN,
             "Forbidden. Only administrators can perform this action.",
@@ -1501,10 +1502,13 @@ async fn login_google_callback(
 async fn main() {
     tracing_subscriber::fmt::init();
 
-    let admin_email = std::env::var("ADMIN_EMAIL").unwrap_or_else(|_| {
-        error!("ADMIN_EMAIL environment variable is not set!");
-        panic!("Missing required environment variable: ADMIN_EMAIL");
-    });
+    let admin_email = match std::env::var("ADMIN_EMAIL") {
+        Ok(email) => email,
+        Err(_) => {
+            error!("ADMIN_EMAIL environment variable is not set!");
+            panic!("Missing required environment variable: ADMIN_EMAIL");
+        }
+    };
     // Ensure data directories exist (important for volume mounts)
     let _ = std::fs::create_dir_all("data/recipes");
     let _ = std::fs::create_dir_all("data/uploads");
@@ -1543,14 +1547,17 @@ async fn main() {
         std::env::var("GOOGLE_CLIENT_SECRET"),
         std::env::var("ADMIN_EMAIL"),
     ) {
-        let redirect_uri = std::env::var("GOOGLE_REDIRECT_URI").unwrap_or_else(|_| {
-            let base = if app_base.is_empty() {
-                "http://localhost:3000"
-            } else {
-                app_base
-            };
-            format!("{}/login/google/callback", base)
-        });
+        let redirect_uri = match std::env::var("GOOGLE_REDIRECT_URI") {
+            Ok(uri) => uri,
+            Err(_) => {
+                let base = if app_base.is_empty() {
+                    "http://localhost:3000"
+                } else {
+                    app_base
+                };
+                format!("{}/login/google/callback", base)
+            }
+        };
 
         info!("Google OAuth enabled for admin email: {}", admin_email);
         Some(GoogleOauthConfig {
