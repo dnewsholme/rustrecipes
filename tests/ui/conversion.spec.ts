@@ -20,13 +20,16 @@ test.describe('Unit Conversions', () => {
     await page.click('#unit-metric');
     await page.waitForTimeout(500); // Wait for API
     const metricText = await page.locator('.recipe-content').innerText();
-    // test-recipe.md is already 500g, so metricText might be same as initialText
     expect(metricText).toContain('500 g'); 
+    // Verify temperature converts to Celsius automatically
+    await expect(page.locator('.instruction-temp').first()).toContainText('107-121°C');
     
     // Switch to Imperial
     await page.click('#unit-imperial');
     await page.waitForTimeout(500); // Wait for API
-    await expect(page.locator('.recipe-content')).toContainText('oz'); // Should have ounces now
+    await expect(page.locator('.recipe-content')).toContainText('oz'); 
+    // Verify temperature converts to Fahrenheit automatically
+    await expect(page.locator('.instruction-temp').first()).toContainText('225-250°F');
   });
 
   test('Baker\'s percentage activates for bread recipes', async ({ page }) => {

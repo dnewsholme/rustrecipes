@@ -509,7 +509,7 @@ mod tests {
                 "2 cups water".into(),
                 "1/2 tsp salt".into(),
             ],
-            markdown: "Bake at 350°F for 1 1/2 hours.".into(),
+            markdown: "rise at a warm room temperature (70°F to 75°F) for 1 hour. preheat the oven to 475°F.".into(),
             html: None,
             combustion_csv: None,
             video_url: None,
@@ -531,7 +531,9 @@ mod tests {
         // Metric conversion
         let metric = convert_recipe(r.clone(), Some("metric"), Some("c"), Some(1.0), false);
         assert!(metric.ingredients[0].contains("240 ml")); // 1 cup -> 240 ml
-        assert!(metric.markdown.contains("177°C")); // 350 F -> 177 C
+        assert!(metric.markdown.contains("21°C")); // 70 F -> 21 C
+        assert!(metric.markdown.contains("24°C")); // 75 F -> 24 C
+        assert!(metric.markdown.contains("246°C")); // 475 F -> 246 C
         assert_eq!(metric.description, Some("Bake at 177°C".into())); // Verify description also converts!
 
         // Baker's Percentage

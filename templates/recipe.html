@@ -1033,6 +1033,30 @@
         btn.classList.remove('btn-secondary');
 
         currentUnitSystem = system;
+
+        // Auto-select corresponding temperature system
+        let tempBtnId = 'temp-original';
+        if (system === 'metric') {
+            currentTempSystem = 'c';
+            tempBtnId = 'temp-c';
+        } else if (system === 'imperial') {
+            currentTempSystem = 'f';
+            tempBtnId = 'temp-f';
+        } else if (system === 'original') {
+            currentTempSystem = 'original';
+            tempBtnId = 'temp-original';
+        }
+
+        const tempBtn = document.getElementById(tempBtnId);
+        if (tempBtn) {
+            document.querySelectorAll('.temp-btn').forEach(b => {
+                b.classList.remove('btn-primary');
+                b.classList.add('btn-secondary');
+            });
+            tempBtn.classList.add('btn-primary');
+            tempBtn.classList.remove('btn-secondary');
+        }
+
         applyScalingAndUnits();
     }
 
