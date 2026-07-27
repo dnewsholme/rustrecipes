@@ -1070,91 +1070,96 @@
 
     
     function wrapAmounts() {
-        const recipeContent = document.querySelector('.recipe-content');
-        if (!recipeContent) return;
+        const targets = [];
+        const content = document.querySelector('.recipe-content');
+        if (content) targets.push(content);
+        const desc = document.getElementById('recipe-description');
+        if (desc) targets.push(desc);
 
-        const walker = document.createTreeWalker(recipeContent, NodeFilter.SHOW_TEXT, null, false);
-        const nodesToReplace = [];
-        let node;
-        while (node = walker.nextNode()) {
-            if (node.parentNode.nodeName === 'SCRIPT' || node.parentNode.nodeName === 'STYLE' || node.parentNode.nodeName === 'CANVAS') continue;
+        targets.forEach(target => {
+            const walker = document.createTreeWalker(target, NodeFilter.SHOW_TEXT, null, false);
+            const nodesToReplace = [];
+            let node;
+            while (node = walker.nextNode()) {
+                if (node.parentNode.nodeName === 'SCRIPT' || node.parentNode.nodeName === 'STYLE' || node.parentNode.nodeName === 'CANVAS') continue;
 
-            const isStartOfIngredient = node.parentNode.classList.contains('ingredient-item') && node === node.parentNode.firstChild;
-            
-            unitRegex.lastIndex = 0;
-            tempRegex.lastIndex = 0;
-            startAmountRegex.lastIndex = 0;
+                const isStartOfIngredient = node.parentNode.classList.contains('ingredient-item') && node === node.parentNode.firstChild;
+                
+                unitRegex.lastIndex = 0;
+                tempRegex.lastIndex = 0;
+                startAmountRegex.lastIndex = 0;
 
-            if (unitRegex.test(node.nodeValue) || tempRegex.test(node.nodeValue) || (isStartOfIngredient && startAmountRegex.test(node.nodeValue))) {
-                nodesToReplace.push({ node, isStartOfIngredient });
-            }
-        }
-
-        nodesToReplace.forEach(({ node: textNode, isStartOfIngredient }) => {
-            const fragment = document.createDocumentFragment();
-            const text = textNode.nodeValue;
-            let lastIndex = 0;
-            const matches = [];
-            let match;
-
-            unitRegex.lastIndex = 0;
-            tempRegex.lastIndex = 0;
-            startAmountRegex.lastIndex = 0;
-
-            if (isStartOfIngredient) {
-                match = startAmountRegex.exec(text);
-                if (match) {
-                    matches.push({ type: 'unit', match, isStart: true });
-                    lastIndex = match.index + match[0].length;
+                if (unitRegex.test(node.nodeValue) || tempRegex.test(node.nodeValue) || (isStartOfIngredient && startAmountRegex.test(node.nodeValue))) {
+                    nodesToReplace.push({ node, isStartOfIngredient });
                 }
             }
 
-            unitRegex.lastIndex = lastIndex;
-            while ((match = unitRegex.exec(text)) !== null) {
-                matches.push({ type: 'unit', match, isStart: isStartOfIngredient && matches.length === 0 });
-            }
-            tempRegex.lastIndex = lastIndex;
-            while ((match = tempRegex.exec(text)) !== null) {
-                matches.push({ type: 'temp', match, isStart: false });
-            }
+            nodesToReplace.forEach(({ node: textNode, isStartOfIngredient }) => {
+                const fragment = document.createDocumentFragment();
+                const text = textNode.nodeValue;
+                let lastIndex = 0;
+                const matches = [];
+                let match;
 
-            matches.sort((a, b) => a.match.index - b.match.index);
+                unitRegex.lastIndex = 0;
+                tempRegex.lastIndex = 0;
+                startAmountRegex.lastIndex = 0;
 
-            let cursor = 0;
-            matches.forEach(({ type, match, isStart }) => {
-                if (match.index < cursor) return;
-                if (match.index > cursor) fragment.appendChild(document.createTextNode(text.substring(cursor, match.index)));
-
-                const fullMatch = match[0];
-                const numStr = match[1];
-                const unitStr = match[2] || '';
-                const leadingChar = isStart ? "" : fullMatch.substring(0, fullMatch.indexOf(numStr));
-                if (leadingChar) fragment.appendChild(document.createTextNode(leadingChar));
-
-                const span = document.createElement('span');
-                span.style.fontWeight = 'bold';
-                span.style.color = 'var(--primary-color)';
-
-                if (type === 'unit') {
-                    span.className = 'instruction-amount';
-                    if (isStart) span.classList.add('ingredient-amount');
-                    span.dataset.base = parseNumStr(numStr);
-                    span.dataset.unit = unitStr;
-                } else {
-                    span.className = 'instruction-temp';
-                    span.dataset.base = numStr;
-                    const u = unitStr.toLowerCase().startsWith('c') ? 'c' : 'f';
-                    span.dataset.unit = u;
-                    span.setAttribute(`data-temp-${u}`, numStr);
+                if (isStartOfIngredient) {
+                    match = startAmountRegex.exec(text);
+                    if (match) {
+                        matches.push({ type: 'unit', match, isStart: true });
+                        lastIndex = match.index + match[0].length;
+                    }
                 }
 
-                span.textContent = fullMatch.substring(leadingChar.length);
-                fragment.appendChild(span);
-                cursor = match.index + fullMatch.length;
+                unitRegex.lastIndex = lastIndex;
+                while ((match = unitRegex.exec(text)) !== null) {
+                    matches.push({ type: 'unit', match, isStart: isStartOfIngredient && matches.length === 0 });
+                }
+                tempRegex.lastIndex = lastIndex;
+                while ((match = tempRegex.exec(text)) !== null) {
+                    matches.push({ type: 'temp', match, isStart: false });
+                }
+
+                matches.sort((a, b) => a.match.index - b.match.index);
+
+                let cursor = 0;
+                matches.forEach(({ type, match, isStart }) => {
+                    if (match.index < cursor) return;
+                    if (match.index > cursor) fragment.appendChild(document.createTextNode(text.substring(cursor, match.index)));
+
+                    const fullMatch = match[0];
+                    const numStr = match[1];
+                    const unitStr = match[2] || '';
+                    const leadingChar = isStart ? "" : fullMatch.substring(0, fullMatch.indexOf(numStr));
+                    if (leadingChar) fragment.appendChild(document.createTextNode(leadingChar));
+
+                    const span = document.createElement('span');
+                    span.style.fontWeight = 'bold';
+                    span.style.color = 'var(--primary-color)';
+
+                    if (type === 'unit') {
+                        span.className = 'instruction-amount';
+                        if (isStart) span.classList.add('ingredient-amount');
+                        span.dataset.base = parseNumStr(numStr);
+                        span.dataset.unit = unitStr;
+                    } else {
+                        span.className = 'instruction-temp';
+                        span.dataset.base = numStr;
+                        const u = unitStr.toLowerCase().startsWith('c') ? 'c' : 'f';
+                        span.dataset.unit = u;
+                        span.setAttribute(`data-temp-${u}`, numStr);
+                    }
+
+                    span.textContent = fullMatch.substring(leadingChar.length);
+                    fragment.appendChild(span);
+                    cursor = match.index + fullMatch.length;
+                });
+
+                if (cursor < text.length) fragment.appendChild(document.createTextNode(text.substring(cursor)));
+                textNode.parentNode.replaceChild(fragment, textNode);
             });
-
-            if (cursor < text.length) fragment.appendChild(document.createTextNode(text.substring(cursor)));
-            textNode.parentNode.replaceChild(fragment, textNode);
         });
     }
 
@@ -1230,6 +1235,11 @@
             const instructionsDiv = document.querySelector('#recipe-instructions');
             if (instructionsDiv && data.html) {
                 instructionsDiv.innerHTML = '<h2>Directions</h2>' + data.html;
+            }
+
+            const descDiv = document.getElementById('recipe-description');
+            if (descDiv && data.description !== undefined && data.description !== null) {
+                descDiv.innerText = data.description;
             }
 
             // Update Overall Hydration

@@ -50,4 +50,20 @@ test.describe('Unit Conversions', () => {
     await page.waitForTimeout(500); // Wait for API
     await expect(page.locator('.instruction-temp').first()).toContainText('107-121°C');
   });
+
+  test('Description temperature conversion is correct', async ({ page }) => {
+    // 1. Create a recipe with description temperature
+    const slug = await createRecipeFromFixture(page, 'tests/fixtures/desc-temp-recipe.md');
+    await page.goto(`/recipe/${slug}`);
+
+    // Verify description temperature displays initially as 375°F
+    await expect(page.locator('#recipe-description')).toContainText('375°F');
+
+    // 2. Switch to Celsius
+    await page.click('#temp-c');
+    await page.waitForTimeout(500); // Wait for API
+
+    // Verify description temperature converts to 191°C
+    await expect(page.locator('#recipe-description')).toContainText('191°C');
+  });
 });

@@ -153,6 +153,7 @@ fn get_grams(amount: f64, unit: &str) -> f64 {
 pub struct ConvertedRecipe {
     pub id: String,
     pub title: String,
+    pub description: Option<String>,
     pub ingredients: Vec<String>,
     pub markdown: String,
     pub html: String,
@@ -434,6 +435,7 @@ pub fn convert_recipe(
         })
         .collect();
     recipe.markdown = replace_text(&recipe.markdown, false);
+    let description = recipe.description.map(|d| replace_text(&d, false));
 
     let parser = pulldown_cmark::Parser::new(&recipe.markdown);
     let mut html_output = String::new();
@@ -443,6 +445,7 @@ pub fn convert_recipe(
     ConvertedRecipe {
         id: recipe.id,
         title: recipe.title,
+        description,
         ingredients: recipe.ingredients,
         markdown: recipe.markdown,
         html,
@@ -494,7 +497,7 @@ mod tests {
         let r = Recipe {
             id: "1".into(),
             title: "Test".into(),
-            description: None,
+            description: Some("Bake at 350°F".into()),
             image: None,
             source_url: None,
             tags: vec![],
@@ -529,6 +532,7 @@ mod tests {
         let metric = convert_recipe(r.clone(), Some("metric"), Some("c"), Some(1.0), false);
         assert!(metric.ingredients[0].contains("240 ml")); // 1 cup -> 240 ml
         assert!(metric.markdown.contains("177°C")); // 350 F -> 177 C
+        assert_eq!(metric.description, Some("Bake at 177°C".into())); // Verify description also converts!
 
         // Baker's Percentage
         let bakers = convert_recipe(r.clone(), None, None, None, true);

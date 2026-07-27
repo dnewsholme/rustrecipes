@@ -30,6 +30,7 @@ export async function createRecipeFromFixture(page: Page, fixturePath: string) {
   
   // Extract fields from frontmatter
   const title = "TEST-" + (frontmatter.match(/title:\s*(.*)/)?.[1] || 'Unnamed').trim();
+  const description = (frontmatter.match(/description:\s*(.*)/)?.[1] || '').trim();
   const tags = (frontmatter.match(/tags:\s*([\s\S]*?)(?=\n\w+:|---|$)/)?.[1] || '')
     .split('\n').map(s => s.replace(/-\s*/, '').trim()).filter(s => s).join(',');
   const prep = (frontmatter.match(/prep_time:\s*(.*)/)?.[1] || '').trim();
@@ -47,6 +48,7 @@ export async function createRecipeFromFixture(page: Page, fixturePath: string) {
 
   await page.goto('/new');
   await page.fill('#title', title);
+  if (description) await page.fill('#description', description);
   await page.fill('#tags', tags);
   await page.fill('#ingredients', ingredients);
   
