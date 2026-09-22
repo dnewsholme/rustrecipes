@@ -4,39 +4,39 @@ version = "0.1.1"
 edition = "2024"
 
 [dependencies]
-ammonia = "4.0.0"
-askama = "0.16.0"
+ammonia = "4.2.0"
+askama = "0.16.1"
 axum = { version = "0.8.9", features = ["multipart", "macros"] }
 base64 = "0.22.1"
-flate2 = "1.1.9"
+flate2 = "1.1.10"
 gray_matter = "0.3.2"
-html-escape = "0.2.13"
-html2text = "0.14.0"
-pulldown-cmark = "0.13.3"
-regex = "1.12.3"
-reqwest = { version = "0.13.3", features = ["json", "cookies"] }
+html-escape = "0.2.15"
+html2text = "0.14.4"
+pulldown-cmark = "0.13.4"
+regex = "1.13.1"
+reqwest = { version = "0.13.5", features = ["json", "cookies"] }
 scraper = "0.26.0"
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.149"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
 serde_yaml = "0.9.34"
 slug = "0.1.6"
-tokio = { version = "1.52.1", features = ["full"] }
-tower-http = { version = "0.6.8", features = ["fs", "trace", "set-header"] }
+tokio = { version = "1.53.1", features = ["full"] }
+tower-http = { version = "0.6.11", features = ["fs", "trace", "set-header"] }
 tracing = "0.1.41"
 tracing-subscriber = "0.3.23"
-uuid = { version = "1.23.1", features = ["v4", "v5"] }
+uuid = { version = "1.26.1", features = ["v4", "v5"] }
 zip = "8.6.0"
-yt-transcript-rs = "0.1.0"
+yt-transcript-rs = "0.1.8"
 axum-extra = { version = "0.12.6", features = ["cookie", "cookie-private"] }
-bcrypt = "0.19.0"
+bcrypt = "0.19.3"
 image = { version = "0.25.10", features = ["webp"] }
-thiserror = "2.0.18"
+thiserror = "2.0.20"
 lazy_static = "1.5.0"
 tower = "0.5.3"
-rusqlite = { version = "0.32.0", features = ["bundled"] }
-time = "0.3.47"
-webauthn-rs = "0.5.0"
-url = "2.5.0"
+rusqlite = { version = "0.32.1", features = ["bundled"] }
+time = "0.3.55"
+webauthn-rs = "0.5.5"
+url = "2.5.8"
 
 [dev-dependencies]
-http-body-util = "0.1.2"
+http-body-util = "0.1.5"

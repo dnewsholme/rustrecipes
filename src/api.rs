@@ -457,24 +457,23 @@ struct FermentResult {
 async fn calculate_fermentation(
     axum::extract::Query(query): axum::extract::Query<FermentQuery>,
 ) -> Json<FermentResult> {
-    let base_time;
-    let temp_factor;
-    let amount_factor;
-
-    if query.leaven_type == "yeast" {
-        base_time = 2.0;
-        temp_factor = f64::powf(2.0, (24.0 - query.temp) / 7.0);
-        amount_factor = 1.0 / query.amount;
+    let (base_time, temp_factor, amount_factor) = if query.leaven_type == "yeast" {
+        (
+            2.0,
+            f64::powf(2.0, (24.0 - query.temp) / 7.0),
+            1.0 / query.amount,
+        )
     } else {
-        base_time = 5.0;
-        temp_factor = f64::powf(2.0, (24.0 - query.temp) / 6.0);
-        amount_factor = 20.0
-            / (if query.amount == 0.0 {
+        (
+            5.0,
+            f64::powf(2.0, (24.0 - query.temp) / 6.0),
+            20.0 / (if query.amount == 0.0 {
                 0.1
             } else {
                 query.amount
-            });
-    }
+            }),
+        )
+    };
 
     let mut estimated_hours = base_time * temp_factor * amount_factor;
     if estimated_hours > 48.0 {
