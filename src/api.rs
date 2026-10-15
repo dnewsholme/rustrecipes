@@ -809,6 +809,7 @@ mod tests {
             password_hash: "".to_string(),
             app_base: "",
             google_oauth: None,
+            oidc: None,
             webauthn,
             reg_states,
             auth_states,

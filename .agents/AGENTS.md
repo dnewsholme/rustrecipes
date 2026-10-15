@@ -31,7 +31,7 @@ This document defines mandatory guidelines, architecture blueprints, build/test 
 - **Database Layer**: SQLite managed via `rusqlite` (bundled edition) with connection pooling, migrations, and local storage in `data/recipemanager.db`.
 - **HTML Server-Side Rendering**: [Askama 0.16](file:///home/daryl/git/recipemanager/Cargo.toml#L8) template engine.
 - **Sanitization & Security**: [Ammonia 4.0](file:///home/daryl/git/recipemanager/Cargo.toml#L7) HTML XSS sanitizer; custom CSRF & SSRF verification middleware.
-- **Authentication**: WebAuthn / Passkeys ([webauthn-rs 0.5](file:///home/daryl/git/recipemanager/Cargo.toml#L38)) in [src/passkeys.rs](file:///home/daryl/git/recipemanager/src/passkeys.rs) + persistent session cookies (`admin_session`).
+- **Authentication**: WebAuthn / Passkeys ([webauthn-rs 0.5](file:///home/daryl/git/recipemanager/Cargo.toml#L38)) in [src/passkeys.rs](file:///home/daryl/git/recipemanager/src/passkeys.rs), OpenID Connect (OIDC / Pocket ID) and Google OAuth in [src/main.rs](file:///home/daryl/git/recipemanager/src/main.rs) + persistent session cookies (`admin_session`).
 - **Frontend**: Vanilla HTML5, CSS3 ([static/styles.css](file:///home/daryl/git/recipemanager/static/styles.css)), and progressive JS enhancement.
 - **E2E Testing**: [Playwright](https://playwright.dev/) TypeScript suite in [tests/ui/](file:///home/daryl/git/recipemanager/tests/ui/).
 

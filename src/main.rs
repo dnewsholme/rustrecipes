@@ -32,12 +32,90 @@ struct GoogleOauthConfig {
     admin_email: String,
 }
 
+#[derive(Clone, Debug)]
+struct OidcConfig {
+    provider_name: String,
+    client_id: String,
+    client_secret: String,
+    redirect_uri: String,
+    scopes: String,
+    issuer_url: Option<String>,
+    auth_url: Option<String>,
+    token_url: Option<String>,
+    userinfo_url: Option<String>,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+struct OidcDiscoveryDocument {
+    authorization_endpoint: String,
+    token_endpoint: String,
+    userinfo_endpoint: Option<String>,
+}
+
+async fn fetch_oidc_discovery(issuer_url: &str) -> Result<OidcDiscoveryDocument, String> {
+    let discovery_url = if issuer_url.ends_with("/.well-known/openid-configuration") {
+        issuer_url.to_string()
+    } else {
+        format!(
+            "{}/.well-known/openid-configuration",
+            issuer_url.trim_end_matches('/')
+        )
+    };
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("Failed to build HTTP client: {}", e))?;
+
+    let res = client.get(&discovery_url).send().await.map_err(|e| {
+        format!(
+            "Failed to contact OIDC discovery endpoint {}: {}",
+            discovery_url, e
+        )
+    })?;
+
+    if !res.status().is_success() {
+        return Err(format!(
+            "OIDC discovery returned HTTP status {}: {}",
+            res.status(),
+            res.text().await.unwrap_or_default()
+        ));
+    }
+
+    res.json::<OidcDiscoveryDocument>()
+        .await
+        .map_err(|e| format!("Failed to parse OIDC discovery document: {}", e))
+}
+
+impl OidcConfig {
+    async fn resolve_endpoints(&self) -> Result<(String, String, Option<String>), String> {
+        let auth = self.auth_url.clone();
+        let token = self.token_url.clone();
+        let userinfo = self.userinfo_url.clone();
+
+        if let (Some(a), Some(t)) = (&auth, &token) {
+            return Ok((a.clone(), t.clone(), userinfo));
+        }
+
+        if let Some(ref issuer) = self.issuer_url {
+            let doc = fetch_oidc_discovery(issuer).await?;
+            let a = auth.unwrap_or(doc.authorization_endpoint);
+            let t = token.unwrap_or(doc.token_endpoint);
+            let u = userinfo.or(doc.userinfo_endpoint);
+            return Ok((a, t, u));
+        }
+
+        Err("Neither complete OIDC endpoints nor issuer URL was provided".to_string())
+    }
+}
+
 #[derive(Clone)]
 struct AppState {
     key: Key,
     password_hash: String,
     app_base: &'static str,
     google_oauth: Option<GoogleOauthConfig>,
+    oidc: Option<OidcConfig>,
     webauthn: std::sync::Arc<webauthn_rs::Webauthn>,
     reg_states: std::sync::Arc<
         std::sync::Mutex<
@@ -109,6 +187,8 @@ struct LoginTemplate {
     app_version: String,
     error: Option<String>,
     google_auth_enabled: bool,
+    oidc_auth_enabled: bool,
+    oidc_provider_name: String,
     current_user_id: Option<String>,
     current_user_email: Option<String>,
     is_admin: bool,
@@ -899,6 +979,12 @@ async fn login_form(
         app_version: APP_VERSION.to_string(),
         error: query.error,
         google_auth_enabled: state.google_oauth.is_some(),
+        oidc_auth_enabled: state.oidc.is_some(),
+        oidc_provider_name: state
+            .oidc
+            .as_ref()
+            .map(|o| o.provider_name.clone())
+            .unwrap_or_default(),
         current_user_id: None,
         current_user_email: None,
         is_admin: false,
@@ -953,6 +1039,12 @@ async fn login_submit(
         app_version: APP_VERSION.to_string(),
         error: Some("Invalid email or password".to_string()),
         google_auth_enabled: state.google_oauth.is_some(),
+        oidc_auth_enabled: state.oidc.is_some(),
+        oidc_provider_name: state
+            .oidc
+            .as_ref()
+            .map(|o| o.provider_name.clone())
+            .unwrap_or_default(),
         current_user_id: None,
         current_user_email: None,
         is_admin: false,
@@ -1094,7 +1186,7 @@ async fn admin_users_reset_password(
     if user_to_reset.password_hash.is_empty() {
         return (
             StatusCode::BAD_REQUEST,
-            "Cannot reset password for users who registered via Google OAuth.",
+            "Cannot reset password for users who registered via external authentication (OAuth/OIDC).",
         )
             .into_response();
     }
@@ -1498,6 +1590,329 @@ async fn login_google_callback(
     (updated_jar, Redirect::to(&format!("{}/", state.app_base))).into_response()
 }
 
+async fn login_oidc(State(state): State<AppState>, jar: PrivateCookieJar) -> impl IntoResponse {
+    let config = match &state.oidc {
+        Some(c) => c,
+        None => {
+            return Redirect::to(&format!(
+                "{}/login?error=OIDC+not+configured",
+                state.app_base
+            ))
+            .into_response();
+        }
+    };
+
+    let (auth_endpoint, _, _) = match config.resolve_endpoints().await {
+        Ok(res) => res,
+        Err(e) => {
+            error!("Failed to resolve OIDC endpoints: {}", e);
+            return Redirect::to(&format!(
+                "{}/login?error=OIDC+discovery+failed",
+                state.app_base
+            ))
+            .into_response();
+        }
+    };
+
+    let state_token = uuid::Uuid::new_v4().to_string();
+    let cookie_path = if state.app_base.is_empty() {
+        "/"
+    } else {
+        state.app_base
+    };
+
+    let state_cookie = Cookie::build(("oidc_state", state_token.clone()))
+        .path(cookie_path)
+        .http_only(true)
+        .secure(is_cookie_secure())
+        .same_site(SameSite::Lax)
+        .build();
+
+    let mut auth_url = match reqwest::Url::parse(&auth_endpoint) {
+        Ok(u) => u,
+        Err(_) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Invalid OIDC auth URL").into_response();
+        }
+    };
+
+    auth_url
+        .query_pairs_mut()
+        .append_pair("client_id", &config.client_id)
+        .append_pair("redirect_uri", &config.redirect_uri)
+        .append_pair("response_type", "code")
+        .append_pair("scope", &config.scopes)
+        .append_pair("state", &state_token);
+
+    let updated_jar = jar.add(state_cookie);
+    (updated_jar, Redirect::to(auth_url.as_str())).into_response()
+}
+
+#[derive(Deserialize)]
+struct OidcCallbackQuery {
+    code: String,
+    state: String,
+}
+
+#[derive(Deserialize, Debug)]
+struct OidcTokenResponse {
+    access_token: String,
+    #[allow(dead_code)]
+    token_type: Option<String>,
+    id_token: Option<String>,
+}
+
+#[derive(Deserialize, Debug)]
+struct OidcUserInfo {
+    #[allow(dead_code)]
+    sub: Option<String>,
+    email: Option<String>,
+    email_verified: Option<bool>,
+    preferred_username: Option<String>,
+    #[allow(dead_code)]
+    name: Option<String>,
+}
+
+async fn login_oidc_callback(
+    State(state): State<AppState>,
+    jar: PrivateCookieJar,
+    Query(query): Query<OidcCallbackQuery>,
+) -> impl IntoResponse {
+    let config = match &state.oidc {
+        Some(c) => c,
+        None => {
+            return Redirect::to(&format!(
+                "{}/login?error=OIDC+not+configured",
+                state.app_base
+            ))
+            .into_response();
+        }
+    };
+
+    let stored_state = jar.get("oidc_state").map(|c| c.value().to_string());
+
+    let cookie_path = if state.app_base.is_empty() {
+        "/"
+    } else {
+        state.app_base
+    };
+    let clear_state_cookie = Cookie::build("oidc_state").path(cookie_path).build();
+    let jar = jar.remove(clear_state_cookie);
+
+    if stored_state.is_none() || stored_state.unwrap() != query.state {
+        warn!("CSRF state mismatch in OIDC callback");
+        return (
+            jar,
+            Redirect::to(&format!(
+                "{}/login?error=Invalid+session+state",
+                state.app_base
+            )),
+        )
+            .into_response();
+    }
+
+    let (_, token_endpoint, userinfo_endpoint) = match config.resolve_endpoints().await {
+        Ok(res) => res,
+        Err(e) => {
+            error!("Failed to resolve OIDC endpoints during callback: {}", e);
+            return (
+                jar,
+                Redirect::to(&format!(
+                    "{}/login?error=OIDC+endpoints+unavailable",
+                    state.app_base
+                )),
+            )
+                .into_response();
+        }
+    };
+
+    let mut dummy_url = match reqwest::Url::parse("http://localhost") {
+        Ok(u) => u,
+        Err(_) => {
+            return (
+                jar,
+                Redirect::to(&format!(
+                    "{}/login?error=Internal+server+error",
+                    state.app_base
+                )),
+            )
+                .into_response();
+        }
+    };
+    dummy_url
+        .query_pairs_mut()
+        .append_pair("code", &query.code)
+        .append_pair("client_id", &config.client_id)
+        .append_pair("client_secret", &config.client_secret)
+        .append_pair("redirect_uri", &config.redirect_uri)
+        .append_pair("grant_type", "authorization_code");
+
+    let body_str = dummy_url.query().unwrap_or("").to_string();
+
+    let client = reqwest::Client::new();
+    let token_res = match client
+        .post(&token_endpoint)
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .body(body_str)
+        .send()
+        .await
+    {
+        Ok(res) => res,
+        Err(e) => {
+            error!("Failed to contact OIDC token endpoint: {:?}", e);
+            return (
+                jar,
+                Redirect::to(&format!(
+                    "{}/login?error=Failed+to+exchange+code+with+OIDC+provider",
+                    state.app_base
+                )),
+            )
+                .into_response();
+        }
+    };
+
+    if !token_res.status().is_success() {
+        let err_text = token_res.text().await.unwrap_or_default();
+        error!("OIDC token endpoint returned error: {}", err_text);
+        return (
+            jar,
+            Redirect::to(&format!("{}/login?error=OIDC+login+failed", state.app_base)),
+        )
+            .into_response();
+    }
+
+    let token_json: OidcTokenResponse = match token_res.json().await {
+        Ok(t) => t,
+        Err(e) => {
+            error!("Failed to parse token response: {:?}", e);
+            return (
+                jar,
+                Redirect::to(&format!(
+                    "{}/login?error=Invalid+token+response+from+OIDC+provider",
+                    state.app_base
+                )),
+            )
+                .into_response();
+        }
+    };
+
+    // Attempt to fetch userinfo from userinfo endpoint
+    let mut resolved_user_info: Option<OidcUserInfo> = None;
+    if let Some(ref u_endpoint) = userinfo_endpoint {
+        if let Ok(res) = client
+            .get(u_endpoint)
+            .bearer_auth(&token_json.access_token)
+            .send()
+            .await
+        {
+            if res.status().is_success() {
+                if let Ok(info) = res.json::<OidcUserInfo>().await {
+                    resolved_user_info = Some(info);
+                }
+            }
+        }
+    }
+
+    // Fallback: decode claims from id_token payload if userinfo didn't resolve
+    if resolved_user_info.is_none() {
+        if let Some(ref id_tok) = token_json.id_token {
+            let parts: Vec<&str> = id_tok.split('.').collect();
+            if parts.len() >= 2 {
+                if let Ok(decoded) = base64::Engine::decode(
+                    &base64::engine::general_purpose::URL_SAFE_NO_PAD,
+                    parts[1],
+                ) {
+                    if let Ok(info) = serde_json::from_slice::<OidcUserInfo>(&decoded) {
+                        resolved_user_info = Some(info);
+                    }
+                }
+            }
+        }
+    }
+
+    let user_info = match resolved_user_info {
+        Some(u) => u,
+        None => {
+            error!("Failed to retrieve user profile information from OIDC provider");
+            return (
+                jar,
+                Redirect::to(&format!(
+                    "{}/login?error=Failed+to+retrieve+profile+information",
+                    state.app_base
+                )),
+            )
+                .into_response();
+        }
+    };
+
+    if user_info.email_verified == Some(false) {
+        warn!("OIDC email is not verified: {:?}", user_info.email);
+        return (
+            jar,
+            Redirect::to(&format!(
+                "{}/login?error=OIDC+email+is+not+verified",
+                state.app_base
+            )),
+        )
+            .into_response();
+    }
+
+    let email = if let Some(ref e) = user_info.email {
+        if !e.trim().is_empty() {
+            e.trim().to_string()
+        } else {
+            user_info
+                .preferred_username
+                .as_deref()
+                .unwrap_or("")
+                .trim()
+                .to_string()
+        }
+    } else if let Some(ref u) = user_info.preferred_username {
+        u.trim().to_string()
+    } else if let Some(ref s) = user_info.sub {
+        s.trim().to_string()
+    } else {
+        "".to_string()
+    };
+
+    if email.is_empty() {
+        return (
+            jar,
+            Redirect::to(&format!(
+                "{}/login?error=No+valid+user+identity+returned+from+OIDC+provider",
+                state.app_base
+            )),
+        )
+            .into_response();
+    }
+
+    let user = match storage::find_user_by_email(&email) {
+        Some(u) => u,
+        None => {
+            let user_id = uuid::Uuid::new_v4().to_string();
+            let new_user = models::User {
+                id: user_id.clone(),
+                email: email.clone(),
+                password_hash: "".to_string(),
+                created_at: "".to_string(),
+            };
+            let _ = storage::save_user(&new_user);
+            new_user
+        }
+    };
+
+    info!("OIDC login successful for user: {}", user.email);
+    let cookie = Cookie::build(("admin_session", user.id))
+        .path(cookie_path)
+        .http_only(true)
+        .secure(is_cookie_secure())
+        .same_site(SameSite::Lax)
+        .max_age(time::Duration::days(30))
+        .build();
+    let updated_jar = jar.add(cookie);
+    (updated_jar, Redirect::to(&format!("{}/", state.app_base))).into_response()
+}
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
@@ -1571,6 +1986,88 @@ async fn main() {
         None
     };
 
+    let oidc = {
+        let client_id =
+            std::env::var("POCKETID_CLIENT_ID").or_else(|_| std::env::var("OIDC_CLIENT_ID"));
+        let client_secret = std::env::var("POCKETID_CLIENT_SECRET")
+            .or_else(|_| std::env::var("OIDC_CLIENT_SECRET"));
+
+        if let (Ok(client_id), Ok(client_secret)) = (client_id, client_secret) {
+            let provider_name = std::env::var("POCKETID_PROVIDER_NAME")
+                .or_else(|_| std::env::var("OIDC_PROVIDER_NAME"))
+                .unwrap_or_else(|_| {
+                    if std::env::var("POCKETID_CLIENT_ID").is_ok()
+                        || std::env::var("POCKETID_ISSUER_URL").is_ok()
+                        || std::env::var("POCKETID_URL").is_ok()
+                    {
+                        "Pocket ID".to_string()
+                    } else {
+                        "OIDC".to_string()
+                    }
+                });
+
+            let redirect_uri = std::env::var("POCKETID_REDIRECT_URI")
+                .or_else(|_| std::env::var("OIDC_REDIRECT_URI"))
+                .unwrap_or_else(|_| {
+                    let base = if app_base.is_empty() {
+                        "http://localhost:3000"
+                    } else {
+                        app_base
+                    };
+                    format!("{}/login/oidc/callback", base)
+                });
+
+            let scopes = std::env::var("OIDC_SCOPES")
+                .or_else(|_| std::env::var("POCKETID_SCOPES"))
+                .unwrap_or_else(|_| "openid email profile".to_string());
+
+            let issuer_url = std::env::var("POCKETID_ISSUER_URL")
+                .or_else(|_| std::env::var("POCKETID_URL"))
+                .or_else(|_| std::env::var("OIDC_ISSUER_URL"))
+                .ok();
+
+            let auth_url = std::env::var("OIDC_AUTH_URL").ok();
+            let token_url = std::env::var("OIDC_TOKEN_URL").ok();
+            let userinfo_url = std::env::var("OIDC_USERINFO_URL").ok();
+
+            let mut config = OidcConfig {
+                provider_name,
+                client_id,
+                client_secret,
+                redirect_uri,
+                scopes,
+                issuer_url,
+                auth_url,
+                token_url,
+                userinfo_url,
+            };
+
+            match config.resolve_endpoints().await {
+                Ok((a, t, u)) => {
+                    info!(
+                        "OIDC provider '{}' configured with endpoints (auth: {}, token: {})",
+                        config.provider_name, a, t
+                    );
+                    config.auth_url = Some(a);
+                    config.token_url = Some(t);
+                    if u.is_some() {
+                        config.userinfo_url = u;
+                    }
+                }
+                Err(e) => {
+                    warn!(
+                        "OIDC provider '{}' registered, but endpoint resolution failed at startup: {}. Will retry on demand.",
+                        config.provider_name, e
+                    );
+                }
+            }
+
+            Some(config)
+        } else {
+            None
+        }
+    };
+
     let rp_id = std::env::var("WEBAUTHN_RP_ID").unwrap_or_else(|_| "localhost".to_string());
     let rp_origin_str =
         std::env::var("WEBAUTHN_RP_ORIGIN").unwrap_or_else(|_| "http://localhost:3000".to_string());
@@ -1588,6 +2085,7 @@ async fn main() {
         password_hash,
         app_base,
         google_oauth,
+        oidc,
         webauthn,
         reg_states,
         auth_states,
@@ -1639,8 +2137,12 @@ async fn main() {
         .route("/login", get(login_form).post(login_submit))
         .route("/login/google", get(login_google))
         .route("/login/google/callback", get(login_google_callback))
+        .route("/login/oidc", get(login_oidc))
+        .route("/login/oidc/callback", get(login_oidc_callback))
+        .route("/login/pocketid", get(login_oidc))
+        .route("/login/pocketid/callback", get(login_oidc_callback))
         .route("/register", get(register_form).post(register_submit))
-        .route("/logout", post(logout))
+        .route("/logout", get(logout).post(logout))
         .route("/api", get(api_guide))
         .route("/api/", get(api_guide))
         .route("/shopping-list", get(shopping_list_page))
@@ -1754,7 +2256,10 @@ mod oauth_tests {
     use http_body_util::BodyExt;
     use tower::ServiceExt;
 
-    async fn build_test_app(google_config: Option<GoogleOauthConfig>) -> Router {
+    async fn build_test_app(
+        google_config: Option<GoogleOauthConfig>,
+        oidc_config: Option<OidcConfig>,
+    ) -> Router {
         unsafe {
             std::env::set_var("ADMIN_EMAIL", "admin@example.com");
         }
@@ -1773,6 +2278,7 @@ mod oauth_tests {
             password_hash: "".to_string(),
             app_base: "",
             google_oauth: google_config,
+            oidc: oidc_config,
             webauthn,
             reg_states,
             auth_states,
@@ -1789,7 +2295,12 @@ mod oauth_tests {
             .route("/login", get(login_form).post(login_submit))
             .route("/login/google", get(login_google))
             .route("/login/google/callback", get(login_google_callback))
+            .route("/login/oidc", get(login_oidc))
+            .route("/login/oidc/callback", get(login_oidc_callback))
+            .route("/login/pocketid", get(login_oidc))
+            .route("/login/pocketid/callback", get(login_oidc_callback))
             .route("/register", get(register_form).post(register_submit))
+            .route("/logout", get(logout).post(logout))
             .merge(static_assets);
 
         Router::new().merge(public_routes).with_state(state)
@@ -1797,7 +2308,7 @@ mod oauth_tests {
 
     #[tokio::test]
     async fn test_google_oauth_disabled_by_default() {
-        let app = build_test_app(None).await;
+        let app = build_test_app(None, None).await;
 
         let req = Request::builder()
             .method("GET")
@@ -1811,6 +2322,7 @@ mod oauth_tests {
         let body = response.into_body().collect().await.unwrap().to_bytes();
         let body_str = String::from_utf8(body.to_vec()).unwrap();
         assert!(!body_str.contains("Sign in with Google"));
+        assert!(!body_str.contains("Sign in with Pocket ID"));
     }
 
     #[tokio::test]
@@ -1821,7 +2333,7 @@ mod oauth_tests {
             redirect_uri: "http://localhost/callback".to_string(),
             admin_email: "admin@example.com".to_string(),
         };
-        let app = build_test_app(Some(config)).await;
+        let app = build_test_app(Some(config), None).await;
 
         let req = Request::builder()
             .method("GET")
@@ -1846,7 +2358,7 @@ mod oauth_tests {
             redirect_uri: "http://localhost/callback".to_string(),
             admin_email: "admin@example.com".to_string(),
         };
-        let app = build_test_app(Some(config)).await;
+        let app = build_test_app(Some(config), None).await;
 
         let req = Request::builder()
             .method("GET")
@@ -1885,7 +2397,7 @@ mod oauth_tests {
             redirect_uri: "http://localhost/callback".to_string(),
             admin_email: "admin@example.com".to_string(),
         };
-        let app = build_test_app(Some(config)).await;
+        let app = build_test_app(Some(config), None).await;
 
         let req = Request::builder()
             .method("GET")
@@ -1902,5 +2414,202 @@ mod oauth_tests {
             .to_str()
             .unwrap();
         assert!(location.contains("/login?error=Invalid+session+state"));
+    }
+
+    #[tokio::test]
+    async fn test_oidc_enabled_shows_button() {
+        let oidc_config = OidcConfig {
+            provider_name: "Pocket ID".to_string(),
+            client_id: "pocketid-client".to_string(),
+            client_secret: "pocketid-secret".to_string(),
+            redirect_uri: "http://localhost:3000/login/oidc/callback".to_string(),
+            scopes: "openid email profile".to_string(),
+            issuer_url: None,
+            auth_url: Some("https://pocketid.example.com/authorize".to_string()),
+            token_url: Some("https://pocketid.example.com/api/oidc/token".to_string()),
+            userinfo_url: Some("https://pocketid.example.com/api/oidc/userinfo".to_string()),
+        };
+        let app = build_test_app(None, Some(oidc_config)).await;
+
+        let req = Request::builder()
+            .method("GET")
+            .uri("/login")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let body_str = String::from_utf8(body.to_vec()).unwrap();
+        assert!(body_str.contains("Sign in with Pocket ID"));
+        assert!(body_str.contains("/login/oidc"));
+        assert!(!body_str.contains("Sign in with Google"));
+    }
+
+    #[tokio::test]
+    async fn test_oidc_and_google_both_enabled_shows_both_buttons() {
+        let google_config = GoogleOauthConfig {
+            client_id: "google-client".to_string(),
+            client_secret: "google-secret".to_string(),
+            redirect_uri: "http://localhost/callback".to_string(),
+            admin_email: "admin@example.com".to_string(),
+        };
+        let oidc_config = OidcConfig {
+            provider_name: "Pocket ID".to_string(),
+            client_id: "pocketid-client".to_string(),
+            client_secret: "pocketid-secret".to_string(),
+            redirect_uri: "http://localhost:3000/login/oidc/callback".to_string(),
+            scopes: "openid email profile".to_string(),
+            issuer_url: None,
+            auth_url: Some("https://pocketid.example.com/authorize".to_string()),
+            token_url: Some("https://pocketid.example.com/api/oidc/token".to_string()),
+            userinfo_url: Some("https://pocketid.example.com/api/oidc/userinfo".to_string()),
+        };
+        let app = build_test_app(Some(google_config), Some(oidc_config)).await;
+
+        let req = Request::builder()
+            .method("GET")
+            .uri("/login")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let body_str = String::from_utf8(body.to_vec()).unwrap();
+        assert!(body_str.contains("Sign in with Pocket ID"));
+        assert!(body_str.contains("Sign in with Google"));
+    }
+
+    #[tokio::test]
+    async fn test_oidc_redirect() {
+        let oidc_config = OidcConfig {
+            provider_name: "Pocket ID".to_string(),
+            client_id: "pocketid-client-123".to_string(),
+            client_secret: "secret-abc".to_string(),
+            redirect_uri: "http://localhost:3000/login/oidc/callback".to_string(),
+            scopes: "openid email profile".to_string(),
+            issuer_url: None,
+            auth_url: Some("https://pocketid.example.com/authorize".to_string()),
+            token_url: Some("https://pocketid.example.com/api/oidc/token".to_string()),
+            userinfo_url: Some("https://pocketid.example.com/api/oidc/userinfo".to_string()),
+        };
+        let app = build_test_app(None, Some(oidc_config)).await;
+
+        let req = Request::builder()
+            .method("GET")
+            .uri("/login/oidc")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::SEE_OTHER);
+        let location = response
+            .headers()
+            .get("location")
+            .unwrap()
+            .to_str()
+            .unwrap();
+        assert!(location.contains("https://pocketid.example.com/authorize"));
+        assert!(location.contains("client_id=pocketid-client-123"));
+        assert!(
+            location
+                .contains("redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Flogin%2Foidc%2Fcallback")
+        );
+        assert!(location.contains("scope=openid+email+profile"));
+        assert!(location.contains("state="));
+
+        let cookie_header = response
+            .headers()
+            .get("set-cookie")
+            .unwrap()
+            .to_str()
+            .unwrap();
+        assert!(cookie_header.contains("oidc_state="));
+    }
+
+    #[tokio::test]
+    async fn test_oidc_callback_csrf_protection() {
+        let oidc_config = OidcConfig {
+            provider_name: "Pocket ID".to_string(),
+            client_id: "test-client".to_string(),
+            client_secret: "test-secret".to_string(),
+            redirect_uri: "http://localhost:3000/login/oidc/callback".to_string(),
+            scopes: "openid email profile".to_string(),
+            issuer_url: None,
+            auth_url: Some("https://pocketid.example.com/authorize".to_string()),
+            token_url: Some("https://pocketid.example.com/api/oidc/token".to_string()),
+            userinfo_url: Some("https://pocketid.example.com/api/oidc/userinfo".to_string()),
+        };
+        let app = build_test_app(None, Some(oidc_config)).await;
+
+        let req = Request::builder()
+            .method("GET")
+            .uri("/login/oidc/callback?code=fake-code&state=mismatched-csrf-token")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::SEE_OTHER);
+        let location = response
+            .headers()
+            .get("location")
+            .unwrap()
+            .to_str()
+            .unwrap();
+        assert!(location.contains("/login?error=Invalid+session+state"));
+    }
+
+    #[tokio::test]
+    async fn test_oidc_endpoint_resolution_from_endpoints() {
+        let config = OidcConfig {
+            provider_name: "Pocket ID".to_string(),
+            client_id: "id".to_string(),
+            client_secret: "sec".to_string(),
+            redirect_uri: "uri".to_string(),
+            scopes: "openid".to_string(),
+            issuer_url: None,
+            auth_url: Some("https://id.example.com/auth".to_string()),
+            token_url: Some("https://id.example.com/token".to_string()),
+            userinfo_url: Some("https://id.example.com/userinfo".to_string()),
+        };
+
+        let (auth, token, userinfo) = config.resolve_endpoints().await.unwrap();
+        assert_eq!(auth, "https://id.example.com/auth");
+        assert_eq!(token, "https://id.example.com/token");
+        assert_eq!(
+            userinfo,
+            Some("https://id.example.com/userinfo".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn test_logout_get() {
+        let app = build_test_app(None, None).await;
+
+        let req = Request::builder()
+            .method("GET")
+            .uri("/logout")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::SEE_OTHER);
+        let location = response
+            .headers()
+            .get("location")
+            .unwrap()
+            .to_str()
+            .unwrap();
+        assert_eq!(location, "/");
+        let cookie_header = response
+            .headers()
+            .get("set-cookie")
+            .unwrap()
+            .to_str()
+            .unwrap();
+        assert!(cookie_header.contains("admin_session=;"));
     }
 }

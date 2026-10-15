@@ -99,6 +99,15 @@ Copy the output (e.g., `$2y$12$...`) and use it as `ADMIN_PASSWORD_HASH`.
 | `API_TOKEN` | Yes | Token for API write access. |
 | `SESSION_SECRET` | Recommended | Signs session cookies. Sessions reset on restart if omitted. |
 | `GEMINI_API_KEY` | No | Enables AI photo/video/URL import via [Google AI Studio](https://aistudio.google.com/app/apikey). |
+| `POCKETID_ISSUER_URL` / `OIDC_ISSUER_URL` | No | Pocket ID / OIDC base issuer URL (e.g., `https://id.example.com`). Fetches `/.well-known/openid-configuration` auto-discovery. |
+| `POCKETID_CLIENT_ID` / `OIDC_CLIENT_ID` | No | Pocket ID / OIDC Client ID. |
+| `POCKETID_CLIENT_SECRET` / `OIDC_CLIENT_SECRET` | No | Pocket ID / OIDC Client Secret. |
+| `POCKETID_REDIRECT_URI` / `OIDC_REDIRECT_URI` | No | OIDC callback URL (defaults to `<app_base>/login/oidc/callback`). |
+| `POCKETID_PROVIDER_NAME` / `OIDC_PROVIDER_NAME` | No | Display name on the login button (defaults to "Pocket ID" or "OIDC"). |
+| `OIDC_AUTH_URL` | No | Manual authorization endpoint override. |
+| `OIDC_TOKEN_URL` | No | Manual token endpoint override. |
+| `OIDC_USERINFO_URL` | No | Manual userinfo endpoint override. |
+| `OIDC_SCOPES` | No | Custom OIDC scopes requested (defaults to `openid email profile`). |
 | `GOOGLE_CLIENT_ID` | No | Google OAuth 2.0 Client ID. |
 | `GOOGLE_CLIENT_SECRET` | No | Google OAuth 2.0 Client Secret. |
 | `GOOGLE_REDIRECT_URI` | No | OAuth callback URL (defaults to `<app_base>/login/google/callback`). |
