@@ -128,6 +128,8 @@ struct AppState {
             std::collections::HashMap<String, webauthn_rs::prelude::PasskeyAuthentication>,
         >,
     >,
+    /// Bearer token granting admin API access. `None` disables token auth.
+    api_token: Option<String>,
 }
 
 impl FromRef<AppState> for Key {
@@ -2132,6 +2134,14 @@ async fn main() {
     let reg_states = std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new()));
     let auth_states = std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new()));
 
+    let api_token = std::env::var("API_TOKEN")
+        .ok()
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty());
+    if api_token.is_none() {
+        warn!("API_TOKEN is not set. Bearer-token API access is disabled.");
+    }
+
     let state = AppState {
         key,
         password_hash,
@@ -2141,6 +2151,7 @@ async fn main() {
         webauthn,
         reg_states,
         auth_states,
+        api_token,
     };
 
     storage::db_init(&state.password_hash, &admin_email).unwrap();
@@ -2332,6 +2343,7 @@ mod oauth_tests {
             webauthn,
             reg_states,
             auth_states,
+            api_token: None,
         };
 
         storage::db_init(&state.password_hash, "admin@example.com").unwrap();

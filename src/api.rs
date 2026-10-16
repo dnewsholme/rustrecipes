@@ -1,17 +1,40 @@
 use crate::{AppState, models::Recipe, storage};
 use axum::{
     Router,
-    extract::Request,
-    extract::{Path, State},
-    http::{HeaderMap, StatusCode},
-    middleware::Next,
-    response::{IntoResponse, Json},
+    extract::{FromRequestParts, Path, Query, State},
+    http::{StatusCode, header, request::Parts},
+    response::{IntoResponse, Json, Response},
     routing::{delete, get, post},
 };
+use axum_extra::extract::cookie::{Key, PrivateCookieJar};
 use serde::{Deserialize, Serialize};
-use tracing::{error, warn};
+use tracing::{debug, error, warn};
 
-pub fn router(state: AppState) -> Router<AppState> {
+// ---------------------------------------------------------------------------
+// Limits used for request validation
+// ---------------------------------------------------------------------------
+
+const MAX_TITLE_LEN: usize = 200;
+const MAX_SHORT_TEXT_LEN: usize = 2_000;
+const MAX_MARKDOWN_LEN: usize = 200_000;
+const MAX_CSV_LEN: usize = 10 * 1024 * 1024;
+const MAX_TAGS: usize = 50;
+const MAX_TAG_LEN: usize = 100;
+const MAX_LIST_ITEMS: usize = 500;
+const MAX_ITEM_LEN: usize = 1_000;
+const MAX_SERVINGS: u32 = 1_000;
+const MAX_NOTES_LEN: usize = 50_000;
+const MAX_IDS_PER_REQUEST: usize = 100;
+const MAX_ID_LEN: usize = 300;
+const MAX_PORTIONS: u32 = 100;
+const MAX_SCALE: f64 = 100.0;
+const MAX_URL_LEN: usize = 2_048;
+const MAX_PAGE_SIZE: usize = 200;
+
+pub fn router(_state: AppState) -> Router<AppState> {
+    // Authentication/authorisation is enforced per handler through the
+    // `CurrentUser` (required) and `MaybeUser` (optional) extractors, rather
+    // than by matching request paths in a middleware.
     Router::new()
         .route("/recipes", get(list_recipes).post(create_recipe))
         .route(
@@ -42,53 +65,247 @@ pub fn router(state: AppState) -> Router<AppState> {
         )
         .route("/meal-plan/{id}", delete(delete_meal_plan_item))
         .route("/meal-plan/toggle", post(toggle_meal_plan))
-        .layer(axum::middleware::from_fn_with_state(
-            state.clone(),
-            require_api_token,
-        ))
 }
 
-async fn require_api_token(
-    State(_state): State<AppState>,
-    headers: HeaderMap,
-    req: Request,
-    next: Next,
-) -> Result<axum::response::Response, StatusCode> {
-    // Only require auth for mutable methods, except for shopping-list and meal-plan
-    let method = req.method();
-    let path = req.uri().path();
-    if method == axum::http::Method::GET
-        || path == "/shopping-list"
-        || path == "/api/v1/shopping-list"
-        || path.starts_with("/meal-plan")
-        || path.starts_with("/api/v1/meal-plan")
-        || (path.starts_with("/recipes/") && path.ends_with("/notes"))
-        || (path.starts_with("/api/v1/recipes/") && path.ends_with("/notes"))
-    {
-        return Ok(next.run(req).await);
-    }
+// ---------------------------------------------------------------------------
+// Errors
+// ---------------------------------------------------------------------------
 
-    let token = std::env::var("API_TOKEN").unwrap_or_default();
-    if token.is_empty() {
-        warn!("API_TOKEN is not set. Mutable API endpoints are disabled.");
-        return Err(StatusCode::UNAUTHORIZED);
-    }
-
-    if headers
-        .get(axum::http::header::AUTHORIZATION)
-        .and_then(|h| h.to_str().ok())
-        .filter(|s| s.starts_with("Bearer ") && s[7..] == token)
-        .is_some()
-    {
-        return Ok(next.run(req).await);
-    }
-
-    Err(StatusCode::UNAUTHORIZED)
+/// Unified API error. Always rendered as
+/// `{"error": {"code": "...", "message": "..."}}` with a matching status code.
+/// Internal details are logged server-side and never returned to clients.
+#[derive(Debug)]
+pub(crate) enum ApiError {
+    Unauthorized,
+    Forbidden,
+    NotFound,
+    BadRequest(String),
+    Internal(String),
 }
+
+type ApiResult<T> = Result<T, ApiError>;
+
+#[derive(Serialize)]
+struct ErrorBody {
+    error: ErrorDetail,
+}
+
+#[derive(Serialize)]
+struct ErrorDetail {
+    code: &'static str,
+    message: String,
+}
+
+impl IntoResponse for ApiError {
+    fn into_response(self) -> Response {
+        let (status, code, message) = match self {
+            ApiError::Unauthorized => (
+                StatusCode::UNAUTHORIZED,
+                "unauthorized",
+                "Authentication required".to_string(),
+            ),
+            ApiError::Forbidden => (
+                StatusCode::FORBIDDEN,
+                "forbidden",
+                "You do not have permission to access this resource".to_string(),
+            ),
+            ApiError::NotFound => (
+                StatusCode::NOT_FOUND,
+                "not_found",
+                "Resource not found".to_string(),
+            ),
+            ApiError::BadRequest(msg) => (StatusCode::BAD_REQUEST, "bad_request", msg),
+            ApiError::Internal(detail) => {
+                error!("Internal API error: {}", detail);
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "internal_error",
+                    "An internal error occurred".to_string(),
+                )
+            }
+        };
+        (
+            status,
+            Json(ErrorBody {
+                error: ErrorDetail { code, message },
+            }),
+        )
+            .into_response()
+    }
+}
+
+fn bad_request(msg: impl Into<String>) -> ApiError {
+    ApiError::BadRequest(msg.into())
+}
+
+fn blocking<T, F>(f: F) -> std::future::Ready<ApiResult<T>>
+where
+    F: FnOnce() -> T,
+{
+    std::future::ready(Ok(f()))
+}
+
+// ---------------------------------------------------------------------------
+// Authentication extractors
+// ---------------------------------------------------------------------------
+
+/// An authenticated caller, resolved either from the `admin_session` cookie
+/// or from a valid `Authorization: Bearer <API_TOKEN>` header (which acts as
+/// the admin user).
+#[derive(Clone, Debug)]
+pub(crate) struct CurrentUser {
+    pub id: String,
+    pub is_admin: bool,
+}
+
+impl CurrentUser {
+    fn can_modify(&self, recipe: &Recipe) -> bool {
+        self.is_admin || self.id == recipe.owner_id
+    }
+}
+
+/// Optional authentication: `None` for anonymous callers.
+pub(crate) struct MaybeUser(pub Option<CurrentUser>);
+
+fn can_view(user: Option<&CurrentUser>, recipe: &Recipe) -> bool {
+    recipe.is_public || user.is_some_and(|u| u.can_modify(recipe))
+}
+
+fn admin_user_id() -> Option<String> {
+    let email = std::env::var("ADMIN_EMAIL").ok()?;
+    storage::find_user_by_email(&email).map(|u| u.id)
+}
+
+/// Constant-time token comparison. Both values are hashed first so neither
+/// the content nor the length of the expected token leaks through timing.
+fn token_matches(presented: &str, expected: &str) -> bool {
+    use sha2::{Digest, Sha256};
+    let a = Sha256::digest(presented.as_bytes());
+    let b = Sha256::digest(expected.as_bytes());
+    a.iter()
+        .zip(b.iter())
+        .fold(0u8, |acc, (x, y)| acc | (x ^ y))
+        == 0
+}
+
+impl FromRequestParts<AppState> for MaybeUser {
+    type Rejection = ApiError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> ApiResult<Self> {
+        // 1. Bearer token. If a header is supplied it must be valid; we never
+        //    silently fall back to anonymous access for a bad token.
+        if let Some(auth) = parts.headers.get(header::AUTHORIZATION) {
+            let presented = auth
+                .to_str()
+                .ok()
+                .and_then(|s| s.strip_prefix("Bearer "))
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .ok_or(ApiError::Unauthorized)?;
+
+            let Some(expected) = state.api_token.as_deref() else {
+                warn!("Bearer token supplied but API_TOKEN is not configured.");
+                return Err(ApiError::Unauthorized);
+            };
+            if !token_matches(presented, expected) {
+                return Err(ApiError::Unauthorized);
+            }
+
+            let admin_id = blocking(admin_user_id)
+                .await?
+                .ok_or_else(|| ApiError::Internal("admin user not found".into()))?;
+            return Ok(MaybeUser(Some(CurrentUser {
+                id: admin_id,
+                is_admin: true,
+            })));
+        }
+
+        // 2. Session cookie.
+        let jar = match PrivateCookieJar::<Key>::from_request_parts(parts, state).await {
+            Ok(jar) => jar,
+            Err(never) => match never {},
+        };
+        let raw = match jar.get("admin_session") {
+            Some(c) if !c.value().is_empty() => c.value().to_string(),
+            _ => return Ok(MaybeUser(None)),
+        };
+
+        let admin_id = blocking(admin_user_id).await?;
+        let id = if raw == "true" {
+            // Legacy admin session cookie
+            match admin_id.clone() {
+                Some(id) => id,
+                None => return Ok(MaybeUser(None)),
+            }
+        } else {
+            raw
+        };
+        let is_admin = admin_id.as_deref() == Some(id.as_str());
+        Ok(MaybeUser(Some(CurrentUser { id, is_admin })))
+    }
+}
+
+impl FromRequestParts<AppState> for CurrentUser {
+    type Rejection = ApiError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> ApiResult<Self> {
+        MaybeUser::from_request_parts(parts, state)
+            .await?
+            .0
+            .ok_or(ApiError::Unauthorized)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Validation helpers
+// ---------------------------------------------------------------------------
+
+fn check_len(field: &str, value: &str, max: usize) -> ApiResult<()> {
+    if value.chars().count() > max {
+        return Err(bad_request(format!(
+            "'{field}' must be at most {max} characters"
+        )));
+    }
+    Ok(())
+}
+
+fn check_opt_len(field: &str, value: &Option<String>, max: usize) -> ApiResult<()> {
+    match value {
+        Some(v) => check_len(field, v, max),
+        None => Ok(()),
+    }
+}
+
+fn check_list(field: &str, items: &[String], max_items: usize, max_len: usize) -> ApiResult<()> {
+    if items.len() > max_items {
+        return Err(bad_request(format!(
+            "'{field}' must contain at most {max_items} entries"
+        )));
+    }
+    for item in items {
+        check_len(field, item, max_len)?;
+    }
+    Ok(())
+}
+
+fn check_ids(field: &str, ids: &[String]) -> ApiResult<()> {
+    if ids.is_empty() {
+        return Err(bad_request(format!("'{field}' must not be empty")));
+    }
+    if ids.iter().any(|id| id.trim().is_empty()) {
+        return Err(bad_request(format!("'{field}' must not contain empty ids")));
+    }
+    check_list(field, ids, MAX_IDS_PER_REQUEST, MAX_ID_LEN)
+}
+
+// ---------------------------------------------------------------------------
+// Recipes
+// ---------------------------------------------------------------------------
 
 #[derive(Serialize)]
 struct RecipeListResponse {
     recipes: Vec<RecipeSummary>,
+    total: usize,
 }
 
 #[derive(Serialize)]
@@ -101,6 +318,504 @@ struct RecipeSummary {
     cook_time: Option<String>,
     hydration: Option<f64>,
 }
+
+#[derive(Deserialize)]
+struct ListRecipesQuery {
+    /// Case-insensitive substring match on title.
+    q: Option<String>,
+    /// Case-insensitive exact tag match.
+    tag: Option<String>,
+    limit: Option<usize>,
+    offset: Option<usize>,
+}
+
+async fn list_recipes(
+    MaybeUser(user): MaybeUser,
+    Query(query): Query<ListRecipesQuery>,
+) -> ApiResult<impl IntoResponse> {
+    if query.limit.is_some_and(|l| l == 0 || l > MAX_PAGE_SIZE) {
+        return Err(bad_request(format!(
+            "'limit' must be between 1 and {MAX_PAGE_SIZE}"
+        )));
+    }
+
+    let user_id = user.map(|u| u.id);
+    let recipes = blocking(move || storage::list_recipes_for_user(user_id.as_deref())).await?;
+
+    let q = query
+        .q
+        .map(|s| s.trim().to_lowercase())
+        .filter(|s| !s.is_empty());
+    let tag = query
+        .tag
+        .map(|s| s.trim().to_lowercase())
+        .filter(|s| !s.is_empty());
+
+    let filtered: Vec<Recipe> = recipes
+        .into_iter()
+        .filter(|r| {
+            q.as_ref()
+                .is_none_or(|q| r.title.to_lowercase().contains(q))
+        })
+        .filter(|r| {
+            tag.as_ref()
+                .is_none_or(|t| r.tags.iter().any(|rt| rt.trim().to_lowercase() == *t))
+        })
+        .collect();
+    let total = filtered.len();
+
+    let summaries = filtered
+        .into_iter()
+        .skip(query.offset.unwrap_or(0))
+        .take(query.limit.unwrap_or(usize::MAX))
+        .map(|r| {
+            let totals = crate::conversions::calculate_totals(&r.ingredients, 1.0);
+            let hydration = if totals.total_flour > 0.0 {
+                Some(totals.total_water / totals.total_flour)
+            } else {
+                None
+            };
+
+            RecipeSummary {
+                id: r.id,
+                title: r.title,
+                image: r.image,
+                tags: r.tags,
+                prep_time: r.prep_time,
+                cook_time: r.cook_time,
+                hydration,
+            }
+        })
+        .collect();
+
+    Ok(Json(RecipeListResponse {
+        recipes: summaries,
+        total,
+    }))
+}
+
+#[derive(Deserialize)]
+struct GetRecipeQuery {
+    unit: Option<String>,
+    temp: Option<String>,
+    scale: Option<f64>,
+    bakers: Option<bool>,
+}
+
+async fn get_recipe(
+    MaybeUser(user): MaybeUser,
+    Path(id): Path<String>,
+    Query(query): Query<GetRecipeQuery>,
+) -> ApiResult<impl IntoResponse> {
+    if let Some(scale) = query.scale
+        && (!scale.is_finite() || scale <= 0.0 || scale > MAX_SCALE)
+    {
+        return Err(bad_request(format!(
+            "'scale' must be greater than 0 and at most {MAX_SCALE}"
+        )));
+    }
+
+    let user_id = user.as_ref().map(|u| u.id.clone());
+    let recipe = blocking(move || storage::read_recipe_for_user(&id, user_id.as_deref()))
+        .await?
+        .ok_or(ApiError::NotFound)?;
+
+    if !can_view(user.as_ref(), &recipe) {
+        return Err(ApiError::Forbidden);
+    }
+
+    let converted = crate::conversions::convert_recipe(
+        recipe,
+        query.unit.as_deref(),
+        query.temp.as_deref(),
+        query.scale,
+        query.bakers.unwrap_or(false),
+    );
+    Ok(Json(converted))
+}
+
+/// Client-supplied recipe fields. Server-controlled fields (`id`, `owner_id`,
+/// `favorite`, `owner_email`, `html`) are deliberately absent: they are
+/// ignored if a client sends them, so they can't be overwritten through the API.
+#[derive(Deserialize)]
+struct RecipeInput {
+    title: String,
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    image: Option<String>,
+    #[serde(default)]
+    source_url: Option<String>,
+    #[serde(default)]
+    tags: Vec<String>,
+    #[serde(default)]
+    servings: Option<u32>,
+    #[serde(default)]
+    prep_time: Option<String>,
+    #[serde(default)]
+    cook_time: Option<String>,
+    #[serde(default)]
+    ingredients: Vec<String>,
+    #[serde(default)]
+    markdown: String,
+    #[serde(default)]
+    combustion_csv: Option<String>,
+    #[serde(default)]
+    video_url: Option<String>,
+    #[serde(default)]
+    is_public: Option<bool>,
+}
+
+impl RecipeInput {
+    fn validate(&self) -> ApiResult<()> {
+        if self.title.trim().is_empty() {
+            return Err(bad_request("'title' must not be empty"));
+        }
+        check_len("title", &self.title, MAX_TITLE_LEN)?;
+        check_opt_len("description", &self.description, MAX_SHORT_TEXT_LEN)?;
+        check_opt_len("image", &self.image, MAX_URL_LEN)?;
+        check_opt_len("source_url", &self.source_url, MAX_URL_LEN)?;
+        check_opt_len("video_url", &self.video_url, MAX_URL_LEN)?;
+        check_opt_len("prep_time", &self.prep_time, MAX_TAG_LEN)?;
+        check_opt_len("cook_time", &self.cook_time, MAX_TAG_LEN)?;
+        check_list("tags", &self.tags, MAX_TAGS, MAX_TAG_LEN)?;
+        check_list(
+            "ingredients",
+            &self.ingredients,
+            MAX_LIST_ITEMS,
+            MAX_ITEM_LEN,
+        )?;
+        check_len("markdown", &self.markdown, MAX_MARKDOWN_LEN)?;
+        if self
+            .combustion_csv
+            .as_ref()
+            .is_some_and(|c| c.len() > MAX_CSV_LEN)
+        {
+            return Err(bad_request("'combustion_csv' is too large"));
+        }
+        if self.servings.is_some_and(|s| s == 0 || s > MAX_SERVINGS) {
+            return Err(bad_request(format!(
+                "'servings' must be between 1 and {MAX_SERVINGS}"
+            )));
+        }
+        Ok(())
+    }
+
+    fn into_recipe(
+        self,
+        id: String,
+        owner_id: String,
+        favorite: bool,
+        default_public: bool,
+    ) -> Recipe {
+        Recipe {
+            id,
+            title: self.title.trim().to_string(),
+            description: self.description,
+            image: self.image,
+            source_url: self.source_url,
+            tags: self.tags,
+            servings: self.servings,
+            prep_time: self.prep_time,
+            cook_time: self.cook_time,
+            ingredients: self.ingredients,
+            markdown: self.markdown,
+            html: None,
+            combustion_csv: self.combustion_csv,
+            video_url: self.video_url,
+            favorite,
+            owner_id,
+            is_public: self.is_public.unwrap_or(default_public),
+            owner_email: None,
+        }
+    }
+}
+
+/// Generates a slug ID from the title that does not collide with an existing
+/// recipe, so creating a recipe can never overwrite another one.
+fn unique_recipe_id(title: &str) -> String {
+    let base = slug::slugify(title);
+    if base.is_empty() {
+        return uuid::Uuid::new_v4().to_string();
+    }
+    if storage::read_recipe(&base).is_none() {
+        return base;
+    }
+    loop {
+        let suffix = uuid::Uuid::new_v4().simple().to_string();
+        let candidate = format!("{}-{}", base, &suffix[..8]);
+        if storage::read_recipe(&candidate).is_none() {
+            return candidate;
+        }
+    }
+}
+
+async fn create_recipe(
+    State(state): State<AppState>,
+    user: CurrentUser,
+    Json(input): Json<RecipeInput>,
+) -> ApiResult<Response> {
+    input.validate()?;
+
+    let recipe = blocking(move || -> Result<Recipe, std::io::Error> {
+        let id = unique_recipe_id(&input.title);
+        let recipe = input.into_recipe(id, user.id, false, true);
+        storage::save_recipe(&recipe)?;
+        Ok(recipe)
+    })
+    .await?
+    .map_err(|e| ApiError::Internal(format!("failed to create recipe: {e}")))?;
+
+    let location = format!("{}/api/v1/recipes/{}", state.app_base, recipe.id);
+    Ok((
+        StatusCode::CREATED,
+        [(header::LOCATION, location)],
+        Json(recipe),
+    )
+        .into_response())
+}
+
+async fn update_recipe(
+    user: CurrentUser,
+    Path(id): Path<String>,
+    Json(input): Json<RecipeInput>,
+) -> ApiResult<Json<Recipe>> {
+    input.validate()?;
+
+    let lookup_id = id.clone();
+    let existing = blocking(move || storage::read_recipe(&lookup_id))
+        .await?
+        .ok_or(ApiError::NotFound)?;
+    if !user.can_modify(&existing) {
+        return Err(ApiError::Forbidden);
+    }
+
+    // Identity, ownership and favourite state are preserved from the stored recipe.
+    let recipe = input.into_recipe(
+        existing.id,
+        existing.owner_id,
+        existing.favorite,
+        existing.is_public,
+    );
+    let to_save = recipe.clone();
+    blocking(move || storage::save_recipe(&to_save))
+        .await?
+        .map_err(|e| ApiError::Internal(format!("failed to update recipe {id}: {e}")))?;
+
+    Ok(Json(recipe))
+}
+
+async fn delete_recipe(user: CurrentUser, Path(id): Path<String>) -> ApiResult<StatusCode> {
+    let lookup_id = id.clone();
+    let existing = blocking(move || storage::read_recipe(&lookup_id))
+        .await?
+        .ok_or(ApiError::NotFound)?;
+    if !user.can_modify(&existing) {
+        return Err(ApiError::Forbidden);
+    }
+
+    let delete_id = id.clone();
+    blocking(move || storage::delete_recipe(&delete_id))
+        .await?
+        .map_err(|e| ApiError::Internal(format!("failed to delete recipe {id}: {e}")))?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// ---------------------------------------------------------------------------
+// Recipe notes
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+struct SaveNotesRequest {
+    notes: String,
+}
+
+#[derive(Serialize)]
+struct NotesResponse {
+    notes: String,
+}
+
+/// Loads a recipe and ensures the user may view it.
+async fn load_viewable_recipe(user: &CurrentUser, id: &str) -> ApiResult<Recipe> {
+    let (rid, uid) = (id.to_string(), user.id.clone());
+    let recipe = blocking(move || storage::read_recipe_for_user(&rid, Some(&uid)))
+        .await?
+        .ok_or(ApiError::NotFound)?;
+    if !can_view(Some(user), &recipe) {
+        return Err(ApiError::Forbidden);
+    }
+    Ok(recipe)
+}
+
+async fn get_recipe_notes_api(
+    user: CurrentUser,
+    Path(id): Path<String>,
+) -> ApiResult<Json<NotesResponse>> {
+    load_viewable_recipe(&user, &id).await?;
+    let notes = blocking(move || storage::get_recipe_notes(&user.id, &id))
+        .await?
+        .unwrap_or_default();
+    Ok(Json(NotesResponse { notes }))
+}
+
+async fn save_recipe_notes_api(
+    user: CurrentUser,
+    Path(id): Path<String>,
+    Json(payload): Json<SaveNotesRequest>,
+) -> ApiResult<Json<NotesResponse>> {
+    check_len("notes", &payload.notes, MAX_NOTES_LEN)?;
+    load_viewable_recipe(&user, &id).await?;
+
+    let notes = payload.notes;
+    let to_save = notes.clone();
+    blocking(move || storage::save_recipe_notes(&user.id, &id, &to_save))
+        .await?
+        .map_err(|e| ApiError::Internal(format!("failed to save recipe notes: {e:?}")))?;
+
+    Ok(Json(NotesResponse { notes }))
+}
+
+// ---------------------------------------------------------------------------
+// Import
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+struct ImportRequest {
+    url: String,
+}
+
+async fn import_recipe(
+    user: CurrentUser,
+    Json(req): Json<ImportRequest>,
+) -> ApiResult<impl IntoResponse> {
+    // Import performs outbound requests (and may call Gemini), so it stays
+    // restricted to the admin (API token or admin session), as before.
+    if !user.is_admin {
+        return Err(ApiError::Forbidden);
+    }
+    if req.url.trim().is_empty() {
+        return Err(bad_request("'url' must not be empty"));
+    }
+    check_len("url", &req.url, MAX_URL_LEN)?;
+
+    match crate::importer::import_recipe_from_url(&req.url).await {
+        Ok(recipe) => {
+            // Don't save it automatically, just return the parsed recipe
+            // so the client can edit and then POST it.
+            Ok(Json(recipe))
+        }
+        Err(e) => Err(bad_request(format!("Failed to import: {}", e))),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Shopping list
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+struct ShoppingListRequest {
+    recipe_ids: Vec<String>,
+    portions: u32,
+    unit_system: String,
+}
+
+#[derive(Serialize)]
+struct ShoppingListResponse {
+    ingredients: Vec<String>,
+}
+
+async fn generate_shopping_list(
+    MaybeUser(user): MaybeUser,
+    Json(payload): Json<ShoppingListRequest>,
+) -> ApiResult<Json<ShoppingListResponse>> {
+    check_ids("recipe_ids", &payload.recipe_ids)?;
+    if payload.portions == 0 || payload.portions > MAX_PORTIONS {
+        return Err(bad_request(format!(
+            "'portions' must be between 1 and {MAX_PORTIONS}"
+        )));
+    }
+    if !matches!(payload.unit_system.as_str(), "metric" | "imperial") {
+        return Err(bad_request("'unit_system' must be 'metric' or 'imperial'"));
+    }
+
+    let ids = payload.recipe_ids;
+    let viewer = user.clone();
+    let recipes = blocking(move || {
+        let uid = viewer.as_ref().map(|u| u.id.as_str());
+        ids.iter()
+            .filter_map(|id| storage::read_recipe_for_user(id, uid))
+            .filter(|r| can_view(viewer.as_ref(), r))
+            .collect::<Vec<_>>()
+    })
+    .await?;
+
+    if recipes.is_empty() {
+        return Err(bad_request("No valid recipes found"));
+    }
+
+    let ingredients = crate::conversions::generate_combined_shopping_list(
+        recipes,
+        payload.portions,
+        &payload.unit_system,
+    );
+
+    // Save generated list automatically if user is logged in
+    if let Some(user) = user {
+        let items: Vec<crate::models::ShoppingItem> = ingredients
+            .iter()
+            .map(|ing| crate::models::ShoppingItem {
+                name: ing.clone(),
+                checked: false,
+            })
+            .collect();
+        let uid = user.id;
+        if let Err(e) = blocking(move || storage::save_shopping_list(&uid, &items)).await? {
+            // The generated list is still returned; only persistence failed.
+            warn!("Failed to persist generated shopping list: {}", e);
+        }
+    }
+
+    Ok(Json(ShoppingListResponse { ingredients }))
+}
+
+async fn get_shopping_list(user: CurrentUser) -> ApiResult<impl IntoResponse> {
+    // An empty list is a valid state, so return `[]` rather than 404.
+    let items = blocking(move || storage::read_shopping_list(&user.id))
+        .await?
+        .unwrap_or_default();
+    Ok(Json(items))
+}
+
+async fn update_shopping_list(
+    user: CurrentUser,
+    Json(payload): Json<Vec<crate::models::ShoppingItem>>,
+) -> ApiResult<StatusCode> {
+    if payload.len() > MAX_LIST_ITEMS {
+        return Err(bad_request(format!(
+            "Shopping list must contain at most {MAX_LIST_ITEMS} items"
+        )));
+    }
+    for item in &payload {
+        check_len("name", &item.name, MAX_ITEM_LEN)?;
+    }
+
+    blocking(move || storage::save_shopping_list(&user.id, &payload))
+        .await?
+        .map_err(|e| ApiError::Internal(format!("failed to save shopping list: {e}")))?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn clear_shopping_list(user: CurrentUser) -> ApiResult<StatusCode> {
+    blocking(move || storage::delete_shopping_list(&user.id))
+        .await?
+        .map_err(|e| ApiError::Internal(format!("failed to clear shopping list: {e}")))?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// ---------------------------------------------------------------------------
+// Calculators & reference data
+// ---------------------------------------------------------------------------
 
 #[derive(Serialize)]
 struct CookingTemp {
@@ -127,320 +842,6 @@ struct Log7Query {
     temp: f64,
 }
 
-async fn list_recipes(jar: axum_extra::extract::cookie::PrivateCookieJar) -> impl IntoResponse {
-    let user_id = get_session_user_id(&jar);
-    let recipes = storage::list_recipes_for_user(user_id.as_deref());
-    let summaries = recipes
-        .into_iter()
-        .map(|r| {
-            let totals = crate::conversions::calculate_totals(&r.ingredients, 1.0);
-            let hydration = if totals.total_flour > 0.0 {
-                Some(totals.total_water / totals.total_flour)
-            } else {
-                None
-            };
-
-            RecipeSummary {
-                id: r.id,
-                title: r.title,
-                image: r.image,
-                tags: r.tags,
-                prep_time: r.prep_time,
-                cook_time: r.cook_time,
-                hydration,
-            }
-        })
-        .collect();
-
-    Json(RecipeListResponse { recipes: summaries })
-}
-
-#[derive(Deserialize)]
-struct GetRecipeQuery {
-    unit: Option<String>,
-    temp: Option<String>,
-    scale: Option<f64>,
-    bakers: Option<bool>,
-}
-
-async fn get_recipe(
-    jar: axum_extra::extract::cookie::PrivateCookieJar,
-    Path(id): Path<String>,
-    axum::extract::Query(query): axum::extract::Query<GetRecipeQuery>,
-) -> impl IntoResponse {
-    let user_id = get_session_user_id(&jar);
-    let is_admin = if let Some(ref uid) = user_id {
-        let admin_email = std::env::var("ADMIN_EMAIL").expect("ADMIN_EMAIL must be set");
-        if let Some(admin_user) = storage::find_user_by_email(&admin_email) {
-            uid == &admin_user.id
-        } else {
-            false
-        }
-    } else {
-        false
-    };
-
-    match storage::read_recipe_for_user(&id, user_id.as_deref()) {
-        Some(recipe) => {
-            let is_owner = user_id.as_ref() == Some(&recipe.owner_id);
-            if recipe.is_public || is_owner || is_admin {
-                let converted = crate::conversions::convert_recipe(
-                    recipe,
-                    query.unit.as_deref(),
-                    query.temp.as_deref(),
-                    query.scale,
-                    query.bakers.unwrap_or(false),
-                );
-                Json(converted).into_response()
-            } else {
-                StatusCode::FORBIDDEN.into_response()
-            }
-        }
-        None => StatusCode::NOT_FOUND.into_response(),
-    }
-}
-
-#[derive(Deserialize)]
-struct SaveNotesRequest {
-    notes: String,
-}
-
-#[derive(Serialize)]
-struct NotesResponse {
-    notes: String,
-}
-
-async fn get_recipe_notes_api(
-    jar: axum_extra::extract::cookie::PrivateCookieJar,
-    Path(id): Path<String>,
-) -> impl IntoResponse {
-    let user_id = match get_session_user_id(&jar) {
-        Some(uid) => uid,
-        None => return StatusCode::UNAUTHORIZED.into_response(),
-    };
-
-    let is_admin = {
-        let admin_email = std::env::var("ADMIN_EMAIL").expect("ADMIN_EMAIL must be set");
-        if let Some(admin_user) = storage::find_user_by_email(&admin_email) {
-            user_id == admin_user.id
-        } else {
-            false
-        }
-    };
-
-    match storage::read_recipe_for_user(&id, Some(&user_id)) {
-        Some(recipe) => {
-            let is_owner = user_id == recipe.owner_id;
-            if recipe.is_public || is_owner || is_admin {
-                let notes = storage::get_recipe_notes(&user_id, &id).unwrap_or_default();
-                Json(NotesResponse { notes }).into_response()
-            } else {
-                StatusCode::FORBIDDEN.into_response()
-            }
-        }
-        None => StatusCode::NOT_FOUND.into_response(),
-    }
-}
-
-async fn save_recipe_notes_api(
-    jar: axum_extra::extract::cookie::PrivateCookieJar,
-    Path(id): Path<String>,
-    Json(payload): Json<SaveNotesRequest>,
-) -> impl IntoResponse {
-    let user_id = match get_session_user_id(&jar) {
-        Some(uid) => uid,
-        None => return StatusCode::UNAUTHORIZED.into_response(),
-    };
-
-    let is_admin = {
-        let admin_email = std::env::var("ADMIN_EMAIL").expect("ADMIN_EMAIL must be set");
-        if let Some(admin_user) = storage::find_user_by_email(&admin_email) {
-            user_id == admin_user.id
-        } else {
-            false
-        }
-    };
-
-    match storage::read_recipe_for_user(&id, Some(&user_id)) {
-        Some(recipe) => {
-            let is_owner = user_id == recipe.owner_id;
-            if recipe.is_public || is_owner || is_admin {
-                if let Err(e) = storage::save_recipe_notes(&user_id, &id, &payload.notes) {
-                    error!("Failed to save recipe notes: {:?}", e);
-                    return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-                }
-                Json(NotesResponse {
-                    notes: payload.notes,
-                })
-                .into_response()
-            } else {
-                StatusCode::FORBIDDEN.into_response()
-            }
-        }
-        None => StatusCode::NOT_FOUND.into_response(),
-    }
-}
-
-async fn create_recipe(Json(recipe): Json<Recipe>) -> impl IntoResponse {
-    match storage::save_recipe(&recipe) {
-        Ok(_) => (StatusCode::CREATED, Json(recipe)).into_response(),
-        Err(e) => {
-            error!("Failed to create recipe: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response()
-        }
-    }
-}
-
-#[derive(Deserialize)]
-struct ShoppingListRequest {
-    recipe_ids: Vec<String>,
-    portions: u32,
-    unit_system: String,
-}
-
-#[derive(Serialize)]
-struct ShoppingListResponse {
-    ingredients: Vec<String>,
-}
-
-async fn generate_shopping_list(
-    jar: axum_extra::extract::cookie::PrivateCookieJar,
-    Json(payload): Json<ShoppingListRequest>,
-) -> impl IntoResponse {
-    let user_id = get_session_user_id(&jar);
-    let is_admin = if let Some(ref uid) = user_id {
-        let admin_email = std::env::var("ADMIN_EMAIL").expect("ADMIN_EMAIL must be set");
-        if let Some(admin_user) = storage::find_user_by_email(&admin_email) {
-            uid == &admin_user.id
-        } else {
-            false
-        }
-    } else {
-        false
-    };
-
-    let mut recipes = Vec::new();
-    for id in &payload.recipe_ids {
-        if let Some(r) = storage::read_recipe_for_user(id, user_id.as_deref()) {
-            let is_owner = user_id.as_ref() == Some(&r.owner_id);
-            if r.is_public || is_owner || is_admin {
-                recipes.push(r);
-            }
-        }
-    }
-
-    if recipes.is_empty() {
-        return (StatusCode::BAD_REQUEST, "No valid recipes found").into_response();
-    }
-
-    let ingredients = crate::conversions::generate_combined_shopping_list(
-        recipes,
-        payload.portions,
-        &payload.unit_system,
-    );
-
-    // Save generated list automatically if user is logged in
-    if let Some(ref uid) = user_id {
-        let items: Vec<crate::models::ShoppingItem> = ingredients
-            .iter()
-            .map(|ing| crate::models::ShoppingItem {
-                name: ing.clone(),
-                checked: false,
-            })
-            .collect();
-        let _ = storage::save_shopping_list(uid, &items);
-    }
-
-    Json(ShoppingListResponse { ingredients }).into_response()
-}
-
-async fn get_shopping_list(
-    jar: axum_extra::extract::cookie::PrivateCookieJar,
-) -> Result<impl IntoResponse, StatusCode> {
-    let user_id = match get_session_user_id(&jar) {
-        Some(uid) => uid,
-        None => return Err(StatusCode::UNAUTHORIZED),
-    };
-
-    match storage::read_shopping_list(&user_id) {
-        Some(items) => Ok(Json(items)),
-        None => Err(StatusCode::NOT_FOUND),
-    }
-}
-
-async fn update_shopping_list(
-    jar: axum_extra::extract::cookie::PrivateCookieJar,
-    Json(payload): Json<Vec<crate::models::ShoppingItem>>,
-) -> Result<impl IntoResponse, StatusCode> {
-    let user_id = match get_session_user_id(&jar) {
-        Some(uid) => uid,
-        None => return Err(StatusCode::UNAUTHORIZED),
-    };
-
-    match storage::save_shopping_list(&user_id, &payload) {
-        Ok(_) => Ok(StatusCode::OK),
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
-    }
-}
-
-async fn clear_shopping_list(
-    jar: axum_extra::extract::cookie::PrivateCookieJar,
-) -> Result<impl IntoResponse, StatusCode> {
-    let user_id = match get_session_user_id(&jar) {
-        Some(uid) => uid,
-        None => return Err(StatusCode::UNAUTHORIZED),
-    };
-
-    match storage::delete_shopping_list(&user_id) {
-        Ok(_) => Ok(StatusCode::NO_CONTENT),
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
-    }
-}
-
-#[axum::debug_handler]
-async fn update_recipe(
-    Path(id): Path<String>,
-    Json(mut recipe): Json<Recipe>,
-) -> impl IntoResponse {
-    recipe.id = id.clone();
-    match storage::save_recipe(&recipe) {
-        Ok(_) => Json(recipe).into_response(),
-        Err(e) => {
-            error!("Failed to update recipe {}: {}", id, e);
-            (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response()
-        }
-    }
-}
-
-async fn delete_recipe(Path(id): Path<String>) -> impl IntoResponse {
-    match storage::delete_recipe(&id) {
-        Ok(_) => StatusCode::NO_CONTENT.into_response(),
-        Err(e) => {
-            error!("Failed to delete recipe {}: {}", id, e);
-            (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response()
-        }
-    }
-}
-
-#[derive(Deserialize)]
-struct ImportRequest {
-    url: String,
-}
-
-async fn import_recipe(Json(req): Json<ImportRequest>) -> impl IntoResponse {
-    match crate::importer::import_recipe_from_url(&req.url).await {
-        Ok(recipe) => {
-            // Don't save it automatically, just return the parsed recipe
-            // so the client can edit and then POST it.
-            Json(recipe).into_response()
-        }
-        Err(e) => {
-            let msg = format!("Failed to import: {}", e);
-            (StatusCode::BAD_REQUEST, msg).into_response()
-        }
-    }
-}
-
 #[derive(Deserialize)]
 struct FermentQuery {
     #[serde(rename = "type")]
@@ -455,8 +856,17 @@ struct FermentResult {
 }
 
 async fn calculate_fermentation(
-    axum::extract::Query(query): axum::extract::Query<FermentQuery>,
-) -> Json<FermentResult> {
+    Query(query): Query<FermentQuery>,
+) -> ApiResult<Json<FermentResult>> {
+    if !query.amount.is_finite() || query.amount <= 0.0 || query.amount > 1_000.0 {
+        return Err(bad_request(
+            "'amount' must be greater than 0 and at most 1000",
+        ));
+    }
+    if !query.temp.is_finite() || !(-20.0..=60.0).contains(&query.temp) {
+        return Err(bad_request("'temp' must be between -20 and 60 °C"));
+    }
+
     let (base_time, temp_factor, amount_factor) = if query.leaven_type == "yeast" {
         (
             2.0,
@@ -467,11 +877,7 @@ async fn calculate_fermentation(
         (
             5.0,
             f64::powf(2.0, (24.0 - query.temp) / 6.0),
-            20.0 / (if query.amount == 0.0 {
-                0.1
-            } else {
-                query.amount
-            }),
+            20.0 / query.amount,
         )
     };
 
@@ -480,7 +886,7 @@ async fn calculate_fermentation(
         estimated_hours = 48.0;
     }
 
-    Json(FermentResult { estimated_hours })
+    Ok(Json(FermentResult { estimated_hours }))
 }
 
 async fn get_cooking_temps() -> impl IntoResponse {
@@ -547,17 +953,22 @@ async fn get_cooking_temps() -> impl IntoResponse {
         },
     ];
 
-    Json(temps)
+    // Static reference data: safe to cache.
+    (
+        [(header::CACHE_CONTROL, "public, max-age=86400")],
+        Json(temps),
+    )
 }
 
-async fn get_spices() -> impl IntoResponse {
-    Json(crate::storage::list_spices())
+async fn get_spices() -> ApiResult<impl IntoResponse> {
+    Ok(Json(blocking(crate::storage::list_spices).await?))
 }
 
-async fn calculate_log7(
-    axum::extract::Query(query): axum::extract::Query<Log7Query>,
-) -> impl IntoResponse {
+async fn calculate_log7(Query(query): Query<Log7Query>) -> ApiResult<Json<Log7Response>> {
     let temp_c = query.temp;
+    if !temp_c.is_finite() {
+        return Err(bad_request("'temp' must be a finite number"));
+    }
     let log7_table = [
         (57.8, 4104.0),
         (60.0, 1650.0),
@@ -595,12 +1006,16 @@ async fn calculate_log7(
         format!("{:.0} Sec", seconds)
     };
 
-    Json(Log7Response {
+    Ok(Json(Log7Response {
         temp_c,
         seconds,
         display_time,
-    })
+    }))
 }
+
+// ---------------------------------------------------------------------------
+// Meal plan
+// ---------------------------------------------------------------------------
 
 #[derive(Serialize)]
 struct MealPlanResponse {
@@ -624,76 +1039,64 @@ struct ToggleMealRequest {
     recipe_id: String,
 }
 
-fn get_session_user_id(jar: &axum_extra::extract::cookie::PrivateCookieJar) -> Option<String> {
-    if let Some(c) = jar.get("admin_session") {
-        let val = c.value();
-        if val == "true" {
-            let admin_email = std::env::var("ADMIN_EMAIL").expect("ADMIN_EMAIL must be set");
-            if let Some(user) = storage::find_user_by_email(&admin_email) {
-                return Some(user.id);
-            }
-        }
-        if !val.is_empty() {
-            return Some(val.to_string());
-        }
-    }
-    None
+async fn get_meal_plan(user: CurrentUser) -> ApiResult<impl IntoResponse> {
+    debug!("get_meal_plan called for user_id={}", user.id);
+    let viewer = user.clone();
+    let items = blocking(move || {
+        storage::read_meal_plan(&viewer.id)
+            .into_iter()
+            .map(|meal| {
+                let title = if meal.recipe_id.starts_with("manual:") {
+                    meal.recipe_id.trim_start_matches("manual:").to_string()
+                } else {
+                    match storage::read_recipe(&meal.recipe_id) {
+                        // Only reveal titles of recipes the user is allowed to see.
+                        Some(recipe) if can_view(Some(&viewer), &recipe) => recipe.title,
+                        Some(_) => "Unavailable recipe".to_string(),
+                        None => meal.recipe_id.clone(),
+                    }
+                };
+                PlannedMealItem {
+                    recipe_id: meal.recipe_id,
+                    title,
+                    checked: meal.checked,
+                }
+            })
+            .collect::<Vec<_>>()
+    })
+    .await?;
+    debug!(
+        "Returning {} meal plan items for user_id={}",
+        items.len(),
+        user.id
+    );
+
+    Ok((
+        [
+            (
+                header::CACHE_CONTROL,
+                "no-store, no-cache, must-revalidate, private",
+            ),
+            (header::VARY, "Cookie"),
+        ],
+        Json(MealPlanResponse { meals: items }),
+    ))
 }
 
-async fn get_meal_plan(
-    jar: axum_extra::extract::cookie::PrivateCookieJar,
-) -> Result<impl IntoResponse, StatusCode> {
-    let user_id = match get_session_user_id(&jar) {
-        Some(uid) => uid,
-        None => return Err(StatusCode::UNAUTHORIZED),
-    };
-
-    tracing::info!("get_meal_plan called for user_id={}", user_id);
-    let meals = storage::read_meal_plan(&user_id);
-    tracing::info!(
-        "Returning {} meal plan items for user_id={}",
-        meals.len(),
-        user_id
-    );
-    let mut items = Vec::new();
-    for meal in meals {
-        let title = if meal.recipe_id.starts_with("manual:") {
-            meal.recipe_id.trim_start_matches("manual:").to_string()
-        } else if let Some(recipe) = storage::read_recipe(&meal.recipe_id) {
-            recipe.title
-        } else {
-            meal.recipe_id.clone()
-        };
-
-        items.push(PlannedMealItem {
-            recipe_id: meal.recipe_id,
-            title,
-            checked: meal.checked,
-        });
-    }
-
-    let mut headers = axum::http::HeaderMap::new();
-    headers.insert(
-        axum::http::header::CACHE_CONTROL,
-        "no-store, no-cache, must-revalidate, private"
-            .parse()
-            .unwrap(),
-    );
-    headers.insert(axum::http::header::VARY, "Cookie".parse().unwrap());
-
-    Ok((headers, Json(MealPlanResponse { meals: items })))
+async fn save_meals(user_id: String, meals: Vec<crate::models::PlannedMeal>) -> ApiResult<()> {
+    blocking(move || storage::save_meal_plan(&user_id, &meals))
+        .await?
+        .map_err(|e| ApiError::Internal(format!("failed to save meal plan: {e:?}")))
 }
 
 async fn add_to_meal_plan(
-    jar: axum_extra::extract::cookie::PrivateCookieJar,
+    user: CurrentUser,
     Json(payload): Json<AddMealPlanRequest>,
-) -> Result<impl IntoResponse, StatusCode> {
-    let user_id = match get_session_user_id(&jar) {
-        Some(uid) => uid,
-        None => return Err(StatusCode::UNAUTHORIZED),
-    };
+) -> ApiResult<StatusCode> {
+    check_ids("recipe_ids", &payload.recipe_ids)?;
 
-    let mut meals = storage::read_meal_plan(&user_id);
+    let uid = user.id.clone();
+    let mut meals = blocking(move || storage::read_meal_plan(&uid)).await?;
     for id in payload.recipe_ids {
         if !meals.iter().any(|m| m.recipe_id == id) {
             meals.push(crate::models::PlannedMeal {
@@ -703,80 +1106,46 @@ async fn add_to_meal_plan(
         }
     }
 
-    if storage::save_meal_plan(&user_id, &meals).is_err() {
-        return Err(StatusCode::INTERNAL_SERVER_ERROR);
-    }
-
-    Ok(StatusCode::OK)
+    save_meals(user.id, meals).await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn toggle_meal_plan(
-    jar: axum_extra::extract::cookie::PrivateCookieJar,
+    user: CurrentUser,
     Json(payload): Json<ToggleMealRequest>,
-) -> Result<impl IntoResponse, StatusCode> {
-    let user_id = match get_session_user_id(&jar) {
-        Some(uid) => uid,
-        None => return Err(StatusCode::UNAUTHORIZED),
-    };
+) -> ApiResult<StatusCode> {
+    let uid = user.id.clone();
+    let mut meals = blocking(move || storage::read_meal_plan(&uid)).await?;
+    let meal = meals
+        .iter_mut()
+        .find(|m| m.recipe_id == payload.recipe_id)
+        .ok_or(ApiError::NotFound)?;
+    meal.checked = !meal.checked;
 
-    let mut meals = storage::read_meal_plan(&user_id);
-    let mut found = false;
-    for meal in &mut meals {
-        if meal.recipe_id == payload.recipe_id {
-            meal.checked = !meal.checked;
-            found = true;
-            break;
-        }
-    }
-
-    if !found {
-        return Err(StatusCode::NOT_FOUND);
-    }
-
-    if storage::save_meal_plan(&user_id, &meals).is_err() {
-        return Err(StatusCode::INTERNAL_SERVER_ERROR);
-    }
-
-    Ok(StatusCode::OK)
+    save_meals(user.id, meals).await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
-async fn clear_meal_plan(
-    jar: axum_extra::extract::cookie::PrivateCookieJar,
-) -> Result<impl IntoResponse, StatusCode> {
-    let user_id = match get_session_user_id(&jar) {
-        Some(uid) => uid,
-        None => return Err(StatusCode::UNAUTHORIZED),
-    };
-
-    if storage::save_meal_plan(&user_id, &[]).is_err() {
-        return Err(StatusCode::INTERNAL_SERVER_ERROR);
-    }
-
-    Ok(StatusCode::OK)
+async fn clear_meal_plan(user: CurrentUser) -> ApiResult<StatusCode> {
+    save_meals(user.id, Vec::new()).await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn delete_meal_plan_item(
-    jar: axum_extra::extract::cookie::PrivateCookieJar,
+    user: CurrentUser,
     Path(recipe_id): Path<String>,
-) -> Result<impl IntoResponse, StatusCode> {
-    let user_id = match get_session_user_id(&jar) {
-        Some(uid) => uid,
-        None => return Err(StatusCode::UNAUTHORIZED),
-    };
-
-    let mut meals = storage::read_meal_plan(&user_id);
+) -> ApiResult<StatusCode> {
+    let uid = user.id.clone();
+    let mut meals = blocking(move || storage::read_meal_plan(&uid)).await?;
     let original_len = meals.len();
     meals.retain(|m| m.recipe_id != recipe_id);
 
     if meals.len() == original_len {
-        return Err(StatusCode::NOT_FOUND);
+        return Err(ApiError::NotFound);
     }
 
-    if storage::save_meal_plan(&user_id, &meals).is_err() {
-        return Err(StatusCode::INTERNAL_SERVER_ERROR);
-    }
-
-    Ok(StatusCode::OK)
+    save_meals(user.id, meals).await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[cfg(test)]
@@ -787,6 +1156,8 @@ mod tests {
     use axum::http::{Request, StatusCode};
     use http_body_util::BodyExt;
     use tower::ServiceExt;
+
+    const TEST_TOKEN: &str = "test-token";
 
     fn test_state() -> AppState {
         let _ = std::fs::create_dir_all("data");
@@ -813,7 +1184,59 @@ mod tests {
             webauthn,
             reg_states,
             auth_states,
+            api_token: Some(TEST_TOKEN.to_string()),
         }
+    }
+
+    fn session_cookie(state: &AppState, user_id: &str) -> String {
+        let cookie = axum_extra::extract::cookie::Cookie::new("admin_session", user_id.to_string());
+        let jar = axum_extra::extract::cookie::PrivateCookieJar::new(state.key.clone()).add(cookie);
+        let response = axum::response::IntoResponse::into_response(jar);
+        response
+            .headers()
+            .get(axum::http::header::SET_COOKIE)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string()
+    }
+
+    fn save_test_user(id: &str, email: &str) {
+        storage::save_user(&crate::models::User {
+            id: id.to_string(),
+            email: email.to_string(),
+            password_hash: "hash".to_string(),
+            created_at: "".to_string(),
+        })
+        .unwrap();
+    }
+
+    fn sample_recipe(id: &str, owner_id: &str, is_public: bool) -> Recipe {
+        Recipe {
+            id: id.to_string(),
+            title: format!("Recipe {id}"),
+            description: None,
+            image: None,
+            source_url: None,
+            tags: vec![],
+            servings: Some(4),
+            prep_time: None,
+            cook_time: None,
+            ingredients: vec!["Secret Ingredient".to_string()],
+            markdown: "Secret instructions".to_string(),
+            html: None,
+            combustion_csv: None,
+            video_url: None,
+            favorite: false,
+            owner_id: owner_id.to_string(),
+            is_public,
+            owner_email: None,
+        }
+    }
+
+    async fn json_body(response: Response) -> serde_json::Value {
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        serde_json::from_slice(&body).unwrap()
     }
 
     #[tokio::test]
@@ -826,6 +1249,24 @@ mod tests {
             .uri("/import")
             .header("Content-Type", "application/json")
             .body(Body::from("{\"url\": \"test\"}"))
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        let body = json_body(response).await;
+        assert_eq!(body["error"]["code"], "unauthorized");
+    }
+
+    #[tokio::test]
+    async fn test_invalid_bearer_token_rejected() {
+        let state = test_state();
+        let app = router(state.clone()).with_state(state);
+
+        let req = Request::builder()
+            .method("GET")
+            .uri("/recipes")
+            .header("Authorization", "Bearer wrong-token")
+            .body(Body::empty())
             .unwrap();
 
         let response = app.oneshot(req).await.unwrap();
@@ -846,9 +1287,24 @@ mod tests {
         let response = app.oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        let body = response.into_body().collect().await.unwrap().to_bytes();
-        let list: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let list = json_body(response).await;
         assert!(list.get("recipes").is_some());
+        assert!(list.get("total").is_some());
+    }
+
+    #[tokio::test]
+    async fn test_list_recipes_rejects_invalid_limit() {
+        let state = test_state();
+        let app = router(state.clone()).with_state(state);
+
+        let req = Request::builder()
+            .method("GET")
+            .uri("/recipes?limit=0")
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]
@@ -857,49 +1313,38 @@ mod tests {
         let _ = std::fs::create_dir_all("data/recipes");
 
         let state = test_state();
-        // Set API_TOKEN for mutable methods
-        unsafe {
-            std::env::set_var("API_TOKEN", "test-token");
-        }
         let app = router(state.clone()).with_state(state);
 
-        let owner_id = storage::find_user_by_email("admin@example.com")
-            .map(|u| u.id)
-            .unwrap_or_else(|| "admin".to_string());
+        let payload = serde_json::json!({
+            "title": "API Lifecycle Test",
+            "tags": ["test"],
+            "servings": 4,
+            "ingredients": ["100g flour"],
+            "markdown": "Test",
+        });
 
-        let test_id = "api-test-recipe";
-        let recipe = Recipe {
-            id: test_id.to_string(),
-            title: "API Test".to_string(),
-            description: None,
-            image: None,
-            source_url: None,
-            tags: vec!["test".to_string()],
-            servings: Some(4),
-            prep_time: None,
-            cook_time: None,
-            ingredients: vec!["100g flour".to_string()],
-            markdown: "Test".to_string(),
-            html: None,
-            combustion_csv: None,
-            video_url: None,
-            favorite: false,
-            owner_id,
-            is_public: true,
-            owner_email: None,
-        };
-
-        // 1. Create
+        // 1. Create (server assigns the ID)
         let req = Request::builder()
             .method("POST")
             .uri("/recipes")
             .header("Content-Type", "application/json")
-            .header("Authorization", "Bearer test-token")
-            .body(Body::from(serde_json::to_string(&recipe).unwrap()))
+            .header("Authorization", format!("Bearer {TEST_TOKEN}"))
+            .body(Body::from(payload.to_string()))
             .unwrap();
 
         let response = app.clone().oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::CREATED);
+        let location = response
+            .headers()
+            .get(header::LOCATION)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
+        let created = json_body(response).await;
+        let test_id = created["id"].as_str().unwrap().to_string();
+        assert!(test_id.starts_with("api-lifecycle-test"));
+        assert_eq!(location, format!("/api/v1/recipes/{test_id}"));
 
         // 2. Get with conversions
         let req = Request::builder()
@@ -910,41 +1355,195 @@ mod tests {
 
         let response = app.clone().oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        let body = response.into_body().collect().await.unwrap().to_bytes();
-        let converted: serde_json::Value = serde_json::from_slice(&body).unwrap();
-        assert_eq!(converted["title"], "API Test");
+        let converted = json_body(response).await;
+        assert_eq!(converted["title"], "API Lifecycle Test");
         // 100g * 2 = 200g. 200g in imperial is ~7.1 oz
         assert!(converted["ingredients"][0].as_str().unwrap().contains("oz"));
 
         // 3. Update
-        let mut updated = recipe.clone();
-        updated.title = "Updated Title".into();
+        let mut updated = payload.clone();
+        updated["title"] = "Updated Title".into();
         let req = Request::builder()
             .method("PUT")
             .uri(format!("/recipes/{}", test_id))
             .header("Content-Type", "application/json")
-            .header("Authorization", "Bearer test-token")
-            .body(Body::from(serde_json::to_string(&updated).unwrap()))
+            .header("Authorization", format!("Bearer {TEST_TOKEN}"))
+            .body(Body::from(updated.to_string()))
             .unwrap();
 
         let response = app.clone().oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
+        let body = json_body(response).await;
+        assert_eq!(body["id"], test_id.as_str());
+        assert_eq!(body["title"], "Updated Title");
 
         // 4. Delete
         let req = Request::builder()
             .method("DELETE")
             .uri(format!("/recipes/{}", test_id))
-            .header("Authorization", "Bearer test-token")
+            .header("Authorization", format!("Bearer {TEST_TOKEN}"))
             .body(Body::empty())
             .unwrap();
 
         let response = app.clone().oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::NO_CONTENT);
 
-        // Cleanup env
-        unsafe {
-            std::env::remove_var("API_TOKEN");
+        // 5. Deleting again yields 404
+        let req = Request::builder()
+            .method("DELETE")
+            .uri(format!("/recipes/{}", test_id))
+            .header("Authorization", format!("Bearer {TEST_TOKEN}"))
+            .body(Body::empty())
+            .unwrap();
+        let response = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn test_create_cannot_overwrite_or_spoof_owner() {
+        let state = test_state();
+        let app = router(state.clone()).with_state(state.clone());
+
+        let victim_id = "api-victim-user";
+        let attacker_id = "api-attacker-user";
+        save_test_user(victim_id, "victim@example.com");
+        save_test_user(attacker_id, "attacker@example.com");
+
+        let existing_id = "api-overwrite-target";
+        storage::save_recipe(&sample_recipe(existing_id, victim_id, true)).unwrap();
+
+        // Attacker tries to POST with the victim's recipe id and owner id
+        let payload = serde_json::json!({
+            "id": existing_id,
+            "owner_id": victim_id,
+            "title": format!("Recipe {existing_id}"),
+            "markdown": "pwned",
+        });
+        let req = Request::builder()
+            .method("POST")
+            .uri("/recipes")
+            .header("Content-Type", "application/json")
+            .header("Cookie", session_cookie(&state, attacker_id))
+            .body(Body::from(payload.to_string()))
+            .unwrap();
+        let response = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let created = json_body(response).await;
+        let new_id = created["id"].as_str().unwrap().to_string();
+
+        assert_ne!(new_id, existing_id, "must not reuse an existing id");
+        assert_eq!(created["owner_id"], attacker_id, "owner must be the caller");
+        let original = storage::read_recipe(existing_id).unwrap();
+        assert_eq!(original.markdown, "Secret instructions");
+        assert_eq!(original.owner_id, victim_id);
+
+        let _ = storage::delete_recipe(existing_id);
+        let _ = storage::delete_recipe(&new_id);
+        let _ = storage::delete_user(victim_id);
+        let _ = storage::delete_user(attacker_id);
+    }
+
+    #[tokio::test]
+    async fn test_non_owner_cannot_update_or_delete() {
+        let state = test_state();
+        let app = router(state.clone()).with_state(state.clone());
+
+        let owner_id = "api-owner-user";
+        let other_id = "api-other-user";
+        save_test_user(owner_id, "owner@example.com");
+        save_test_user(other_id, "other@example.com");
+
+        let recipe_id = "api-owned-recipe";
+        storage::save_recipe(&sample_recipe(recipe_id, owner_id, true)).unwrap();
+        let other_cookie = session_cookie(&state, other_id);
+
+        let req = Request::builder()
+            .method("PUT")
+            .uri(format!("/recipes/{recipe_id}"))
+            .header("Content-Type", "application/json")
+            .header("Cookie", &other_cookie)
+            .body(Body::from(
+                serde_json::json!({"title": "Hijacked"}).to_string(),
+            ))
+            .unwrap();
+        let response = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+        let req = Request::builder()
+            .method("DELETE")
+            .uri(format!("/recipes/{recipe_id}"))
+            .header("Cookie", &other_cookie)
+            .body(Body::empty())
+            .unwrap();
+        let response = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        assert!(storage::read_recipe(recipe_id).is_some());
+
+        // The owner can update via their session; owner_id in the body is ignored.
+        let req = Request::builder()
+            .method("PUT")
+            .uri(format!("/recipes/{recipe_id}"))
+            .header("Content-Type", "application/json")
+            .header("Cookie", session_cookie(&state, owner_id))
+            .body(Body::from(
+                serde_json::json!({"title": "Renamed", "owner_id": other_id}).to_string(),
+            ))
+            .unwrap();
+        let response = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let stored = storage::read_recipe(recipe_id).unwrap();
+        assert_eq!(stored.title, "Renamed");
+        assert_eq!(stored.owner_id, owner_id);
+
+        // Updating a missing recipe is 404, not an implicit create.
+        let req = Request::builder()
+            .method("PUT")
+            .uri("/recipes/api-does-not-exist")
+            .header("Content-Type", "application/json")
+            .header("Authorization", format!("Bearer {TEST_TOKEN}"))
+            .body(Body::from(
+                serde_json::json!({"title": "Ghost"}).to_string(),
+            ))
+            .unwrap();
+        let response = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        assert!(storage::read_recipe("api-does-not-exist").is_none());
+
+        let _ = storage::delete_recipe(recipe_id);
+        let _ = storage::delete_user(owner_id);
+        let _ = storage::delete_user(other_id);
+    }
+
+    #[tokio::test]
+    async fn test_recipe_validation() {
+        let state = test_state();
+        let app = router(state.clone()).with_state(state);
+
+        for payload in [
+            serde_json::json!({"title": "   "}),
+            serde_json::json!({"title": "x".repeat(MAX_TITLE_LEN + 1)}),
+            serde_json::json!({"title": "ok", "servings": 0}),
+        ] {
+            let req = Request::builder()
+                .method("POST")
+                .uri("/recipes")
+                .header("Content-Type", "application/json")
+                .header("Authorization", format!("Bearer {TEST_TOKEN}"))
+                .body(Body::from(payload.to_string()))
+                .unwrap();
+            let response = app.clone().oneshot(req).await.unwrap();
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+            let body = json_body(response).await;
+            assert_eq!(body["error"]["code"], "bad_request");
         }
+
+        let req = Request::builder()
+            .method("GET")
+            .uri("/recipes/anything?scale=-1")
+            .body(Body::empty())
+            .unwrap();
+        let response = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]
@@ -960,8 +1559,8 @@ mod tests {
             .unwrap();
         let response = app.clone().oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        let body = response.into_body().collect().await.unwrap().to_bytes();
-        let temps: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert!(response.headers().get(header::CACHE_CONTROL).is_some());
+        let temps = json_body(response).await;
         assert!(!temps.as_array().unwrap().is_empty());
 
         // Test /log7
@@ -972,10 +1571,18 @@ mod tests {
             .unwrap();
         let response = app.clone().oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        let body = response.into_body().collect().await.unwrap().to_bytes();
-        let log7: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let log7 = json_body(response).await;
         assert_eq!(log7["temp_c"], 65.0);
         assert!(log7["display_time"].as_str().unwrap().contains("Min"));
+
+        // Invalid fermentation input is rejected instead of producing nonsense
+        let req = Request::builder()
+            .method("GET")
+            .uri("/ferment?type=yeast&amount=0&temp=24")
+            .body(Body::empty())
+            .unwrap();
+        let response = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]
@@ -985,38 +1592,10 @@ mod tests {
 
         let private_recipe_id = "api-private-test-recipe";
         let owner_id = "some-user-id".to_string();
-
-        let test_user = crate::models::User {
-            id: owner_id.clone(),
-            email: "some-user@example.com".to_string(),
-            password_hash: "hash".to_string(),
-            created_at: "".to_string(),
-        };
-        storage::save_user(&test_user).unwrap();
-
-        let recipe = Recipe {
-            id: private_recipe_id.to_string(),
-            title: "Private API Test".to_string(),
-            description: None,
-            image: None,
-            source_url: None,
-            tags: vec![],
-            servings: Some(4),
-            prep_time: None,
-            cook_time: None,
-            ingredients: vec!["Secret Ingredient".to_string()],
-            markdown: "Secret instructions".to_string(),
-            html: None,
-            combustion_csv: None,
-            video_url: None,
-            favorite: false,
-            owner_id,
-            is_public: false,
-            owner_email: None,
-        };
+        save_test_user(&owner_id, "some-user@example.com");
 
         // Save directly to storage
-        storage::save_recipe(&recipe).unwrap();
+        storage::save_recipe(&sample_recipe(private_recipe_id, &owner_id, false)).unwrap();
 
         // 1. Verify GET /recipes does not contain the private recipe
         let req = Request::builder()
@@ -1026,8 +1605,7 @@ mod tests {
             .unwrap();
         let response = app.clone().oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        let body = response.into_body().collect().await.unwrap().to_bytes();
-        let list: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let list = json_body(response).await;
         let recipes = list["recipes"].as_array().unwrap();
         let contains_private = recipes
             .iter()
@@ -1067,32 +1645,60 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_meal_plan_hides_private_titles() {
+        let state = test_state();
+        let app = router(state.clone()).with_state(state.clone());
+
+        let owner_id = "api-meal-owner";
+        let viewer_id = "api-meal-viewer";
+        save_test_user(owner_id, "meal-owner@example.com");
+        save_test_user(viewer_id, "meal-viewer@example.com");
+
+        let private_id = "api-meal-private-recipe";
+        storage::save_recipe(&sample_recipe(private_id, owner_id, false)).unwrap();
+        let cookie = session_cookie(&state, viewer_id);
+
+        let req = Request::builder()
+            .method("POST")
+            .uri("/meal-plan")
+            .header("Content-Type", "application/json")
+            .header("Cookie", &cookie)
+            .body(Body::from(
+                serde_json::json!({"recipe_ids": [private_id]}).to_string(),
+            ))
+            .unwrap();
+        let response = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+        let req = Request::builder()
+            .method("GET")
+            .uri("/meal-plan")
+            .header("Cookie", &cookie)
+            .body(Body::empty())
+            .unwrap();
+        let response = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = json_body(response).await;
+        assert_eq!(body["meals"][0]["title"], "Unavailable recipe");
+
+        let _ = storage::save_meal_plan(viewer_id, &[]);
+        let _ = storage::delete_recipe(private_id);
+        let _ = storage::delete_user(owner_id);
+        let _ = storage::delete_user(viewer_id);
+    }
+
+    #[tokio::test]
     async fn test_shopping_list_persistence() {
         let state = test_state();
         let app = router(state.clone()).with_state(state.clone());
 
         let user_id = "shopping-test-user";
-        let test_user = crate::models::User {
-            id: user_id.to_string(),
-            email: "shopping@example.com".to_string(),
-            password_hash: "hash".to_string(),
-            created_at: "".to_string(),
-        };
-        storage::save_user(&test_user).unwrap();
+        save_test_user(user_id, "shopping@example.com");
 
         // Construct encrypted cookie header
-        let cookie = axum_extra::extract::cookie::Cookie::new("admin_session", user_id);
-        let jar = axum_extra::extract::cookie::PrivateCookieJar::new(state.key.clone()).add(cookie);
-        let response = axum::response::IntoResponse::into_response(jar);
-        let cookie_header_val = response
-            .headers()
-            .get(axum::http::header::SET_COOKIE)
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .to_string();
+        let cookie_header_val = session_cookie(&state, user_id);
 
-        // 1. GET /shopping-list initially should return NOT_FOUND (404)
+        // 1. GET /shopping-list initially should return an empty list
         let req = Request::builder()
             .method("GET")
             .uri("/shopping-list")
@@ -1100,7 +1706,10 @@ mod tests {
             .body(Body::empty())
             .unwrap();
         let response = app.clone().oneshot(req).await.unwrap();
-        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        assert_eq!(response.status(), StatusCode::OK);
+        let initial: Vec<crate::models::ShoppingItem> =
+            serde_json::from_value(json_body(response).await).unwrap();
+        assert!(initial.is_empty());
 
         // 2. PUT /shopping-list to save a shopping list
         let list_items = vec![
@@ -1121,7 +1730,7 @@ mod tests {
             .body(Body::from(serde_json::to_string(&list_items).unwrap()))
             .unwrap();
         let response = app.clone().oneshot(req).await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
 
         // 3. GET /shopping-list to verify list is saved correctly
         let req = Request::builder()
@@ -1132,8 +1741,8 @@ mod tests {
             .unwrap();
         let response = app.clone().oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        let body = response.into_body().collect().await.unwrap().to_bytes();
-        let fetched: Vec<crate::models::ShoppingItem> = serde_json::from_slice(&body).unwrap();
+        let fetched: Vec<crate::models::ShoppingItem> =
+            serde_json::from_value(json_body(response).await).unwrap();
         assert_eq!(fetched.len(), 2);
         assert_eq!(fetched[0].name, "2 cups flour");
         assert_eq!(fetched[0].checked, false);
@@ -1150,7 +1759,7 @@ mod tests {
         let response = app.clone().oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::NO_CONTENT);
 
-        // 5. GET /shopping-list to verify list is deleted / empty (404)
+        // 5. GET /shopping-list to verify list is empty again
         let req = Request::builder()
             .method("GET")
             .uri("/shopping-list")
@@ -1158,7 +1767,10 @@ mod tests {
             .body(Body::empty())
             .unwrap();
         let response = app.clone().oneshot(req).await.unwrap();
-        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        assert_eq!(response.status(), StatusCode::OK);
+        let cleared: Vec<crate::models::ShoppingItem> =
+            serde_json::from_value(json_body(response).await).unwrap();
+        assert!(cleared.is_empty());
 
         // Clean up
         let _ = storage::delete_user(user_id);
