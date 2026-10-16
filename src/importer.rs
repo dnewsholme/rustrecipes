@@ -178,12 +178,6 @@ pub async fn import_recipe_from_text(text: &str) -> Result<Recipe, ImportError> 
         }
     };
 
-    let client = reqwest::Client::new();
-    let url = format!(
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key={}",
-        api_key
-    );
-
     let prompt = format!(
         "You are a professional recipe extractor. Extract the recipe from this text: \n\n{}\n\n \
                   Format the response EXACTLY as a JSON object with no markdown formatting around it. \
@@ -194,92 +188,9 @@ pub async fn import_recipe_from_text(text: &str) -> Result<Recipe, ImportError> 
         text
     );
 
-    let body = serde_json::json!({
-        "contents": [{
-            "parts": [{ "text": prompt }]
-        }],
-        "generationConfig": {
-            "responseMimeType": "application/json"
-        }
-    });
-
-    let res = client
-        .post(&url)
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| ImportError::AiFailed(e.to_string()))?;
-    let res_json: serde_json::Value = res
-        .json()
-        .await
-        .map_err(|e| ImportError::AiFailed(e.to_string()))?;
-
-    if let Some(text) = res_json["candidates"][0]["content"]["parts"][0]["text"].as_str() {
-        let clean_text = text.trim();
-        let clean_text = if clean_text.starts_with("```json") {
-            clean_text
-                .trim_start_matches("```json")
-                .trim_end_matches("```")
-                .trim()
-        } else {
-            clean_text
-        };
-
-        match serde_json::from_str::<GeminiRecipe>(clean_text) {
-            Ok(mut gemini) => {
-                // Decode all fields
-                gemini.title = decode_html(&gemini.title);
-                gemini.description = gemini.description.map(|d| decode_html(&d));
-                gemini.ingredients = gemini.ingredients.iter().map(|i| decode_html(i)).collect();
-                gemini.markdown = decode_html(&gemini.markdown);
-
-                let mut id = slug::slugify(&gemini.title);
-                if id.is_empty() {
-                    id = uuid::Uuid::new_v4().to_string();
-                }
-
-                Ok(Recipe {
-                    id,
-                    title: gemini.title,
-                    description: gemini.description,
-                    image: None,
-                    source_url: None,
-                    tags: gemini.tags.unwrap_or_default(),
-                    servings: gemini.servings,
-                    prep_time: gemini.prep_time,
-                    cook_time: gemini.cook_time,
-                    ingredients: gemini.ingredients,
-                    markdown: gemini.markdown,
-                    html: None,
-                    combustion_csv: None,
-                    video_url: None,
-                    favorite: false,
-                    owner_id: "admin".to_string(),
-                    is_public: true,
-                    owner_email: None,
-                })
-            }
-            Err(e) => {
-                error!("Failed to deserialize Gemini response: {:?}", e);
-                info!("Raw AI response was: {}", clean_text);
-                Err(ImportError::AiFailed(e.to_string()))
-            }
-        }
-    } else {
-        // Check for rate limit error
-        if let Some(status) = res_json["error"]["status"].as_str()
-            && status == "RESOURCE_EXHAUSTED"
-        {
-            return Err(ImportError::RateLimited);
-        }
-        warn!(
-            "Gemini AI response did not contain expected text field. Full response: {:?}",
-            res_json
-        );
-        Err(ImportError::AiFailed(
-            "Invalid AI response structure".to_string(),
-        ))
-    }
+    let parts = vec![serde_json::json!({ "text": prompt })];
+    let gemini = call_gemini_api(&api_key, parts).await?;
+    Ok(gemini_recipe_to_recipe(gemini))
 }
 
 fn extract_recipe_from_json(json_str: &str) -> Option<LdRecipe> {
@@ -624,6 +535,172 @@ where
     }
 }
 
+fn gemini_recipe_to_recipe(gemini: GeminiRecipe) -> Recipe {
+    let title = decode_html(&gemini.title);
+    let mut id = slug::slugify(&title);
+    if id.is_empty() {
+        id = uuid::Uuid::new_v4().to_string();
+    }
+
+    Recipe {
+        id,
+        title,
+        description: gemini.description.map(|d| decode_html(&d)),
+        image: None,
+        source_url: None,
+        tags: gemini.tags.unwrap_or_default(),
+        servings: gemini.servings,
+        prep_time: gemini.prep_time,
+        cook_time: gemini.cook_time,
+        ingredients: gemini.ingredients.iter().map(|i| decode_html(i)).collect(),
+        markdown: decode_html(&gemini.markdown),
+        html: None,
+        combustion_csv: None,
+        video_url: None,
+        favorite: false,
+        owner_id: "admin".to_string(),
+        is_public: true,
+        owner_email: None,
+    }
+}
+
+async fn call_gemini_api(
+    api_key: &str,
+    parts: Vec<serde_json::Value>,
+) -> Result<GeminiRecipe, ImportError> {
+    let client = reqwest::Client::new();
+    let custom_model = std::env::var("GEMINI_MODEL").ok();
+    let mut candidate_models = Vec::new();
+    if let Some(ref m) = custom_model {
+        candidate_models.push(m.as_str());
+    }
+    // gemini-3.5-flash and gemini-3.5-flash-lite are primary; gemini-flash-lite-latest and gemini-flash-latest as fallbacks
+    for m in &[
+        "gemini-3.5-flash",
+        "gemini-3.5-flash-lite",
+        "gemini-flash-lite-latest",
+        "gemini-flash-latest",
+    ] {
+        if !candidate_models.contains(m) {
+            candidate_models.push(m);
+        }
+    }
+
+    let body = serde_json::json!({
+        "contents": [{
+            "parts": parts
+        }],
+        "generationConfig": {
+            "responseMimeType": "application/json"
+        }
+    });
+
+    let mut last_error_msg = String::new();
+
+    for model in &candidate_models {
+        let url = format!(
+            "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
+            model, api_key
+        );
+
+        for attempt in 0..2 {
+            if attempt > 0 {
+                tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+            }
+
+            let res = match client.post(&url).json(&body).send().await {
+                Ok(r) => r,
+                Err(e) => {
+                    last_error_msg = format!("Network request failed: {e}");
+                    continue;
+                }
+            };
+
+            let status = res.status();
+            let res_json: serde_json::Value = match res.json().await {
+                Ok(v) => v,
+                Err(e) => {
+                    last_error_msg = format!("Failed to parse response JSON: {e}");
+                    continue;
+                }
+            };
+
+            if !status.is_success() {
+                let error_status = res_json["error"]["status"].as_str().unwrap_or("");
+                let error_message = res_json["error"]["message"].as_str().unwrap_or("");
+
+                if error_status == "RESOURCE_EXHAUSTED" || status == StatusCode::TOO_MANY_REQUESTS {
+                    last_error_msg = format!("Rate limit reached: {error_message}");
+                    warn!("Gemini model {model} rate limited: {error_message}");
+                    continue;
+                }
+
+                if status == StatusCode::SERVICE_UNAVAILABLE || status.as_u16() == 503 {
+                    last_error_msg = format!("Model {model} high demand (503): {error_message}");
+                    warn!("{}", last_error_msg);
+                    continue;
+                }
+
+                if status == StatusCode::NOT_FOUND || status.as_u16() == 404 {
+                    last_error_msg = format!("Model {model} unavailable (404): {error_message}");
+                    warn!("{}", last_error_msg);
+                    break;
+                }
+
+                last_error_msg = format!("API error ({status}): {error_message}");
+                warn!("{}", last_error_msg);
+                continue;
+            }
+
+            if let Some(text) = res_json["candidates"][0]["content"]["parts"][0]["text"].as_str() {
+                let clean_text = text.trim();
+                let clean_text = if clean_text.starts_with("```json") {
+                    clean_text
+                        .trim_start_matches("```json")
+                        .trim_end_matches("```")
+                        .trim()
+                } else if clean_text.starts_with("```") {
+                    clean_text
+                        .trim_start_matches("```")
+                        .trim_end_matches("```")
+                        .trim()
+                } else {
+                    clean_text
+                };
+
+                match serde_json::from_str::<GeminiRecipe>(clean_text) {
+                    Ok(gemini) => return Ok(gemini),
+                    Err(e) => {
+                        error!(
+                            "Failed to deserialize Gemini response: {:?}. Raw: {}",
+                            e, clean_text
+                        );
+                        return Err(ImportError::AiFailed(format!(
+                            "Failed to parse recipe JSON from AI: {e}"
+                        )));
+                    }
+                }
+            } else {
+                warn!(
+                    "Gemini response did not contain expected text field: {:?}",
+                    res_json
+                );
+                last_error_msg = "Gemini response did not contain text content".to_string();
+            }
+        }
+    }
+
+    if last_error_msg.contains("Rate limit") || last_error_msg.contains("RESOURCE_EXHAUSTED") {
+        Err(ImportError::RateLimited)
+    } else {
+        Err(ImportError::AiFailed(if last_error_msg.is_empty() {
+            "All Gemini AI models failed to respond".to_string()
+        } else {
+            last_error_msg
+        }))
+    }
+}
+
 pub async fn import_recipe_from_photo(
     mime_type: &str,
     image_data: &[u8],
@@ -639,12 +716,6 @@ pub async fn import_recipe_from_photo(
     use base64::{Engine as _, engine::general_purpose};
     let b64 = general_purpose::STANDARD.encode(image_data);
 
-    let client = reqwest::Client::new();
-    let url = format!(
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key={}",
-        api_key
-    );
-
     let prompt = "You are a professional recipe extractor. Extract the recipe from this image. \
                   Format the response EXACTLY as a JSON object with no markdown formatting around it. \
                   The JSON should match this schema: \
@@ -652,111 +723,51 @@ pub async fn import_recipe_from_photo(
                   \"prep_time\": \"string or null\", \"cook_time\": \"string or null\", \
                   \"ingredients\": [\"string\"], \"markdown\": \"string (use markdown for instructions)\", \"tags\": [\"string\"] }";
 
-    let body = serde_json::json!({
-        "contents": [{
-            "parts": [
-                { "text": prompt },
-                {
-                    "inline_data": {
-                        "mime_type": mime_type,
-                        "data": b64
-                    }
-                }
-            ]
-        }],
-        "generationConfig": {
-            "responseMimeType": "application/json"
-        }
-    });
-
-    let res = match client.post(&url).json(&body).send().await {
-        Ok(r) => r,
-        Err(e) => {
-            println!("Request to Gemini failed: {:?}", e);
-            return Err(ImportError::AiFailed(e.to_string()));
-        }
-    };
-
-    let status = res.status();
-    let res_json: serde_json::Value = match res.json().await {
-        Ok(v) => v,
-        Err(e) => {
-            println!("Failed to parse Gemini response as JSON: {:?}", e);
-            return Err(ImportError::AiFailed(e.to_string()));
-        }
-    };
-
-    if !status.is_success() {
-        if status == StatusCode::TOO_MANY_REQUESTS {
-            return Err(ImportError::RateLimited);
-        }
-        if let Some(status_str) = res_json["error"]["status"].as_str()
-            && status_str == "RESOURCE_EXHAUSTED"
-        {
-            return Err(ImportError::RateLimited);
-        }
-        error!(
-            "Gemini API returned error status {}: {:?}",
-            status, res_json
-        );
-        return Err(ImportError::AiFailed(format!("API error: {}", status)));
-    }
-
-    if let Some(text) = res_json["candidates"][0]["content"]["parts"][0]["text"].as_str() {
-        let clean_text = text.trim();
-        // Sometimes LLMs still wrap in ```json ... ``` despite instructions
-        let clean_text = if clean_text.starts_with("```json") {
-            clean_text
-                .trim_start_matches("```json")
-                .trim_end_matches("```")
-                .trim()
-        } else {
-            clean_text
-        };
-
-        match serde_json::from_str::<GeminiRecipe>(clean_text) {
-            Ok(gemini) => {
-                let mut id = slug::slugify(&gemini.title);
-                if id.is_empty() {
-                    id = uuid::Uuid::new_v4().to_string();
-                }
-
-                Ok(Recipe {
-                    id,
-                    title: decode_html(&gemini.title),
-                    description: gemini.description.map(|d| decode_html(&d)),
-                    image: None,
-                    source_url: None,
-                    tags: gemini.tags.unwrap_or_default(),
-                    servings: gemini.servings,
-                    prep_time: gemini.prep_time,
-                    cook_time: gemini.cook_time,
-                    ingredients: gemini.ingredients.iter().map(|i| decode_html(i)).collect(),
-                    markdown: decode_html(&gemini.markdown),
-                    html: None,
-                    combustion_csv: None,
-                    video_url: None,
-                    favorite: false,
-                    owner_id: "admin".to_string(),
-                    is_public: true,
-                    owner_email: None,
-                })
+    let parts = vec![
+        serde_json::json!({ "text": prompt }),
+        serde_json::json!({
+            "inline_data": {
+                "mime_type": mime_type,
+                "data": b64
             }
-            Err(e) => {
-                error!(
-                    "Failed to deserialize Gemini response into GeminiRecipe: {:?}",
-                    e
-                );
-                info!("Raw JSON was: {}", clean_text);
-                Err(ImportError::AiFailed(e.to_string()))
-            }
-        }
+        }),
+    ];
+
+    let gemini = call_gemini_api(&api_key, parts).await?;
+    Ok(gemini_recipe_to_recipe(gemini))
+}
+
+fn extract_youtube_description(html: &str) -> Option<String> {
+    let key = r#""shortDescription":""#;
+    let idx = html.find(key)?;
+    let after = &html[idx + key.len()..];
+    let end_marker = r#"","isCrawlable""#;
+    let end_idx = after.find(end_marker)?;
+    let raw = &after[..end_idx];
+
+    let unescaped = raw
+        .replace(r#"\n"#, "\n")
+        .replace(r#"\r"#, "")
+        .replace(r#"\""#, "\"")
+        .replace(r#"\\/"#, "/")
+        .replace(r#"\\"#, "\\");
+
+    if unescaped.trim().is_empty() {
+        None
     } else {
-        warn!("Unexpected response structure from Gemini: {:?}", res_json);
-        Err(ImportError::AiFailed(
-            "Invalid AI response structure".to_string(),
-        ))
+        Some(unescaped)
     }
+}
+
+fn extract_recipe_url_from_description(desc: &str) -> Option<String> {
+    let re =
+        regex::Regex::new(r#"https?://[^\s\"<>]+(?:recipe|blog|food|cook|bake)[^\s\"<>]*"#).ok()?;
+    re.find(desc).map(|m| {
+        m.as_str()
+            .trim_end_matches('.')
+            .trim_end_matches('/')
+            .to_string()
+    })
 }
 
 pub async fn import_recipe_from_youtube(url: &str) -> Result<Recipe, ImportError> {
@@ -775,30 +786,77 @@ pub async fn import_recipe_from_youtube(url: &str) -> Result<Recipe, ImportError
                 "Failed to fetch transcript: {}. Falling back to metadata only.",
                 e
             );
-            // If no transcript, we might still get something from description but it's much worse
             String::new()
         }
     };
 
-    // We also want the title and description from the page if possible
+    // Extract title, description, and possible linked recipe URL from page HTML
     let client = reqwest::Client::new();
     let mut page_text = format!("YouTube Video ID: {}\n", video_id);
+    let mut recipe_link: Option<String> = None;
 
-    if let Ok(res) = client.get(url).send().await
+    if let Ok(res) = client
+        .get(url)
+        .header(
+            reqwest::header::USER_AGENT,
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        )
+        .send()
+        .await
         && let Ok(body) = res.text().await
     {
         let document = Html::parse_document(&body);
         let title_selector = Selector::parse("title").unwrap();
         if let Some(title_el) = document.select(&title_selector).next() {
-            page_text.push_str(&format!("Video Title: {}\n", title_el.inner_html()));
+            let raw_title = title_el.inner_html();
+            let clean_title = raw_title.trim_end_matches(" - YouTube").trim();
+            page_text.push_str(&format!("Video Title: {}\n", clean_title));
         }
 
-        // Try to find the description in meta tags
-        let desc_selector = Selector::parse("meta[name=\"description\"]").unwrap();
-        if let Some(desc_el) = document.select(&desc_selector).next()
-            && let Some(desc) = desc_el.value().attr("content")
-        {
-            page_text.push_str(&format!("Video Description: {}\n", desc));
+        let full_desc = extract_youtube_description(&body);
+        let desc = full_desc.or_else(|| {
+            let desc_selector = Selector::parse("meta[name=\"description\"]").unwrap();
+            document
+                .select(&desc_selector)
+                .next()
+                .and_then(|el| el.value().attr("content"))
+                .map(|s| s.to_string())
+        });
+
+        if let Some(ref d) = desc {
+            page_text.push_str(&format!("Video Description:\n{}\n", d));
+            recipe_link = extract_recipe_url_from_description(d);
+        }
+    }
+
+    // If description has a direct link to the recipe (common when captions are missing/disabled),
+    // attempt to import directly from the creator's recipe page!
+    if let Some(ref linked_url) = recipe_link
+        && !linked_url.contains("youtube.com")
+        && !linked_url.contains("youtu.be")
+    {
+        info!(
+            "Found recipe link in video description: {}. Attempting direct import.",
+            linked_url
+        );
+        match Box::pin(import_recipe_from_url(linked_url)).await {
+            Ok(mut linked_recipe) => {
+                linked_recipe.source_url = Some(url.to_string());
+                linked_recipe.video_url = Some(url.to_string());
+                if linked_recipe.image.is_none() {
+                    linked_recipe.image = Some(format!(
+                        "https://i.ytimg.com/vi/{}/maxresdefault.jpg",
+                        video_id
+                    ));
+                }
+                return Ok(linked_recipe);
+            }
+            Err(e) => {
+                warn!(
+                    "Failed to import from linked recipe URL {}: {:?}. Continuing with video metadata.",
+                    linked_url, e
+                );
+            }
         }
     }
 
@@ -807,7 +865,7 @@ pub async fn import_recipe_from_youtube(url: &str) -> Result<Recipe, ImportError
         page_text.push_str(&transcript_text);
     }
 
-    if page_text.len() < 100 && transcript_text.is_empty() {
+    if page_text.len() < 30 && transcript_text.is_empty() {
         warn!(
             "Could not extract enough information from YouTube video {}",
             video_id
@@ -819,7 +877,6 @@ pub async fn import_recipe_from_youtube(url: &str) -> Result<Recipe, ImportError
 
     recipe.source_url = Some(url.to_string());
     recipe.video_url = Some(url.to_string());
-    // Use the high-res thumbnail
     recipe.image = Some(format!(
         "https://i.ytimg.com/vi/{}/maxresdefault.jpg",
         video_id
@@ -865,5 +922,30 @@ mod tests {
         assert!(extracted.is_some());
         let ld = extracted.unwrap();
         assert_eq!(ld.name, "Test Recipe");
+    }
+
+    #[test]
+    fn test_extract_youtube_description_and_recipe_link() {
+        let fake_html = r#"<script>var ytInitialData = {"shortDescription":"Sticky toffee pudding recipe!\n\nRecipe: https://www.example.com/recipes/sticky-toffee\n\nEnjoy!","isCrawlable":true};</script>"#;
+        let desc = extract_youtube_description(fake_html);
+        assert!(desc.is_some());
+        let desc_text = desc.unwrap();
+        assert!(desc_text.contains("Sticky toffee pudding"));
+
+        let link = extract_recipe_url_from_description(&desc_text);
+        assert_eq!(
+            link,
+            Some("https://www.example.com/recipes/sticky-toffee".to_string())
+        );
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_live_youtube_import() {
+        let res = import_recipe_from_youtube("https://www.youtube.com/watch?v=Ngrx3pU_fqk").await;
+        assert!(res.is_ok(), "Import failed: {:?}", res.err());
+        let recipe = res.unwrap();
+        assert!(!recipe.title.is_empty());
+        assert!(!recipe.ingredients.is_empty());
     }
 }
