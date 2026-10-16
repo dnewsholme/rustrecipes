@@ -18,6 +18,7 @@ use axum::{
 };
 use axum_extra::extract::cookie::{Cookie, Key, PrivateCookieJar, SameSite};
 use serde::{Deserialize, Serialize};
+use sha2::Digest;
 use std::env;
 use std::net::SocketAddr;
 use tower_http::{services::ServeDir, trace::TraceLayer};
@@ -1621,7 +1622,30 @@ async fn login_oidc(State(state): State<AppState>, jar: PrivateCookieJar) -> imp
         state.app_base
     };
 
+    // Generate PKCE code_verifier using cryptographically random UUIDs
+    // Two UUID v4s give us 32 random bytes (each UUID v4 has 122 bits of randomness)
+    let code_verifier = format!(
+        "{}{}",
+        uuid::Uuid::new_v4().as_simple(),
+        uuid::Uuid::new_v4().as_simple()
+    );
+    // Compute code_challenge = BASE64URL(SHA256(code_verifier))
+    let mut hasher = sha2::Sha256::new();
+    hasher.update(code_verifier.as_bytes());
+    let challenge_hash = hasher.finalize();
+    let code_challenge = base64::Engine::encode(
+        &base64::engine::general_purpose::URL_SAFE_NO_PAD,
+        challenge_hash,
+    );
+
     let state_cookie = Cookie::build(("oidc_state", state_token.clone()))
+        .path(cookie_path)
+        .http_only(true)
+        .secure(is_cookie_secure())
+        .same_site(SameSite::Lax)
+        .build();
+
+    let verifier_cookie = Cookie::build(("oidc_verifier", code_verifier))
         .path(cookie_path)
         .http_only(true)
         .secure(is_cookie_secure())
@@ -1641,16 +1665,20 @@ async fn login_oidc(State(state): State<AppState>, jar: PrivateCookieJar) -> imp
         .append_pair("redirect_uri", &config.redirect_uri)
         .append_pair("response_type", "code")
         .append_pair("scope", &config.scopes)
-        .append_pair("state", &state_token);
+        .append_pair("state", &state_token)
+        .append_pair("code_challenge", &code_challenge)
+        .append_pair("code_challenge_method", "S256");
 
-    let updated_jar = jar.add(state_cookie);
+    let updated_jar = jar.add(state_cookie).add(verifier_cookie);
     (updated_jar, Redirect::to(auth_url.as_str())).into_response()
 }
 
 #[derive(Deserialize)]
 struct OidcCallbackQuery {
-    code: String,
+    code: Option<String>,
     state: String,
+    error: Option<String>,
+    error_description: Option<String>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -1696,7 +1724,42 @@ async fn login_oidc_callback(
         state.app_base
     };
     let clear_state_cookie = Cookie::build("oidc_state").path(cookie_path).build();
-    let jar = jar.remove(clear_state_cookie);
+    let stored_verifier = jar.get("oidc_verifier").map(|c| c.value().to_string());
+    let clear_verifier_cookie = Cookie::build("oidc_verifier").path(cookie_path).build();
+    let jar = jar.remove(clear_state_cookie).remove(clear_verifier_cookie);
+
+    // Handle error responses from OIDC provider (e.g. missing PKCE, invalid request)
+    if let Some(ref err) = query.error {
+        let desc = query
+            .error_description
+            .as_deref()
+            .unwrap_or("Unknown error");
+        warn!("OIDC provider returned error: {} - {}", err, desc);
+        return (
+            jar,
+            Redirect::to(&format!(
+                "{}/login?error={}",
+                state.app_base,
+                url::form_urlencoded::byte_serialize(desc.as_bytes()).collect::<String>()
+            )),
+        )
+            .into_response();
+    }
+
+    let auth_code = match query.code {
+        Some(ref c) => c.clone(),
+        None => {
+            warn!("OIDC callback missing both code and error");
+            return (
+                jar,
+                Redirect::to(&format!(
+                    "{}/login?error=Missing+authorization+code",
+                    state.app_base
+                )),
+            )
+                .into_response();
+        }
+    };
 
     if stored_state.is_none() || stored_state.unwrap() != query.state {
         warn!("CSRF state mismatch in OIDC callback");
@@ -1740,11 +1803,18 @@ async fn login_oidc_callback(
     };
     dummy_url
         .query_pairs_mut()
-        .append_pair("code", &query.code)
+        .append_pair("code", &auth_code)
         .append_pair("client_id", &config.client_id)
         .append_pair("client_secret", &config.client_secret)
         .append_pair("redirect_uri", &config.redirect_uri)
         .append_pair("grant_type", "authorization_code");
+
+    // Include PKCE code_verifier if we stored one during the authorization request
+    if let Some(ref verifier) = stored_verifier {
+        dummy_url
+            .query_pairs_mut()
+            .append_pair("code_verifier", verifier);
+    }
 
     let body_str = dummy_url.query().unwrap_or("").to_string();
 
@@ -1987,44 +2057,26 @@ async fn main() {
     };
 
     let oidc = {
-        let client_id =
-            std::env::var("POCKETID_CLIENT_ID").or_else(|_| std::env::var("OIDC_CLIENT_ID"));
-        let client_secret = std::env::var("POCKETID_CLIENT_SECRET")
-            .or_else(|_| std::env::var("OIDC_CLIENT_SECRET"));
+        let client_id = std::env::var("OIDC_CLIENT_ID");
+        let client_secret = std::env::var("OIDC_CLIENT_SECRET");
 
         if let (Ok(client_id), Ok(client_secret)) = (client_id, client_secret) {
-            let provider_name = std::env::var("POCKETID_PROVIDER_NAME")
-                .or_else(|_| std::env::var("OIDC_PROVIDER_NAME"))
-                .unwrap_or_else(|_| {
-                    if std::env::var("POCKETID_CLIENT_ID").is_ok()
-                        || std::env::var("POCKETID_ISSUER_URL").is_ok()
-                        || std::env::var("POCKETID_URL").is_ok()
-                    {
-                        "Pocket ID".to_string()
-                    } else {
-                        "OIDC".to_string()
-                    }
-                });
+            let provider_name =
+                std::env::var("OIDC_PROVIDER_NAME").unwrap_or_else(|_| "OIDC".to_string());
 
-            let redirect_uri = std::env::var("POCKETID_REDIRECT_URI")
-                .or_else(|_| std::env::var("OIDC_REDIRECT_URI"))
-                .unwrap_or_else(|_| {
-                    let base = if app_base.is_empty() {
-                        "http://localhost:3000"
-                    } else {
-                        app_base
-                    };
-                    format!("{}/login/oidc/callback", base)
-                });
+            let redirect_uri = std::env::var("OIDC_REDIRECT_URI").unwrap_or_else(|_| {
+                let base = if app_base.is_empty() {
+                    "http://localhost:3000"
+                } else {
+                    app_base
+                };
+                format!("{}/login/oidc/callback", base)
+            });
 
-            let scopes = std::env::var("OIDC_SCOPES")
-                .or_else(|_| std::env::var("POCKETID_SCOPES"))
-                .unwrap_or_else(|_| "openid email profile".to_string());
+            let scopes =
+                std::env::var("OIDC_SCOPES").unwrap_or_else(|_| "openid email profile".to_string());
 
-            let issuer_url = std::env::var("POCKETID_ISSUER_URL")
-                .or_else(|_| std::env::var("POCKETID_URL"))
-                .or_else(|_| std::env::var("OIDC_ISSUER_URL"))
-                .ok();
+            let issuer_url = std::env::var("OIDC_ISSUER_URL").ok();
 
             let auth_url = std::env::var("OIDC_AUTH_URL").ok();
             let token_url = std::env::var("OIDC_TOKEN_URL").ok();
@@ -2139,8 +2191,6 @@ async fn main() {
         .route("/login/google/callback", get(login_google_callback))
         .route("/login/oidc", get(login_oidc))
         .route("/login/oidc/callback", get(login_oidc_callback))
-        .route("/login/pocketid", get(login_oidc))
-        .route("/login/pocketid/callback", get(login_oidc_callback))
         .route("/register", get(register_form).post(register_submit))
         .route("/logout", get(logout).post(logout))
         .route("/api", get(api_guide))
@@ -2297,8 +2347,6 @@ mod oauth_tests {
             .route("/login/google/callback", get(login_google_callback))
             .route("/login/oidc", get(login_oidc))
             .route("/login/oidc/callback", get(login_oidc_callback))
-            .route("/login/pocketid", get(login_oidc))
-            .route("/login/pocketid/callback", get(login_oidc_callback))
             .route("/register", get(register_form).post(register_submit))
             .route("/logout", get(logout).post(logout))
             .merge(static_assets);
@@ -2420,14 +2468,14 @@ mod oauth_tests {
     async fn test_oidc_enabled_shows_button() {
         let oidc_config = OidcConfig {
             provider_name: "Pocket ID".to_string(),
-            client_id: "pocketid-client".to_string(),
-            client_secret: "pocketid-secret".to_string(),
+            client_id: "oidc-client".to_string(),
+            client_secret: "oidc-secret".to_string(),
             redirect_uri: "http://localhost:3000/login/oidc/callback".to_string(),
             scopes: "openid email profile".to_string(),
             issuer_url: None,
-            auth_url: Some("https://pocketid.example.com/authorize".to_string()),
-            token_url: Some("https://pocketid.example.com/api/oidc/token".to_string()),
-            userinfo_url: Some("https://pocketid.example.com/api/oidc/userinfo".to_string()),
+            auth_url: Some("https://id.example.com/authorize".to_string()),
+            token_url: Some("https://id.example.com/api/oidc/token".to_string()),
+            userinfo_url: Some("https://id.example.com/api/oidc/userinfo".to_string()),
         };
         let app = build_test_app(None, Some(oidc_config)).await;
 
@@ -2457,14 +2505,14 @@ mod oauth_tests {
         };
         let oidc_config = OidcConfig {
             provider_name: "Pocket ID".to_string(),
-            client_id: "pocketid-client".to_string(),
-            client_secret: "pocketid-secret".to_string(),
+            client_id: "oidc-client".to_string(),
+            client_secret: "oidc-secret".to_string(),
             redirect_uri: "http://localhost:3000/login/oidc/callback".to_string(),
             scopes: "openid email profile".to_string(),
             issuer_url: None,
-            auth_url: Some("https://pocketid.example.com/authorize".to_string()),
-            token_url: Some("https://pocketid.example.com/api/oidc/token".to_string()),
-            userinfo_url: Some("https://pocketid.example.com/api/oidc/userinfo".to_string()),
+            auth_url: Some("https://id.example.com/authorize".to_string()),
+            token_url: Some("https://id.example.com/api/oidc/token".to_string()),
+            userinfo_url: Some("https://id.example.com/api/oidc/userinfo".to_string()),
         };
         let app = build_test_app(Some(google_config), Some(oidc_config)).await;
 
@@ -2487,14 +2535,14 @@ mod oauth_tests {
     async fn test_oidc_redirect() {
         let oidc_config = OidcConfig {
             provider_name: "Pocket ID".to_string(),
-            client_id: "pocketid-client-123".to_string(),
+            client_id: "oidc-client-123".to_string(),
             client_secret: "secret-abc".to_string(),
             redirect_uri: "http://localhost:3000/login/oidc/callback".to_string(),
             scopes: "openid email profile".to_string(),
             issuer_url: None,
-            auth_url: Some("https://pocketid.example.com/authorize".to_string()),
-            token_url: Some("https://pocketid.example.com/api/oidc/token".to_string()),
-            userinfo_url: Some("https://pocketid.example.com/api/oidc/userinfo".to_string()),
+            auth_url: Some("https://id.example.com/authorize".to_string()),
+            token_url: Some("https://id.example.com/api/oidc/token".to_string()),
+            userinfo_url: Some("https://id.example.com/api/oidc/userinfo".to_string()),
         };
         let app = build_test_app(None, Some(oidc_config)).await;
 
@@ -2512,22 +2560,27 @@ mod oauth_tests {
             .unwrap()
             .to_str()
             .unwrap();
-        assert!(location.contains("https://pocketid.example.com/authorize"));
-        assert!(location.contains("client_id=pocketid-client-123"));
+        assert!(location.contains("https://id.example.com/authorize"));
+        assert!(location.contains("client_id=oidc-client-123"));
         assert!(
             location
                 .contains("redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Flogin%2Foidc%2Fcallback")
         );
         assert!(location.contains("scope=openid+email+profile"));
         assert!(location.contains("state="));
+        // Verify PKCE parameters are present
+        assert!(location.contains("code_challenge="));
+        assert!(location.contains("code_challenge_method=S256"));
 
-        let cookie_header = response
+        let cookie_headers: Vec<String> = response
             .headers()
-            .get("set-cookie")
-            .unwrap()
-            .to_str()
-            .unwrap();
-        assert!(cookie_header.contains("oidc_state="));
+            .get_all("set-cookie")
+            .iter()
+            .map(|v| v.to_str().unwrap().to_string())
+            .collect();
+        let combined = cookie_headers.join(" ");
+        assert!(combined.contains("oidc_state="));
+        assert!(combined.contains("oidc_verifier="));
     }
 
     #[tokio::test]
@@ -2539,9 +2592,9 @@ mod oauth_tests {
             redirect_uri: "http://localhost:3000/login/oidc/callback".to_string(),
             scopes: "openid email profile".to_string(),
             issuer_url: None,
-            auth_url: Some("https://pocketid.example.com/authorize".to_string()),
-            token_url: Some("https://pocketid.example.com/api/oidc/token".to_string()),
-            userinfo_url: Some("https://pocketid.example.com/api/oidc/userinfo".to_string()),
+            auth_url: Some("https://id.example.com/authorize".to_string()),
+            token_url: Some("https://id.example.com/api/oidc/token".to_string()),
+            userinfo_url: Some("https://id.example.com/api/oidc/userinfo".to_string()),
         };
         let app = build_test_app(None, Some(oidc_config)).await;
 
