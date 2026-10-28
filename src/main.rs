@@ -255,6 +255,13 @@ async fn default_index(State(state): State<AppState>) -> Response {
     }
 }
 
+async fn admin_users_page(State(state): State<AppState>, jar: PrivateCookieJar) -> Response {
+    if !is_admin_session(&jar) {
+        return Redirect::to("/login").into_response();
+    }
+    default_index(State(state)).await
+}
+
 async fn api_guide(State(state): State<AppState>, jar: PrivateCookieJar) -> impl IntoResponse {
     let user_id = get_session_user_id(&jar).await;
     let user_email = if let Some(uid) = &user_id {
@@ -397,6 +404,29 @@ async fn upload_image(mut multipart: Multipart) -> impl IntoResponse {
                 error: None,
             })
             .into_response();
+        }
+    }
+
+    Json(UploadResponse {
+        data: None,
+        error: Some("Upload failed".to_string()),
+    })
+    .into_response()
+}
+
+async fn upload_csv(mut multipart: Multipart) -> impl IntoResponse {
+    while let Some(field) = multipart.next_field().await.unwrap_or(None) {
+        if let Ok(bytes) = field.bytes().await {
+            let new_filename = format!("{}.csv", uuid::Uuid::new_v4());
+            let filepath = format!("data/uploads/{}", new_filename);
+            if std::fs::write(&filepath, bytes).is_ok() {
+                let url = format!("uploads/{}", new_filename);
+                return Json(UploadResponse {
+                    data: Some(UploadData { file_path: url }),
+                    error: None,
+                })
+                .into_response();
+            }
         }
     }
 
@@ -1454,6 +1484,7 @@ async fn main() {
 
     let protected_routes = Router::new()
         .route("/upload", post(upload_image))
+        .route("/upload-csv", post(upload_csv))
         .route("/import/photo", post(import_photo))
         .route("/import/paprika", post(import_paprika))
         .route("/api/v1/auth/passkeys", get(passkeys::passkeys_list))
@@ -1491,8 +1522,8 @@ async fn main() {
         .route("/shopping-list/", get(default_index))
         .route("/recipe/{id}", get(default_index))
         .route("/recipe/{id}/edit", get(default_index))
-        .route("/admin/users", get(default_index))
-        .route("/admin/users/", get(default_index))
+        .route("/admin/users", get(admin_users_page))
+        .route("/admin/users/", get(admin_users_page))
         .route("/recipe/favorite/{id}", post(toggle_favorite))
         .route("/login", get(login_form).post(login_submit))
         .route("/login/google", get(login_google))

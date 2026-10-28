@@ -290,3 +290,30 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted);
 }
+
+@media (max-width: 768px) {
+  .hide-mobile {
+    display: none !important;
+  }
+  .recipe-hero-img {
+    display: none !important;
+  }
+  .recipe-hero-img.force-show {
+    display: block !important;
+  }
+  #mobile-image-toggle {
+    display: flex !important;
+  }
+  .show-mobile-only {
+    display: flex;
+  }
+}
+
+@media (min-width: 769px) {
+  .hide-desktop,
+  .show-mobile-only,
+  #mobile-image-toggle,
+  #notes-tab-btn {
+    display: none !important;
+  }
+}

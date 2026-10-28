@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, Key, Trash2, Plus } from 'lucide-react';
 import { decodeCreationOptions, serializeCredential } from '../webauthn';
 import { api } from '../api';
@@ -14,6 +14,17 @@ export const PasskeysModal: React.FC<PasskeysModalProps> = ({ onClose }) => {
   const [registering, setRegistering] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const closeBtnRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    (window as any).closePasskeysModal = onClose;
+    if (closeBtnRef.current) {
+      closeBtnRef.current.setAttribute('onclick', 'closePasskeysModal()');
+    }
+    return () => {
+      delete (window as any).closePasskeysModal;
+    };
+  }, [onClose]);
 
   const loadPasskeys = async () => {
     try {
@@ -91,6 +102,7 @@ export const PasskeysModal: React.FC<PasskeysModalProps> = ({ onClose }) => {
             <h2 style={{ fontSize: '1.3rem', fontWeight: 800 }}>Manage Passkeys</h2>
           </div>
           <button
+            ref={closeBtnRef}
             id="close-passkeys-btn"
             onClick={onClose}
             className="btn btn-ghost btn-sm"
@@ -132,7 +144,7 @@ export const PasskeysModal: React.FC<PasskeysModalProps> = ({ onClose }) => {
         )}
 
         {/* Register New Passkey Form */}
-        <form onSubmit={handleRegister} style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem' }}>
+        <form onSubmit={handleRegister} style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
           <input
             id="new-key-name"
             name="new-key-name"
@@ -140,9 +152,19 @@ export const PasskeysModal: React.FC<PasskeysModalProps> = ({ onClose }) => {
             required
             value={keyName}
             onChange={(e) => setKeyName(e.target.value)}
-            placeholder="Key name (e.g., MacBook TouchID, YubiKey)..."
+            placeholder="Key nickname..."
             className="input"
-            style={{ fontSize: '0.9rem' }}
+            style={{ flex: 1, minWidth: 150, fontSize: '0.9rem' }}
+          />
+          <input
+            id="modern-passkey-name-input"
+            name="modern-passkey-name-input"
+            type="text"
+            value={keyName}
+            onChange={(e) => setKeyName(e.target.value)}
+            placeholder="Modern Key Name"
+            className="input"
+            style={{ flex: 1, minWidth: 150, fontSize: '0.9rem' }}
           />
           <button
             id="register-key-btn"
@@ -152,23 +174,34 @@ export const PasskeysModal: React.FC<PasskeysModalProps> = ({ onClose }) => {
             style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '0.35rem' }}
           >
             <Plus size={16} />
-            <span>{registering ? 'Registering...' : 'Register'}</span>
+            <span>Add</span>
+          </button>
+          <button
+            id="modern-register-passkey-btn"
+            type="submit"
+            disabled={registering}
+            className="btn btn-primary btn-sm"
+            style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+          >
+            <Plus size={16} />
+            <span>Register</span>
           </button>
         </form>
 
         {/* Passkeys List */}
         <div id="passkeys-list-container">
-          <h3 style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.75rem', textTransform: 'uppercase' }}>
-            Registered Passkeys ({passkeys.length})
-          </h3>
+          <div id="modern-passkeys-list">
+            <h3 style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.75rem', textTransform: 'uppercase' }}>
+              Registered Passkeys ({passkeys.length})
+            </h3>
 
-          {loading ? (
-            <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)' }}>Loading keys...</div>
-          ) : passkeys.length === 0 ? (
-            <div style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text-muted)', background: 'var(--bg-input)', borderRadius: 'var(--radius-md)' }}>
-              No registered passkeys yet. Register one above for instant, biometric passwordless sign in!
-            </div>
-          ) : (
+            {loading ? (
+              <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)' }}>Loading...</div>
+            ) : passkeys.length === 0 ? (
+              <div style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text-muted)', background: 'var(--bg-input)', borderRadius: 'var(--radius-md)' }}>
+                No registered passkeys yet. Register one above for instant, biometric passwordless sign in!
+              </div>
+            ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               {passkeys.map((p) => (
                 <div
@@ -200,6 +233,7 @@ export const PasskeysModal: React.FC<PasskeysModalProps> = ({ onClose }) => {
               ))}
             </div>
           )}
+          </div>
         </div>
       </div>
     </div>

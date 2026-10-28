@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import Papa from 'papaparse';
 import {
   Chart as ChartJS,
@@ -33,6 +33,7 @@ export const CombustionChart: React.FC<CombustionChartProps> = ({ csvUrl, tempUn
   const [chartData, setChartData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const chartRef = useRef<any>(null);
 
   useEffect(() => {
     let isCancelled = false;
@@ -68,6 +69,8 @@ export const CombustionChart: React.FC<CombustionChartProps> = ({ csvUrl, tempUn
           throw new Error('No temperature data points found in CSV');
         }
 
+        (window as any).combustionRawData = rows;
+
         const labels = rows.map((r) => ((parseFloat(r['Timestamp']) || 0) / 60).toFixed(1)); // minutes
 
         const convertTemp = (val: number | null | undefined) => {
@@ -86,7 +89,7 @@ export const CombustionChart: React.FC<CombustionChartProps> = ({ csvUrl, tempUn
           labels,
           datasets: [
             {
-              label: `Core (${tempUnit.toUpperCase()}°)`,
+              label: `Core (°${tempUnit.toUpperCase()})`,
               data: coreTemps,
               borderColor: '#ef4444',
               backgroundColor: 'rgba(239, 68, 68, 0.1)',
@@ -95,7 +98,7 @@ export const CombustionChart: React.FC<CombustionChartProps> = ({ csvUrl, tempUn
               borderWidth: 2,
             },
             {
-              label: `Surface (${tempUnit.toUpperCase()}°)`,
+              label: `Surface (°${tempUnit.toUpperCase()})`,
               data: surfaceTemps,
               borderColor: '#f59e0b',
               backgroundColor: 'rgba(245, 158, 11, 0.1)',
@@ -104,7 +107,7 @@ export const CombustionChart: React.FC<CombustionChartProps> = ({ csvUrl, tempUn
               borderWidth: 2,
             },
             {
-              label: `Ambient (${tempUnit.toUpperCase()}°)`,
+              label: `Ambient (°${tempUnit.toUpperCase()})`,
               data: ambientTemps,
               borderColor: '#3b82f6',
               backgroundColor: 'rgba(59, 130, 246, 0.1)',
@@ -128,25 +131,10 @@ export const CombustionChart: React.FC<CombustionChartProps> = ({ csvUrl, tempUn
     };
   }, [csvUrl, tempUnit]);
 
-  if (loading) {
-    return (
-      <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
-        Loading combustion thermometer data...
-      </div>
-    );
-  }
-
-  if (error || !chartData) {
-    return (
-      <div style={{ padding: '1.5rem', background: 'rgba(239, 68, 68, 0.1)', borderRadius: 'var(--radius-md)', color: 'var(--danger)' }}>
-        {error || 'Unable to render temperature chart'}
-      </div>
-    );
-  }
-
   const options = {
     responsive: true,
     maintainAspectRatio: false,
+    animation: false as const,
     interaction: {
       mode: 'index' as const,
       intersect: false,
@@ -155,7 +143,7 @@ export const CombustionChart: React.FC<CombustionChartProps> = ({ csvUrl, tempUn
       x: {
         title: {
           display: true,
-          text: 'Elapsed Time (minutes)',
+          text: 'Time (min)',
           color: '#94a3b8',
         },
         grid: {
@@ -183,6 +171,28 @@ export const CombustionChart: React.FC<CombustionChartProps> = ({ csvUrl, tempUn
     },
   };
 
+  useEffect(() => {
+    if (chartRef.current) {
+      (window as any).combustionChart = chartRef.current;
+    }
+  }, [chartData, tempUnit]);
+
+  if (loading) {
+    return (
+      <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+        Loading combustion thermometer data...
+      </div>
+    );
+  }
+
+  if (error || !chartData) {
+    return (
+      <div style={{ padding: '1.5rem', background: 'rgba(239, 68, 68, 0.1)', borderRadius: 'var(--radius-md)', color: 'var(--danger)' }}>
+        {error || 'Unable to render temperature chart'}
+      </div>
+    );
+  }
+
   return (
     <div style={{ width: '100%', height: 350, position: 'relative' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.75rem', color: 'var(--accent)', fontWeight: 600 }}>
@@ -190,7 +200,17 @@ export const CombustionChart: React.FC<CombustionChartProps> = ({ csvUrl, tempUn
         <span>Combustion Predictive Thermometer Profile</span>
       </div>
       <div style={{ width: '100%', height: 300 }}>
-        <Line data={chartData} options={options} />
+        <Line
+          id="combustionChart"
+          ref={(node) => {
+            chartRef.current = node;
+            if (node) {
+              (window as any).combustionChart = node;
+            }
+          }}
+          data={chartData}
+          options={options}
+        />
       </div>
     </div>
   );

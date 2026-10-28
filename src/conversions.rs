@@ -466,7 +466,14 @@ pub fn convert_recipe(
     let youtube_id = recipe.youtube_id();
 
     let steps = if !recipe.steps.is_empty() {
-        recipe.steps
+        recipe
+            .steps
+            .into_iter()
+            .map(|mut s| {
+                s.instruction = replace_text(&s.instruction, false);
+                s
+            })
+            .collect()
     } else {
         parse_recipe_steps(&recipe.markdown)
     };

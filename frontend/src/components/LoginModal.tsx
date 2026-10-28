@@ -6,17 +6,23 @@ import { api, getAppBase } from '../api';
 
 interface LoginModalProps {
   auth: AuthState;
+  initialTab?: 'login' | 'register';
   onClose: () => void;
   onLoginSuccess: (user: any) => void;
 }
 
-export const LoginModal: React.FC<LoginModalProps> = ({ auth, onClose, onLoginSuccess }) => {
-  const [tab, setTab] = useState<'login' | 'register'>('login');
+export const LoginModal: React.FC<LoginModalProps> = ({ auth, initialTab = 'login', onClose, onLoginSuccess }) => {
+  const [tab, setTab] = useState<'login' | 'register'>(initialTab);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [config, setConfig] = useState(auth.config);
+
+  useEffect(() => {
+    setTab(initialTab);
+  }, [initialTab]);
 
   useEffect(() => {
     if (!config?.oidc_auth_enabled && !config?.google_auth_enabled) {
@@ -30,24 +36,27 @@ export const LoginModal: React.FC<LoginModalProps> = ({ auth, onClose, onLoginSu
     e.preventDefault();
     setLoading(true);
     setError(null);
+    const base = getAppBase();
     try {
       if (tab === 'login') {
         const res = await api.login(email, password);
         onLoginSuccess(res.user);
         onClose();
+        window.history.pushState(null, '', base ? `${base}/` : '/');
       } else {
         // Form post to /register
-        const res = await fetch(`${getAppBase()}/register`, {
+        const res = await fetch(`${base}/register`, {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({ email, password }).toString(),
+          body: new URLSearchParams({ email, password, confirm_password: confirmPassword || password }).toString(),
         });
         if (!res.ok) throw new Error('Registration failed');
         // Now login
         const loginRes = await api.login(email, password);
         onLoginSuccess(loginRes.user);
         onClose();
+        window.history.pushState(null, '', base ? `${base}/` : '/');
       }
     } catch (err: any) {
       setError(err.message || 'Authentication failed');
@@ -88,6 +97,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({ auth, onClose, onLoginSu
       if (authData.user) {
         onLoginSuccess(authData.user);
         onClose();
+        const base = getAppBase();
+        window.history.pushState(null, '', base ? `${base}/` : '/');
       }
     } catch (err: any) {
       setError(err.message || 'Passkey login failed');
@@ -194,6 +205,24 @@ export const LoginModal: React.FC<LoginModalProps> = ({ auth, onClose, onLoginSu
               className="input"
             />
           </div>
+
+          {tab === 'register' && (
+            <div>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.3rem' }}>
+                Confirm Password
+              </label>
+              <input
+                id="confirm_password"
+                name="confirm_password"
+                type="password"
+                required
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="••••••••"
+                className="input"
+              />
+            </div>
+          )}
 
           <button
             id="login-submit-btn"

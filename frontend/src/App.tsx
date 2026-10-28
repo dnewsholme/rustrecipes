@@ -39,6 +39,7 @@ export const App: React.FC = () => {
 
   // Modals
   const [loginModalOpen, setLoginModalOpen] = useState(false);
+  const [loginModalTab, setLoginModalTab] = useState<'login' | 'register'>('login');
   const [passkeysModalOpen, setPasskeysModalOpen] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
 
@@ -114,6 +115,10 @@ export const App: React.FC = () => {
       } else if (path === '/admin/users' || path === '/admin/users/') {
         setActiveView('admin_users');
       } else if (path === '/login') {
+        setLoginModalTab('login');
+        setLoginModalOpen(true);
+      } else if (path === '/register') {
+        setLoginModalTab('register');
         setLoginModalOpen(true);
       }
     };
@@ -288,6 +293,7 @@ export const App: React.FC = () => {
         onLogout={async () => {
           await api.logout();
           setAuth({ ...auth, user: null });
+          navigateTo('recipes');
         }}
         onOpenNewRecipe={() => {
           setEditingRecipe(null);
@@ -508,6 +514,7 @@ export const App: React.FC = () => {
       {loginModalOpen && (
         <LoginModal
           auth={auth}
+          initialTab={loginModalTab}
           onClose={() => setLoginModalOpen(false)}
           onLoginSuccess={(user) => {
             setAuth({ ...auth, user });

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Check, ChevronLeft, ChevronRight, Clock, Play } from 'lucide-react';
+import { X, Check, ChevronLeft, ChevronRight, Clock, Play, Eye } from 'lucide-react';
 import type { Recipe } from '../types';
 
 interface CookModeModalProps {
@@ -11,7 +11,7 @@ interface CookModeModalProps {
 export const CookModeModal: React.FC<CookModeModalProps> = ({ recipe, onClose, onStartTimer }) => {
   const [currentStepIdx, setCurrentStepIdx] = useState(0);
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
-  const [checkedIngredients, setCheckedIngredients] = useState<Set<string>>(new Set());
+  const [checkedIngredients, setCheckedIngredients] = useState<Set<number>>(new Set());
 
   const steps = recipe.steps.length > 0 ? recipe.steps : [
     { step_number: 1, instruction: recipe.markdown || 'No directions specified.' }
@@ -29,12 +29,12 @@ export const CookModeModal: React.FC<CookModeModalProps> = ({ recipe, onClose, o
     setCompletedSteps(next);
   };
 
-  const toggleIngredientChecked = (ing: string) => {
+  const toggleIngredientChecked = (idx: number) => {
     const next = new Set(checkedIngredients);
-    if (next.has(ing)) {
-      next.delete(ing);
+    if (next.has(idx)) {
+      next.delete(idx);
     } else {
-      next.add(ing);
+      next.add(idx);
     }
     setCheckedIngredients(next);
   };
@@ -53,16 +53,19 @@ export const CookModeModal: React.FC<CookModeModalProps> = ({ recipe, onClose, o
   }
 
   return (
-    <div style={{
-      position: 'fixed',
-      inset: 0,
-      background: 'var(--bg-primary)',
-      zIndex: 2000,
-      display: 'flex',
-      flexDirection: 'column',
-      padding: '1.5rem',
-      overflow: 'hidden',
-    }}>
+    <div
+      id="cook-mode-overlay"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'var(--bg-primary)',
+        zIndex: 2000,
+        display: 'flex',
+        flexDirection: 'column',
+        padding: '1.5rem',
+        overflow: 'hidden',
+      }}
+    >
       {/* Top Bar */}
       <div style={{
         display: 'flex',
@@ -71,12 +74,31 @@ export const CookModeModal: React.FC<CookModeModalProps> = ({ recipe, onClose, o
         paddingBottom: '1rem',
         borderBottom: '1px solid var(--border)',
       }}>
-        <div>
-          <span className="badge badge-accent" style={{ marginBottom: '0.25rem' }}>COOK MODE</span>
-          <h2 style={{ fontSize: '1.4rem', fontWeight: 800 }}>{recipe.title}</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <div>
+            <span className="badge badge-accent" style={{ marginBottom: '0.25rem' }}>COOK MODE</span>
+            <h2 style={{ fontSize: '1.4rem', fontWeight: 800 }}>{recipe.title}</h2>
+          </div>
+          <div
+            id="wake-lock-status-text"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.35rem',
+              fontSize: '0.8rem',
+              color: 'var(--success)',
+              background: 'rgba(16, 185, 129, 0.1)',
+              padding: '0.25rem 0.6rem',
+              borderRadius: '9999px',
+            }}
+          >
+            <Eye size={14} />
+            <span>Screen Wake Lock Active</span>
+          </div>
         </div>
-        <button onClick={onClose} className="btn btn-secondary btn-sm" style={{ padding: '0.5rem' }}>
-          <X size={20} />
+
+        <button onClick={onClose} className="btn btn-secondary btn-sm" style={{ padding: '0.5rem 1rem' }}>
+          <X size={18} />
           <span>Exit</span>
         </button>
       </div>
@@ -95,19 +117,23 @@ export const CookModeModal: React.FC<CookModeModalProps> = ({ recipe, onClose, o
           <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
             Ingredients ({recipe.ingredients.length})
           </h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+          <ul id="cook-ingredients-list" style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
             {recipe.ingredients.map((ing, i) => {
-              const isChecked = checkedIngredients.has(ing);
+              const isChecked = checkedIngredients.has(i);
               return (
-                <label
+                <li
                   key={i}
-                  onClick={() => toggleIngredientChecked(ing)}
+                  className={`cook-ingredient-row ${isChecked ? 'completed' : ''}`}
+                  onClick={() => toggleIngredientChecked(i)}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
                     gap: '0.6rem',
                     cursor: 'pointer',
                     fontSize: '0.9rem',
+                    padding: '0.4rem 0.5rem',
+                    borderRadius: 'var(--radius-sm)',
+                    background: isChecked ? 'rgba(148, 163, 184, 0.08)' : 'transparent',
                     color: isChecked ? 'var(--text-muted)' : 'var(--text-primary)',
                     textDecoration: isChecked ? 'line-through' : 'none',
                     userSelect: 'none',
@@ -120,38 +146,56 @@ export const CookModeModal: React.FC<CookModeModalProps> = ({ recipe, onClose, o
                     style={{ accentColor: 'var(--accent)', width: 16, height: 16 }}
                   />
                   <span>{ing}</span>
-                </label>
+                </li>
               );
             })}
-          </div>
+          </ul>
         </div>
 
         {/* Right: Step Progression */}
         <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-          {/* Step Card */}
-          <div className="card" style={{ padding: '2.5rem', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
-              <span style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--accent)' }}>
-                Step {currentStepIdx + 1} of {steps.length}
-              </span>
-              <button
-                onClick={() => toggleStepCompleted(currentStepIdx)}
-                className={`btn btn-sm ${completedSteps.has(currentStepIdx) ? 'btn-primary' : 'btn-secondary'}`}
-              >
-                <Check size={16} />
-                <span>{completedSteps.has(currentStepIdx) ? 'Step Done' : 'Mark as Done'}</span>
-              </button>
-            </div>
+          {/* Step Cards List */}
+          <div id="cook-steps-list" className="card" style={{ padding: '2.5rem', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            {steps.map((st, idx) => {
+              if (idx !== currentStepIdx && steps.length > 1) return null;
+              const isStepDone = completedSteps.has(idx);
+              return (
+                <div
+                  key={idx}
+                  className={`cook-step-card ${isStepDone ? 'completed' : ''}`}
+                  onClick={() => toggleStepCompleted(idx)}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
+                    <span style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--accent)' }}>
+                      Step {idx + 1} of {steps.length}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleStepCompleted(idx);
+                      }}
+                      className={`btn btn-sm ${isStepDone ? 'btn-primary' : 'btn-secondary'}`}
+                    >
+                      <Check size={16} />
+                      <span>{isStepDone ? 'Step Done' : 'Mark as Done'}</span>
+                    </button>
+                  </div>
 
-            {/* Instruction text with large typography */}
-            <p style={{
-              fontSize: '1.6rem',
-              fontWeight: 500,
-              lineHeight: 1.6,
-              color: 'var(--text-primary)',
-            }}>
-              {currentStep.instruction}
-            </p>
+                  {/* Instruction text with large typography */}
+                  <p style={{
+                    fontSize: '1.6rem',
+                    fontWeight: 500,
+                    lineHeight: 1.6,
+                    color: isStepDone ? 'var(--text-muted)' : 'var(--text-primary)',
+                    textDecoration: isStepDone ? 'line-through' : 'none',
+                  }}>
+                    {st.instruction}
+                  </p>
+                </div>
+              );
+            })}
 
             {/* Detected Timers */}
             {timerMatches.length > 0 && (

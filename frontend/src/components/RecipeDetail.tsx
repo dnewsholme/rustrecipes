@@ -11,11 +11,11 @@ import {
   Calendar,
   ExternalLink,
   Save,
-  Check,
   ChevronLeft,
+  Image as ImageIcon,
 } from 'lucide-react';
 import type { Recipe, AuthState } from '../types';
-import { api } from '../api';
+import { api, resolveMediaUrl } from '../api';
 import { CombustionChart } from './CombustionChart';
 import { CookModeModal } from './CookModeModal';
 
@@ -52,6 +52,12 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({
   const [temp, setTemp] = useState<'original' | 'c' | 'f'>('original');
   const [bakers, setBakers] = useState<boolean>(false);
 
+  // Mobile image toggle
+  const [showPhoto, setShowPhoto] = useState(false);
+
+  // Mobile tabs ('ingredients', 'directions', 'graph', 'fermentation', 'notes')
+  const [mobileTab, setMobileTab] = useState<'ingredients' | 'directions' | 'graph' | 'fermentation' | 'notes'>('ingredients');
+
   // Personal notes
   const [notes, setNotes] = useState<string>('');
   const [savingNotes, setSavingNotes] = useState(false);
@@ -65,7 +71,7 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({
   const [fermentType, setFermentType] = useState<'starter' | 'yeast'>('starter');
   const [fermentAmount, setFermentAmount] = useState<number>(20);
   const [fermentTemp, setFermentTemp] = useState<number>(24);
-  const [fermentResult, setFermentResult] = useState<{ bulk_hours: number; proof_hours: number } | null>(null);
+  const [fermentResult, setFermentResult] = useState<{ estimated_hours?: number } | null>(null);
 
   // Fetch recipe with current conversion parameters
   const loadRecipe = async (overrideScale?: number, overrideUnit?: any, overrideTemp?: any, overrideBakers?: boolean) => {
@@ -78,9 +84,9 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({
       });
       setRecipe(data);
 
-      if (data.leaven_type && data.leaven_amount) {
+      if (data.leaven_type && data.leaven_amount !== null && data.leaven_amount !== undefined) {
         setFermentType(data.leaven_type === 'starter' ? 'starter' : 'yeast');
-        setFermentAmount(Math.round(data.leaven_amount));
+        setFermentAmount(Math.round(data.leaven_amount * 10) / 10);
       }
     } catch (err: any) {
       setError(err.message || 'Failed to load recipe');
@@ -91,10 +97,13 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({
 
   useEffect(() => {
     loadRecipe();
+  }, [recipeId]);
+
+  useEffect(() => {
     if (auth.user) {
       api.getRecipeNotes(recipeId).then(setNotes).catch(() => {});
     }
-  }, [recipeId]);
+  }, [recipeId, auth.user]);
 
   // Recalculate sourdough fermentation
   useEffect(() => {
@@ -112,7 +121,12 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({
 
   const handleUnitChange = (newUnit: 'original' | 'metric' | 'imperial') => {
     setUnit(newUnit);
-    loadRecipe(scale, newUnit, temp, bakers);
+    // When switching to metric or imperial, automatically align temp
+    let nextTemp = temp;
+    if (newUnit === 'metric') nextTemp = 'c';
+    if (newUnit === 'imperial') nextTemp = 'f';
+    setTemp(nextTemp);
+    loadRecipe(scale, newUnit, nextTemp, bakers);
   };
 
   const handleTempChange = (newTemp: 'original' | 'c' | 'f') => {
@@ -129,7 +143,17 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({
   const handleSaveNotes = async () => {
     setSavingNotes(true);
     try {
-      await api.saveRecipeNotes(recipeId, notes);
+      let noteToSave = notes;
+      const textareas = document.querySelectorAll('textarea.recipe-notes-textarea');
+      for (const ta of textareas) {
+        const val = (ta as HTMLTextAreaElement).value;
+        if (val) {
+          noteToSave = val;
+          break;
+        }
+      }
+      await api.saveRecipeNotes(recipeId, noteToSave);
+      setNotes(noteToSave);
       setNotesSaved(true);
       setTimeout(() => setNotesSaved(false), 2000);
     } catch (err) {
@@ -149,6 +173,44 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({
     }
   };
 
+  // Helper to highlight temperatures and amounts
+  const formatTextWithSpans = (text: string) => {
+    if (!text) return null;
+
+    const tokenRegex = /(\b\d+(?:\s*[-–—]\s*\d+)?\s*°\s*[CcFf]\b|\b\d+\s*(?:degrees?\s*)?(?:[Cc]elsius|[Ff]ahrenheit)\b)|(\b\d+(?:\.\d+)?%|\b\d+(?:\.\d+)?\s*(?:g|ml|kg|l|cups?|tbsp|tsp|oz|lb|pound|pounds|pinch|pinches|dash|dashes|clove|cloves|slice|slices)\b|\b\d+\s*[\/⁄]\s*\d+\s*(?:cups?|tbsp|tsp|oz|g|ml)?|\b\d*\s*[½⅓⅔¼¾⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞]\s*(?:cups?|tbsp|tsp|oz|g|ml)?)/gi;
+
+    const elements: React.ReactNode[] = [];
+    let lastIndex = 0;
+    for (const match of text.matchAll(tokenRegex)) {
+      const matchIndex = match.index ?? 0;
+      const matchStr = match[0];
+      if (matchIndex > lastIndex) {
+        elements.push(text.slice(lastIndex, matchIndex));
+      }
+      if (match[1]) {
+        elements.push(
+          <span key={matchIndex} className="instruction-temp" style={{ fontWeight: 700, color: 'var(--accent)' }}>
+            {matchStr}
+          </span>
+        );
+      } else {
+        elements.push(
+          <span key={matchIndex} className="instruction-amount" style={{ fontWeight: 700, color: 'var(--accent)' }}>
+            {matchStr}
+          </span>
+        );
+      }
+      lastIndex = matchIndex + matchStr.length;
+    }
+    if (lastIndex < text.length) {
+      elements.push(text.slice(lastIndex));
+    }
+    return elements;
+  };
+
+  const isIngredientHeader = (text: string) => text.startsWith('##') || text.startsWith('# ');
+  const formatIngredientHeader = (text: string) => text.replace(/^#+\s*/, '');
+
   if (loading) {
     return <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-secondary)' }}>Loading recipe...</div>;
   }
@@ -167,7 +229,7 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({
   const canModify = auth.user && (auth.user.is_admin || auth.user.id === recipe.owner_id);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', animation: 'fadeIn 0.2s ease-out' }}>
+    <div className="recipe-content" style={{ display: 'flex', flexDirection: 'column', gap: '2rem', animation: 'fadeIn 0.2s ease-out' }}>
       {/* Top back & actions bar */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
         <button onClick={onBack} className="btn btn-secondary btn-sm">
@@ -175,9 +237,10 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({
           <span>All Recipes</span>
         </button>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
           {/* Cook Mode CTA */}
           <button
+            id="start-cook-mode-btn"
             onClick={() => setCookModeOpen(true)}
             className="btn btn-primary"
             style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}
@@ -220,11 +283,23 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({
           {/* Edit / Delete for Owner/Admin */}
           {canModify && (
             <>
-              <button onClick={() => onEdit(recipe)} className="btn btn-secondary btn-sm" title="Edit recipe">
+              <button
+                onClick={() => onEdit(recipe)}
+                className="btn btn-secondary btn-sm"
+                title="Edit recipe"
+                style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}
+              >
                 <Edit size={16} />
+                <span>Edit Recipe</span>
               </button>
-              <button onClick={() => onDelete(recipe.id)} className="btn btn-danger btn-sm" title="Delete recipe">
+              <button
+                onClick={() => onDelete(recipe.id)}
+                className="btn btn-danger btn-sm"
+                title="Delete recipe"
+                style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}
+              >
                 <Trash2 size={16} />
+                <span>Delete</span>
               </button>
             </>
           )}
@@ -238,10 +313,42 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({
             {recipe.title}
           </h1>
 
+          {/* Hero Image & Mobile Toggle */}
+          {recipe.image && (
+            <div style={{ marginBottom: '1rem' }}>
+              {/* Mobile image toggle button */}
+              <button
+                id="mobile-image-toggle"
+                onClick={() => setShowPhoto(!showPhoto)}
+                className="btn btn-secondary btn-sm show-mobile-only"
+                style={{ marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+              >
+                <ImageIcon size={16} />
+                <span>{showPhoto ? 'Hide Photo' : 'Show Photo'}</span>
+              </button>
+
+              <div
+                id="recipe-hero-image"
+                className={`recipe-hero-img ${showPhoto ? 'force-show' : ''}`}
+                style={{ maxHeight: 400, borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}
+              >
+                <img
+                  src={resolveMediaUrl(recipe.image)}
+                  alt={recipe.title}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Converted Description with highlighted temperatures */}
           {recipe.description && (
-            <p style={{ fontSize: '1.05rem', color: 'var(--text-secondary)', lineHeight: 1.6, fontStyle: 'italic' }}>
-              {recipe.description}
-            </p>
+            <div
+              id="recipe-description"
+              style={{ fontSize: '1.05rem', color: 'var(--text-secondary)', lineHeight: 1.6, fontStyle: 'italic' }}
+            >
+              {formatTextWithSpans(recipe.description)}
+            </div>
           )}
 
           {/* Meta Badges */}
@@ -249,7 +356,7 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({
             {recipe.servings && (
               <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                 <Users size={16} color="var(--accent)" />
-                <strong>{recipe.servings}</strong> servings
+                <span id="servings-count" style={{ fontWeight: 700 }}>{recipe.servings}</span> servings
               </span>
             )}
             {recipe.prep_time && (
@@ -264,9 +371,9 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({
                 Cook: {recipe.cook_time}
               </span>
             )}
-            {recipe.overall_hydration && (
-              <span className="badge badge-accent">
-                {(recipe.overall_hydration * 100).toFixed(1)}% Hydration
+            {recipe.overall_hydration !== null && recipe.overall_hydration !== undefined && (
+              <span id="overall-hydration-val" className="badge badge-accent">
+                {Math.round(recipe.overall_hydration * 100)}% Hydration
               </span>
             )}
             {recipe.source_url && (
@@ -337,34 +444,58 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({
           {/* Unit System */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Units:</span>
-            {(['original', 'metric', 'imperial'] as const).map((u) => (
-              <button
-                key={u}
-                onClick={() => handleUnitChange(u)}
-                className={`btn btn-sm ${unit === u ? 'btn-primary' : 'btn-secondary'}`}
-                style={{ textTransform: 'capitalize' }}
-              >
-                {u}
-              </button>
-            ))}
+            <button
+              id="unit-original"
+              onClick={() => handleUnitChange('original')}
+              className={`btn btn-sm ${unit === 'original' ? 'btn-primary' : 'btn-secondary'}`}
+            >
+              Original
+            </button>
+            <button
+              id="unit-metric"
+              onClick={() => handleUnitChange('metric')}
+              className={`btn btn-sm ${unit === 'metric' ? 'btn-primary' : 'btn-secondary'}`}
+            >
+              Metric
+            </button>
+            <button
+              id="unit-imperial"
+              onClick={() => handleUnitChange('imperial')}
+              className={`btn btn-sm ${unit === 'imperial' ? 'btn-primary' : 'btn-secondary'}`}
+            >
+              Imperial
+            </button>
           </div>
 
           {/* Temperature */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Temp:</span>
-            {(['original', 'c', 'f'] as const).map((t) => (
-              <button
-                key={t}
-                onClick={() => handleTempChange(t)}
-                className={`btn btn-sm ${temp === t ? 'btn-primary' : 'btn-secondary'}`}
-              >
-                {t === 'original' ? 'Original' : `°${t.toUpperCase()}`}
-              </button>
-            ))}
+            <button
+              id="temp-original"
+              onClick={() => handleTempChange('original')}
+              className={`btn btn-sm ${temp === 'original' ? 'btn-primary' : 'btn-secondary'}`}
+            >
+              Original
+            </button>
+            <button
+              id="temp-c"
+              onClick={() => handleTempChange('c')}
+              className={`btn btn-sm ${temp === 'c' ? 'btn-primary' : 'btn-secondary'}`}
+            >
+              °C
+            </button>
+            <button
+              id="temp-f"
+              onClick={() => handleTempChange('f')}
+              className={`btn btn-sm ${temp === 'f' ? 'btn-primary' : 'btn-secondary'}`}
+            >
+              °F
+            </button>
           </div>
 
           {/* Baker's Percentage */}
           <button
+            id="unit-bakers"
             onClick={handleBakersToggle}
             className={`btn btn-sm ${bakers ? 'btn-primary' : 'btn-secondary'}`}
           >
@@ -373,12 +504,64 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({
         </div>
       </div>
 
-      {/* Sourdough Fermentation Calculator (if leaven detected) */}
+      {/* Mobile Tab Navigation */}
+      <div className="show-mobile-only" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
+        <button
+          onClick={() => setMobileTab('ingredients')}
+          className={`tab-btn btn btn-sm ${mobileTab === 'ingredients' ? 'btn-primary' : 'btn-ghost'}`}
+        >
+          Ingredients
+        </button>
+        <button
+          onClick={() => setMobileTab('directions')}
+          className={`tab-btn btn btn-sm ${mobileTab === 'directions' ? 'btn-primary' : 'btn-ghost'}`}
+        >
+          Directions
+        </button>
+        {recipe.combustion_csv && (
+          <button
+            onClick={() => setMobileTab('graph')}
+            className={`tab-btn btn btn-sm ${mobileTab === 'graph' ? 'btn-primary' : 'btn-ghost'}`}
+          >
+            Graph
+          </button>
+        )}
+        {recipe.leaven_type && (
+          <button
+            id="fermentation-tab-btn"
+            onClick={() => setMobileTab('fermentation')}
+            className={`tab-btn btn btn-sm ${mobileTab === 'fermentation' ? 'btn-primary' : 'btn-ghost'}`}
+          >
+            Fermentation
+          </button>
+        )}
+        {auth.user && (
+          <button
+            id="notes-tab-btn"
+            onClick={() => setMobileTab('notes')}
+            className={`tab-btn btn btn-sm ${mobileTab === 'notes' ? 'btn-primary' : 'btn-ghost'}`}
+          >
+            Notes
+          </button>
+        )}
+      </div>
+
+      {/* Sourdough Fermentation Calculator */}
       {recipe.leaven_type && (
-        <div className="card" style={{ padding: '1.25rem', background: 'rgba(249, 115, 22, 0.05)', borderColor: 'rgba(249, 115, 22, 0.2)' }}>
-          <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--accent)' }}>
-            Sourdough Fermentation Estimator
-          </h3>
+        <div
+          id="fermentation-tab"
+          className={`card ${mobileTab === 'fermentation' ? 'active' : ''}`}
+          style={{ padding: '1.25rem', background: 'rgba(249, 115, 22, 0.05)', borderColor: 'rgba(249, 115, 22, 0.2)' }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+            <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--accent)' }}>
+              Sourdough Fermentation Estimator
+            </h3>
+            <span id="amount-auto-detected" className="badge" style={{ fontSize: '0.75rem', background: 'rgba(249, 115, 22, 0.2)', color: 'var(--accent)' }}>
+              Auto-detected from recipe
+            </span>
+          </div>
+
           <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
               <span style={{ fontSize: '0.85rem' }}>Leaven:</span>
@@ -396,7 +579,9 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
               <span style={{ fontSize: '0.85rem' }}>Amount (%):</span>
               <input
+                id="leaven-amount"
                 type="number"
+                step="0.1"
                 value={fermentAmount}
                 onChange={(e) => setFermentAmount(parseFloat(e.target.value) || 0)}
                 className="input"
@@ -417,141 +602,166 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({
 
             {fermentResult && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginLeft: 'auto', fontWeight: 600, color: 'var(--text-primary)' }}>
-                <span>Bulk: ~{fermentResult.bulk_hours.toFixed(1)} hrs</span>
-                <span>Proof: ~{fermentResult.proof_hours.toFixed(1)} hrs</span>
+                <span>Est. Time: ~{(fermentResult.estimated_hours ?? 0).toFixed(1)} hrs</span>
               </div>
             )}
           </div>
         </div>
       )}
 
-      {/* Main Recipe Content: Ingredients & Directions */}
+      {/* Combustion Graph Container */}
+      {recipe.combustion_csv && (
+        <div id="graph-tab" className={`card ${mobileTab === 'graph' ? 'active' : ''}`} style={{ padding: '1.5rem' }}>
+          <CombustionChart csvUrl={recipe.combustion_csv} tempUnit={temp === 'f' ? 'f' : 'c'} />
+        </div>
+      )}
+
+      {/* Main Recipe Content: Ingredients & Directions Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 380px) 1fr', gap: '2rem' }}>
-        {/* Ingredients Checklist */}
-        <div className="card" style={{ padding: '1.75rem', height: 'fit-content' }}>
+        {/* Ingredients Column */}
+        <div id="ingredients-tab" className={`card tab-content ${mobileTab === 'ingredients' ? 'active' : ''}`} style={{ padding: '1.75rem', height: 'fit-content' }}>
           <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1.25rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
             Ingredients
           </h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            {recipe.structured_ingredients && recipe.structured_ingredients.length > 0 ? (
-              recipe.structured_ingredients.map((ing, idx) => {
-                if (ing.is_header) {
-                  return (
-                    <div
-                      key={idx}
-                      style={{
-                        fontSize: '1rem',
-                        fontWeight: 700,
-                        color: 'var(--accent)',
-                        marginTop: idx === 0 ? 0 : '1rem',
-                        marginBottom: '0.25rem',
-                        borderBottom: '1px solid var(--border)',
-                        paddingBottom: '0.25rem',
-                      }}
-                    >
-                      {ing.name}
-                    </div>
-                  );
-                }
+          <ul id="ingredients-list" style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+            {recipe.ingredients.map((ing, idx) => {
+              if (isIngredientHeader(ing)) {
                 return (
-                  <div
+                  <li
                     key={idx}
+                    className="ingredient-section-header"
                     style={{
-                      display: 'flex',
-                      alignItems: 'baseline',
-                      gap: '0.5rem',
-                      padding: '0.35rem 0',
-                      borderBottom: '1px solid rgba(148, 163, 184, 0.08)',
-                      fontSize: '0.95rem',
+                      fontSize: '1.05rem',
+                      fontWeight: 700,
+                      color: 'var(--accent)',
+                      marginTop: idx === 0 ? 0 : '1rem',
+                      marginBottom: '0.25rem',
+                      borderBottom: '1px solid var(--border)',
+                      paddingBottom: '0.25rem',
                     }}
                   >
-                    <span style={{ color: 'var(--accent)', fontWeight: 600 }}>•</span>
-                    <span>{ing.raw_text}</span>
-                  </div>
+                    {formatIngredientHeader(ing)}
+                  </li>
                 );
-              })
-            ) : (
-              recipe.ingredients.map((ing, idx) => (
-                <div key={idx} style={{ padding: '0.35rem 0', fontSize: '0.95rem' }}>
-                  • {ing}
-                </div>
-              ))
-            )}
-          </div>
+              }
+              return (
+                <li
+                  key={idx}
+                  className="ingredient-item"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'baseline',
+                    gap: '0.5rem',
+                    padding: '0.4rem 0',
+                    borderBottom: '1px solid rgba(148, 163, 184, 0.08)',
+                    fontSize: '0.95rem',
+                  }}
+                >
+                  <span style={{ color: 'var(--accent)', fontWeight: 600 }}>•</span>
+                  <span>{formatTextWithSpans(ing)}</span>
+                </li>
+              );
+            })}
+          </ul>
         </div>
 
-        {/* Directions / Instructions */}
+        {/* Directions / Instructions Column */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          <div className="card" style={{ padding: '1.75rem' }}>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1.25rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
-              Instructions
-            </h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-              {recipe.steps && recipe.steps.length > 0 ? (
-                recipe.steps.map((step) => (
-                  <div key={step.step_number} style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
-                    <div style={{
-                      width: 28,
-                      height: 28,
-                      borderRadius: '999px',
-                      background: 'var(--bg-card-hover)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontWeight: 700,
-                      fontSize: '0.85rem',
-                      color: 'var(--accent)',
-                      flexShrink: 0,
-                    }}>
-                      {step.step_number}
+          <div id="directions-tab" className={`card tab-content ${mobileTab === 'directions' ? 'active' : ''}`} style={{ padding: '1.75rem' }}>
+            <div id="recipe-instructions">
+              <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1.25rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>
+                Directions
+              </h2>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                {recipe.steps && recipe.steps.length > 0 ? (
+                  recipe.steps.map((step) => (
+                    <div key={step.step_number} style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+                      <div style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: '999px',
+                        background: 'var(--bg-card-hover)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontWeight: 700,
+                        fontSize: '0.85rem',
+                        color: 'var(--accent)',
+                        flexShrink: 0,
+                      }}>
+                        {step.step_number}
+                      </div>
+                      <p style={{ fontSize: '1.05rem', lineHeight: 1.6, color: 'var(--text-primary)' }}>
+                        {formatTextWithSpans(step.instruction)}
+                      </p>
                     </div>
-                    <p style={{ fontSize: '1.05rem', lineHeight: 1.6, color: 'var(--text-primary)' }}>
-                      {step.instruction}
-                    </p>
+                  ))
+                ) : (
+                  <div style={{ lineHeight: 1.7, fontSize: '1.05rem' }}>
+                    {formatTextWithSpans(recipe.markdown)}
                   </div>
-                ))
-              ) : (
-                <div
-                  dangerouslySetInnerHTML={{ __html: recipe.html || recipe.markdown }}
-                  style={{ lineHeight: 1.7, fontSize: '1.05rem' }}
-                />
-              )}
+                )}
+              </div>
             </div>
           </div>
 
-          {/* Combustion Thermometer Chart (if available) */}
-          {recipe.combustion_csv && (
-            <div className="card" style={{ padding: '1.75rem' }}>
-              <CombustionChart csvUrl={recipe.combustion_csv} tempUnit={temp === 'f' ? 'f' : 'c'} />
-            </div>
-          )}
-
-          {/* Personal Recipe Notes */}
+          {/* Desktop Notes Card (Hidden on mobile via CSS) */}
           {auth.user && (
-            <div className="card" style={{ padding: '1.5rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-                <h3 style={{ fontSize: '1.05rem', fontWeight: 700 }}>Personal Recipe Notes</h3>
+            <div id="desktop-notes-card" className="card hide-mobile" style={{ padding: '1.75rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Personal Recipe Notes</h3>
                 <button
                   onClick={handleSaveNotes}
                   disabled={savingNotes}
-                  className="btn btn-secondary btn-sm"
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}
+                  className="btn btn-secondary btn-sm save-notes-btn"
+                  style={{
+                    backgroundColor: notesSaved ? '#10b981' : undefined,
+                    color: notesSaved ? '#fff' : undefined,
+                  }}
                 >
-                  {notesSaved ? <Check size={14} color="var(--success)" /> : <Save size={14} />}
-                  <span>{notesSaved ? 'Saved!' : 'Save Notes'}</span>
+                  <Save size={14} />
+                  <span>{notesSaved ? 'Saved!' : savingNotes ? 'Saving...' : 'Save Notes'}</span>
                 </button>
               </div>
               <textarea
+                className="textarea recipe-notes-textarea"
+                rows={4}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="Write your private baking notes, oven temperatures, adjustments..."
-                rows={4}
-                className="textarea"
               />
             </div>
           )}
         </div>
       </div>
+
+      {/* Mobile Notes Tab Panel (Shown on mobile when active) */}
+      {auth.user && (
+        <div id="notes-tab" className={`card show-mobile-only ${mobileTab === 'notes' ? 'active' : ''}`} style={{ padding: '1.5rem', display: mobileTab === 'notes' ? 'block' : 'none' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 700 }}>Personal Recipe Notes</h3>
+            <button
+              onClick={handleSaveNotes}
+              disabled={savingNotes}
+              className="btn btn-secondary btn-sm save-notes-btn"
+              style={{
+                backgroundColor: notesSaved ? '#10b981' : undefined,
+                color: notesSaved ? '#fff' : undefined,
+              }}
+            >
+              <Save size={14} />
+              <span>{notesSaved ? 'Saved!' : savingNotes ? 'Saving...' : 'Save Notes'}</span>
+            </button>
+          </div>
+          <textarea
+            className="textarea recipe-notes-textarea"
+            rows={4}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Write your private baking notes, oven temperatures, adjustments..."
+          />
+        </div>
+      )}
 
       {/* Fullscreen Cook Mode Modal */}
       {cookModeOpen && (

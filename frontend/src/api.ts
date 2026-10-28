@@ -56,9 +56,22 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   if (!res.ok) {
     let errorMsg = `Request failed: ${res.status} ${res.statusText}`;
     try {
-      const data = await res.json();
-      if (data?.error?.message) {
-        errorMsg = data.error.message;
+      const text = await res.text();
+      try {
+        const data = JSON.parse(text);
+        if (typeof data === 'string') {
+          errorMsg = data;
+        } else if (data?.error?.message) {
+          errorMsg = data.error.message;
+        } else if (data?.error) {
+          errorMsg = typeof data.error === 'string' ? data.error : JSON.stringify(data.error);
+        } else if (data?.message) {
+          errorMsg = data.message;
+        }
+      } catch {
+        if (text && text.trim().length > 0) {
+          errorMsg = text.trim();
+        }
       }
     } catch {
       // fallback
@@ -171,7 +184,7 @@ export const api = {
   },
 
   // Sourdough Fermentation
-  async calculateFerment(type: 'starter' | 'yeast', amount: number, temp: number): Promise<{ bulk_hours: number; proof_hours: number }> {
+  async calculateFerment(type: 'starter' | 'yeast', amount: number, temp: number): Promise<{ estimated_hours: number }> {
     return request(`/ferment?type=${type}&amount=${amount}&temp=${temp}`);
   },
 
@@ -288,14 +301,23 @@ export const api = {
   async uploadFile(file: File): Promise<string> {
     const formData = new FormData();
     formData.append('file', file);
-    const res = await fetch(`${getAppBase()}/upload`, {
+    const endpoint = file.name.endsWith('.csv') ? `${getAppBase()}/upload-csv` : `${getAppBase()}/upload`;
+    const res = await fetch(endpoint, {
       method: 'POST',
       credentials: 'include',
       body: formData,
     });
     if (!res.ok) throw new Error('File upload failed');
     const data = await res.json();
-    return data.url || data.path || '';
+    return (
+      data.data?.filePath ||
+      data.data?.file_path ||
+      data.filePath ||
+      data.file_path ||
+      data.url ||
+      data.path ||
+      ''
+    );
   },
 
   // Admin User Management

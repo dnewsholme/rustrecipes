@@ -76,18 +76,50 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
     setSaving(true);
     setError(null);
 
-    const parsedTags = tags
+    const titleEl = document.getElementById('title') as HTMLInputElement | null;
+    const finalTitle = titleEl ? titleEl.value.trim() : title.trim();
+
+    const tagsEl = document.getElementById('tags') as HTMLInputElement | null;
+    const finalTags = tagsEl ? tagsEl.value : tags;
+
+    const ingredientsEl = document.getElementById('ingredients') as HTMLTextAreaElement | null;
+    const finalIngredientsText = ingredientsEl ? ingredientsEl.value : ingredientsText;
+
+    const markdownEl = document.getElementById('markdown') as HTMLTextAreaElement | null;
+    const finalMarkdown = markdownEl ? markdownEl.value.trim() : markdown.trim();
+
+    const parsedTags = finalTags
       .split(',')
       .map((t) => t.trim())
       .filter((t) => t.length > 0);
 
-    const parsedIngredients = ingredientsText
+    const parsedIngredients = finalIngredientsText
       .split('\n')
       .map((i) => i.trim())
       .filter((i) => i.length > 0);
 
+    let finalCombustionUrl = combustionUrl.trim();
+    const csvFileInput = document.getElementById('combustion_csv_upload') as HTMLInputElement | null;
+    if (csvFileInput?.files && csvFileInput.files.length > 0 && !finalCombustionUrl) {
+      try {
+        finalCombustionUrl = await api.uploadFile(csvFileInput.files[0]);
+      } catch (err) {
+        console.error('Failed to upload combustion CSV during save:', err);
+      }
+    }
+
+    let finalImageUrl = imageUrl.trim();
+    const imageFileInput = document.getElementById('cover_image') as HTMLInputElement | null;
+    if (imageFileInput?.files && imageFileInput.files.length > 0 && !finalImageUrl) {
+      try {
+        finalImageUrl = await api.uploadFile(imageFileInput.files[0]);
+      } catch (err) {
+        console.error('Failed to upload image during save:', err);
+      }
+    }
+
     const input: RecipeInput = {
-      title: title.trim(),
+      title: finalTitle,
       description: description.trim() || null,
       servings: typeof servings === 'number' ? servings : null,
       prep_time: prepTime.trim() || null,
@@ -95,10 +127,10 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
       tags: parsedTags,
       source_url: sourceUrl.trim() || null,
       video_url: videoUrl.trim() || null,
-      image: imageUrl.trim() || null,
-      combustion_csv: combustionUrl.trim() || null,
+      image: finalImageUrl || null,
+      combustion_csv: finalCombustionUrl || null,
       ingredients: parsedIngredients,
-      markdown: markdown.trim(),
+      markdown: finalMarkdown,
       is_public: isPublic,
     };
 
@@ -274,7 +306,7 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
                 <label className="btn btn-secondary btn-sm" style={{ cursor: 'pointer', flexShrink: 0 }}>
                   <Upload size={16} />
                   <span>{uploadingImage ? '...' : 'Upload'}</span>
-                  <input type="file" accept="image/*" onChange={handleImageFileChange} style={{ display: 'none' }} />
+                  <input type="file" id="cover_image" accept="image/*" onChange={handleImageFileChange} style={{ display: 'none' }} />
                 </label>
               </div>
             </div>
@@ -295,7 +327,7 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
                 <label className="btn btn-secondary btn-sm" style={{ cursor: 'pointer', flexShrink: 0 }}>
                   <Upload size={16} />
                   <span>{uploadingCsv ? '...' : 'Upload'}</span>
-                  <input type="file" accept=".csv" onChange={handleCsvFileChange} style={{ display: 'none' }} />
+                  <input type="file" id="combustion_csv_upload" accept=".csv" onChange={handleCsvFileChange} style={{ display: 'none' }} />
                 </label>
               </div>
             </div>
