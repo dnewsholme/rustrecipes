@@ -1218,6 +1218,56 @@ pub fn save_recipe_notes(
     }
 }
 
+pub fn export_user_data(user_id: &str) -> Result<crate::models::UserDataExport, rusqlite::Error> {
+    let conn = rusqlite::Connection::open(get_db_path())?;
+    let user = find_user_by_id(user_id);
+    let recipes = list_recipes_for_user(Some(user_id))
+        .into_iter()
+        .filter(|r| r.owner_id == user_id)
+        .collect();
+
+    let favorites = {
+        let mut stmt = conn.prepare("SELECT recipe_id FROM user_favorites WHERE user_id = ?1")?;
+        let rows = stmt.query_map([user_id], |row| row.get::<_, String>(0))?;
+        rows.filter_map(|r| r.ok()).collect()
+    };
+
+    let shopping_list = read_shopping_list(user_id).unwrap_or_default();
+    let meal_plan = read_meal_plan(user_id);
+
+    let recipe_notes = {
+        let mut stmt = conn.prepare(
+            "SELECT recipe_id, notes, updated_at FROM user_recipe_notes WHERE user_id = ?1 ORDER BY updated_at DESC",
+        )?;
+        let rows = stmt.query_map([user_id], |row| {
+            Ok(crate::models::UserRecipeNote {
+                recipe_id: row.get(0)?,
+                notes: row.get(1)?,
+                updated_at: row.get(2)?,
+            })
+        })?;
+        rows.filter_map(|r| r.ok()).collect()
+    };
+
+    let now_str = match time::OffsetDateTime::now_utc()
+        .format(&time::format_description::well_known::Rfc3339)
+    {
+        Ok(s) => s,
+        Err(_) => time::OffsetDateTime::now_utc().to_string(),
+    };
+
+    Ok(crate::models::UserDataExport {
+        exported_at: now_str,
+        user_id: user_id.to_string(),
+        email: user.map(|u| u.email),
+        recipes,
+        favorites,
+        shopping_list,
+        meal_plan,
+        recipe_notes,
+    })
+}
+
 pub fn process_image(data: &[u8]) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let img = image::load_from_memory(data)?;
 

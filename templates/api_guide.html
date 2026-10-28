@@ -1,244 +1,439 @@
 {% extends "base.html" %}
 
-{% block title %}API Guide{% endblock %}
+{% block title %}API Guide & Interactive Playground{% endblock %}
 
 {% block content %}
-<div class="api-guide" style="max-width: 900px; margin: 0 auto; padding: 2rem 1rem;">
-    <div style="text-align: center; margin-bottom: 3rem;">
-        <h1 style="font-size: 2.5rem; font-weight: 800; margin-bottom: 1rem;">REST API Playground</h1>
-        <p style="color: var(--text-secondary); font-size: 1.1rem; max-width: 600px; margin: 0 auto;">
-            Explore and test the Rust Recipe Manager API endpoints directly from your browser.
+<div class="api-guide" style="max-width: 960px; margin: 0 auto; padding: 2rem 1rem;">
+    <!-- Hero / Title -->
+    <div style="text-align: center; margin-bottom: 2.5rem;">
+        <div style="display: inline-flex; align-items: center; gap: 0.5rem; background: var(--surface-hover); padding: 0.35rem 1rem; border-radius: 9999px; font-size: 0.85rem; font-weight: 600; color: var(--accent-color); margin-bottom: 1rem; border: 1px solid var(--border-color);">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            API v1 • OpenAPI 3.0.3 Compatible
+        </div>
+        <h1 style="font-size: 2.5rem; font-weight: 800; margin-bottom: 1rem; letter-spacing: -0.02em;">REST API Guide & Playground</h1>
+        <p style="color: var(--text-secondary); font-size: 1.1rem; max-width: 650px; margin: 0 auto 1.5rem auto; line-height: 1.6;">
+            Explore, test, and integrate with the Recipe Manager REST API endpoints. You can test requests live below or view our comprehensive interactive OpenAPI docs.
         </p>
+
+        <!-- Documentation Links -->
+        <div style="display: flex; justify-content: center; gap: 1rem; flex-wrap: wrap;">
+            <a href="{{ app_base }}/api/docs" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.6rem 1.25rem;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
+                Interactive Swagger UI
+            </a>
+            <a href="{{ app_base }}/api/v1/openapi.json" target="_blank" class="btn" style="display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.6rem 1.25rem; background: var(--surface-color); border: 1px solid var(--border-color); color: var(--text-primary);">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+                OpenAPI 3.0 Specification (JSON)
+            </a>
+            <a href="{{ app_base }}/app/" class="btn" style="display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.6rem 1.25rem; background: var(--surface-color); border: 1px solid var(--border-color); color: var(--text-primary);">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+                Modern SPA UI
+            </a>
+        </div>
     </div>
 
-    <section id="api-settings" style="margin-bottom: 4rem; background: var(--surface-color); padding: 2rem; border-radius: var(--radius-lg); border: 1px solid var(--border-color); box-shadow: var(--shadow-sm);">
-        <h2 style="font-size: 1.3rem; font-weight: 700; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.5rem;">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-            API Playground Settings
+    <!-- Playground Settings -->
+    <section id="api-settings" style="margin-bottom: 3rem; background: var(--surface-color); padding: 1.75rem; border-radius: var(--radius-lg); border: 1px solid var(--border-color); box-shadow: var(--shadow-sm);">
+        <h2 style="font-size: 1.2rem; font-weight: 700; margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.5rem;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+            Playground Configuration
         </h2>
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem;">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem;">
             <div>
                 <label for="base-url-input" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.5rem; color: var(--text-secondary);">Base URL</label>
-                <input type="text" id="base-url-input" class="form-control" value="{{ app_base }}/api/v1" style="width: 100%; font-family: monospace;">
+                <input type="text" id="base-url-input" class="form-control" value="{{ app_base }}/api/v1" style="width: 100%; font-family: monospace; font-size: 0.9rem;">
             </div>
             <div>
-                <label for="api-token-input" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.5rem; color: var(--text-secondary);">Bearer Token (Optional for GET)</label>
+                <label for="api-token-input" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.5rem; color: var(--text-secondary);">Bearer API Token (or use Session Cookie)</label>
                 <div style="position: relative;">
-                    <input type="password" id="api-token-input" class="form-control" placeholder="Bearer your_token_here" style="width: 100%; font-family: monospace; padding-right: 2.5rem;">
-                    <button onclick="toggleTokenVisibility()" style="position: absolute; right: 0.5rem; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-secondary); cursor: pointer; padding: 0.25rem;">
+                    <input type="password" id="api-token-input" class="form-control" placeholder="Optional bearer token" style="width: 100%; font-family: monospace; font-size: 0.9rem; padding-right: 2.5rem;">
+                    <button onclick="toggleTokenVisibility()" style="position: absolute; right: 0.5rem; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-secondary); cursor: pointer; padding: 0.25rem;" title="Show/Hide Token">
                         <svg id="eye-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                     </button>
                 </div>
             </div>
         </div>
-        <p style="margin-top: 1rem; font-size: 0.8rem; color: var(--text-secondary);">
+        <p style="margin-top: 1rem; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0;">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 4px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-            Settings are stored locally in your browser for convenience.
+            If you are logged into Recipe Manager, requests automatically utilize your active session cookie. If bearer token is set, it is sent in the <code>Authorization: Bearer ...</code> header.
         </p>
     </section>
 
-    <section>
-        <h2 style="font-size: 1.5rem; font-weight: 700; margin-bottom: 2rem; border-bottom: 2px solid var(--accent-color); padding-bottom: 0.5rem; display: inline-block;">Endpoints</h2>
-        
-        <!-- GET /recipes -->
-        <div class="endpoint-card" style="margin-bottom: 2rem; border: 1px solid var(--border-color); border-radius: var(--radius-lg); overflow: hidden;">
-            <div style="background: var(--surface-hover); padding: 1rem 1.5rem; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; gap: 1rem;">
-                <span style="background: #27ae60; color: white; padding: 0.2rem 0.6rem; border-radius: 4px; font-size: 0.8rem; font-weight: 700;">GET</span>
-                <code style="font-weight: 700; font-size: 1.1rem;">/recipes</code>
-            </div>
-            <div style="padding: 1.5rem;">
-                <p style="margin-bottom: 1rem;">Returns a list of all recipes with summaries, including overall hydration percentages where applicable.</p>
-                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
-                    <div>
-                        <h4 style="font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); margin-bottom: 0.5rem;">Query Parameters</h4>
-                        <p style="font-size: 0.9rem; color: var(--text-secondary);">None</p>
-                    </div>
-                    <button class="btn btn-primary" onclick="tryIt('GET', '/recipes', this)">Try it out</button>
+    <!-- SECTION 1: AUTHENTICATION -->
+    <section style="margin-bottom: 3.5rem;">
+        <h2 style="font-size: 1.4rem; font-weight: 700; margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.5rem; border-bottom: 2px solid var(--accent-color); padding-bottom: 0.5rem;">
+            Authentication & User
+        </h2>
+
+        <!-- GET /auth/me -->
+        <div class="endpoint-card" style="margin-bottom: 1.5rem; border: 1px solid var(--border-color); border-radius: var(--radius-lg); overflow: hidden; background: var(--surface-color);">
+            <div style="background: var(--surface-hover); padding: 0.85rem 1.25rem; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between;">
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <span style="background: #27ae60; color: white; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 700;">GET</span>
+                    <code style="font-weight: 700; font-size: 1rem;">/auth/me</code>
                 </div>
-                <div class="result-area" style="display: none; margin-top: 1.5rem;">
-                    <h4 style="font-size: 0.8rem; text-transform: uppercase; margin-bottom: 0.5rem;">Response</h4>
-                    <pre class="response-pre" style="background: var(--surface-color); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); font-size: 0.85rem; max-height: 300px; overflow: auto;"></pre>
+                <button class="btn btn-primary" onclick="tryIt('GET', '/auth/me', this)">Execute</button>
+            </div>
+            <div style="padding: 1.25rem;">
+                <p style="margin-bottom: 0.75rem; color: var(--text-secondary);">Returns the currently authenticated user's ID, email, and admin status.</p>
+                <div class="result-area" style="display: none; margin-top: 1rem;">
+                    <h4 style="font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.4rem; color: var(--text-secondary);">Response</h4>
+                    <pre class="response-pre" style="background: var(--surface-hover); padding: 0.75rem 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); font-size: 0.85rem; max-height: 250px; overflow: auto;"></pre>
+                </div>
+            </div>
+        </div>
+
+        <!-- POST /auth/login -->
+        <div class="endpoint-card" style="margin-bottom: 1.5rem; border: 1px solid var(--border-color); border-radius: var(--radius-lg); overflow: hidden; background: var(--surface-color);">
+            <div style="background: var(--surface-hover); padding: 0.85rem 1.25rem; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between;">
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <span style="background: #e67e22; color: white; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 700;">POST</span>
+                    <code style="font-weight: 700; font-size: 1rem;">/auth/login</code>
+                </div>
+                <button class="btn btn-primary" onclick="tryIt('POST', '/auth/login', this)">Execute</button>
+            </div>
+            <div style="padding: 1.25rem;">
+                <p style="margin-bottom: 0.75rem; color: var(--text-secondary);">Authenticates with email and password, setting an HTTP-only session cookie.</p>
+                <div style="margin-bottom: 1rem;">
+                    <label style="display: block; font-size: 0.75rem; margin-bottom: 0.25rem; font-weight: 600;">Request Body</label>
+                    <textarea class="form-control param-body" style="width: 100%; font-family: monospace; font-size: 0.85rem; min-height: 70px;">{
+  "email": "admin@example.com",
+  "password": "admin"
+}</textarea>
+                </div>
+                <div class="result-area" style="display: none; margin-top: 1rem;">
+                    <h4 style="font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.4rem; color: var(--text-secondary);">Response</h4>
+                    <pre class="response-pre" style="background: var(--surface-hover); padding: 0.75rem 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); font-size: 0.85rem; max-height: 250px; overflow: auto;"></pre>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- SECTION 2: RECIPES -->
+    <section style="margin-bottom: 3.5rem;">
+        <h2 style="font-size: 1.4rem; font-weight: 700; margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.5rem; border-bottom: 2px solid var(--accent-color); padding-bottom: 0.5rem;">
+            Recipes CRUD & Conversions
+        </h2>
+
+        <!-- GET /recipes -->
+        <div class="endpoint-card" style="margin-bottom: 1.5rem; border: 1px solid var(--border-color); border-radius: var(--radius-lg); overflow: hidden; background: var(--surface-color);">
+            <div style="background: var(--surface-hover); padding: 0.85rem 1.25rem; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between;">
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <span style="background: #27ae60; color: white; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 700;">GET</span>
+                    <code style="font-weight: 700; font-size: 1rem;">/recipes</code>
+                </div>
+                <button class="btn btn-primary" onclick="tryIt('GET', '/recipes', this)">Execute</button>
+            </div>
+            <div style="padding: 1.25rem;">
+                <p style="margin-bottom: 0.75rem; color: var(--text-secondary);">Returns recipes accessible to the user (public recipes + user's private recipes), with search and tag filters.</p>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.75rem; margin-bottom: 1rem;">
+                    <div>
+                        <label style="display: block; font-size: 0.75rem; margin-bottom: 0.25rem;">Search</label>
+                        <input type="text" class="form-control param-search" placeholder="e.g. sourdough" style="width: 100%; font-size: 0.85rem;">
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 0.75rem; margin-bottom: 0.25rem;">Tag</label>
+                        <input type="text" class="form-control param-tag" placeholder="e.g. bread" style="width: 100%; font-size: 0.85rem;">
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 0.75rem; margin-bottom: 0.25rem;">Limit</label>
+                        <input type="number" class="form-control param-limit" value="20" style="width: 100%; font-size: 0.85rem;">
+                    </div>
+                </div>
+                <div class="result-area" style="display: none; margin-top: 1rem;">
+                    <h4 style="font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.4rem; color: var(--text-secondary);">Response</h4>
+                    <pre class="response-pre" style="background: var(--surface-hover); padding: 0.75rem 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); font-size: 0.85rem; max-height: 250px; overflow: auto;"></pre>
                 </div>
             </div>
         </div>
 
         <!-- GET /recipes/{id} -->
-        <div class="endpoint-card" style="margin-bottom: 2rem; border: 1px solid var(--border-color); border-radius: var(--radius-lg); overflow: hidden;">
-            <div style="background: var(--surface-hover); padding: 1rem 1.5rem; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; gap: 1rem;">
-                <span style="background: #27ae60; color: white; padding: 0.2rem 0.6rem; border-radius: 4px; font-size: 0.8rem; font-weight: 700;">GET</span>
-                <code style="font-weight: 700; font-size: 1.1rem;">/recipes/{id}</code>
+        <div class="endpoint-card" style="margin-bottom: 1.5rem; border: 1px solid var(--border-color); border-radius: var(--radius-lg); overflow: hidden; background: var(--surface-color);">
+            <div style="background: var(--surface-hover); padding: 0.85rem 1.25rem; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between;">
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <span style="background: #27ae60; color: white; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 700;">GET</span>
+                    <code style="font-weight: 700; font-size: 1rem;">/recipes/{id}</code>
+                </div>
+                <button class="btn btn-primary" onclick="tryIt('GET', '/recipes/{id}', this)">Execute</button>
             </div>
-            <div style="padding: 1.5rem;">
-                <p style="margin-bottom: 1rem;">Get full details for a single recipe, including converted ingredients, instructions, and automatic hydration calculations.</p>
-                <div style="margin-bottom: 1.5rem; background: var(--surface-color); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem;">
-                        <div>
-                            <label style="display: block; font-size: 0.75rem; margin-bottom: 0.25rem;">ID</label>
-                            <input type="text" class="form-control param-id" placeholder="recipe-id" style="width: 100%; font-size: 0.85rem;">
-                        </div>
-                        <div>
-                            <label style="display: block; font-size: 0.75rem; margin-bottom: 0.25rem;">Unit</label>
-                            <select class="form-control param-unit" style="width: 100%; font-size: 0.85rem;">
-                                <option value="original">Original</option>
-                                <option value="metric">Metric</option>
-                                <option value="imperial">Imperial</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label style="display: block; font-size: 0.75rem; margin-bottom: 0.25rem;">Baker's %</label>
-                            <select class="form-control param-bakers" style="width: 100%; font-size: 0.85rem;">
-                                <option value="false">No</option>
-                                <option value="true">Yes</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+            <div style="padding: 1.25rem;">
+                <p style="margin-bottom: 0.75rem; color: var(--text-secondary);">Returns full recipe details, pre-converted server-side according to specified query parameters.</p>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.75rem; margin-bottom: 1rem;">
                     <div>
-                        <h4 style="font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); margin-bottom: 0.5rem;">Query Parameters</h4>
-                        <ul style="font-size: 0.9rem; color: var(--text-secondary); padding-left: 1.2rem;">
-                            <li style="margin-bottom: 0.4rem;"><code>unit</code>: Target unit system</li>
-                            <li style="margin-bottom: 0.4rem;"><code>temp</code>: Target temperature system</li>
-                            <li style="margin-bottom: 0.4rem;"><code>scale</code>: Multiplier (default: 1.0)</li>
-                            <li style="margin-bottom: 0.4rem;"><code>bakers</code>: Boolean to return Baker's Percentages</li>
-                        </ul>
+                        <label style="display: block; font-size: 0.75rem; margin-bottom: 0.25rem;">Recipe ID</label>
+                        <input type="text" class="form-control param-id" placeholder="recipe-id" value="1" style="width: 100%; font-size: 0.85rem;">
                     </div>
-                    <button class="btn btn-primary" onclick="tryIt('GET', '/recipes/{id}', this)">Try it out</button>
+                    <div>
+                        <label style="display: block; font-size: 0.75rem; margin-bottom: 0.25rem;">Scale</label>
+                        <input type="number" class="form-control param-scale" value="1.0" step="0.25" style="width: 100%; font-size: 0.85rem;">
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 0.75rem; margin-bottom: 0.25rem;">Unit</label>
+                        <select class="form-control param-unit" style="width: 100%; font-size: 0.85rem;">
+                            <option value="">Original</option>
+                            <option value="metric">Metric (g, ml)</option>
+                            <option value="imperial">Imperial (oz, lb)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 0.75rem; margin-bottom: 0.25rem;">Temp</label>
+                        <select class="form-control param-temp-unit" style="width: 100%; font-size: 0.85rem;">
+                            <option value="">Original</option>
+                            <option value="c">Celsius (°C)</option>
+                            <option value="f">Fahrenheit (°F)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 0.75rem; margin-bottom: 0.25rem;">Baker's %</label>
+                        <select class="form-control param-bakers" style="width: 100%; font-size: 0.85rem;">
+                            <option value="false">No</option>
+                            <option value="true">Yes</option>
+                        </select>
+                    </div>
                 </div>
-                <div class="result-area" style="display: none; margin-top: 1.5rem;">
-                    <h4 style="font-size: 0.8rem; text-transform: uppercase; margin-bottom: 0.5rem;">Response</h4>
-                    <pre class="response-pre" style="background: var(--surface-color); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); font-size: 0.85rem; max-height: 300px; overflow: auto;"></pre>
+                <div class="result-area" style="display: none; margin-top: 1rem;">
+                    <h4 style="font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.4rem; color: var(--text-secondary);">Response</h4>
+                    <pre class="response-pre" style="background: var(--surface-hover); padding: 0.75rem 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); font-size: 0.85rem; max-height: 250px; overflow: auto;"></pre>
                 </div>
             </div>
         </div>
 
-        <!-- GET /temps -->
-        <div class="endpoint-card" style="margin-bottom: 2rem; border: 1px solid var(--border-color); border-radius: var(--radius-lg); overflow: hidden;">
-            <div style="background: var(--surface-hover); padding: 1rem 1.5rem; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; gap: 1rem;">
-                <span style="background: #27ae60; color: white; padding: 0.2rem 0.6rem; border-radius: 4px; font-size: 0.8rem; font-weight: 700;">GET</span>
-                <code style="font-weight: 700; font-size: 1.1rem;">/temps</code>
-            </div>
-            <div style="padding: 1.5rem;">
-                <p style="margin-bottom: 1rem;">Returns a list of recommended cooking temperatures for various meats.</p>
-                <div style="text-align: right;">
-                    <button class="btn btn-primary" onclick="tryIt('GET', '/temps', this)">Try it out</button>
+        <!-- POST /recipes (Create) -->
+        <div class="endpoint-card" style="margin-bottom: 1.5rem; border: 1px solid var(--border-color); border-radius: var(--radius-lg); overflow: hidden; background: var(--surface-color);">
+            <div style="background: var(--surface-hover); padding: 0.85rem 1.25rem; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between;">
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <span style="background: #e67e22; color: white; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 700;">POST</span>
+                    <code style="font-weight: 700; font-size: 1rem;">/recipes</code>
                 </div>
-                <div class="result-area" style="display: none; margin-top: 1.5rem;">
-                    <h4 style="font-size: 0.8rem; text-transform: uppercase; margin-bottom: 0.5rem;">Response</h4>
-                    <pre class="response-pre" style="background: var(--surface-color); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); font-size: 0.85rem; max-height: 300px; overflow: auto;"></pre>
+                <button class="btn btn-primary" onclick="tryIt('POST', '/recipes', this)">Execute</button>
+            </div>
+            <div style="padding: 1.25rem;">
+                <p style="margin-bottom: 0.75rem; color: var(--text-secondary);">Creates a new recipe and normalizes ingredients/steps into SQLite relational tables.</p>
+                <div style="margin-bottom: 1rem;">
+                    <label style="display: block; font-size: 0.75rem; margin-bottom: 0.25rem; font-weight: 600;">Request Body</label>
+                    <textarea class="form-control param-body" style="width: 100%; font-family: monospace; font-size: 0.85rem; min-height: 120px;">{
+  "title": "Rustic Sourdough Boule",
+  "description": "Crispy crust and open crumb sourdough bread",
+  "tags": ["bread", "sourdough", "baking"],
+  "servings": "1 loaf",
+  "prep_time": "30m",
+  "cook_time": "45m",
+  "ingredients": [
+    "500g bread flour",
+    "350g water",
+    "100g sourdough starter",
+    "10g salt"
+  ],
+  "markdown": "1. Mix flour and water, autolyse for 30m.\n2. Add starter and salt, knead.\n3. Ferment at 24°C for 4 hours.\n4. Bake at 230°C for 45 minutes.",
+  "is_public": true
+}</textarea>
+                </div>
+                <div class="result-area" style="display: none; margin-top: 1rem;">
+                    <h4 style="font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.4rem; color: var(--text-secondary);">Response</h4>
+                    <pre class="response-pre" style="background: var(--surface-hover); padding: 0.75rem 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); font-size: 0.85rem; max-height: 250px; overflow: auto;"></pre>
+                </div>
+            </div>
+        </div>
+
+        <!-- POST /recipes/{id}/notes -->
+        <div class="endpoint-card" style="margin-bottom: 1.5rem; border: 1px solid var(--border-color); border-radius: var(--radius-lg); overflow: hidden; background: var(--surface-color);">
+            <div style="background: var(--surface-hover); padding: 0.85rem 1.25rem; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between;">
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <span style="background: #e67e22; color: white; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 700;">POST</span>
+                    <code style="font-weight: 700; font-size: 1rem;">/recipes/{id}/notes</code>
+                </div>
+                <button class="btn btn-primary" onclick="tryIt('POST', '/recipes/{id}/notes', this)">Execute</button>
+            </div>
+            <div style="padding: 1.25rem;">
+                <p style="margin-bottom: 0.75rem; color: var(--text-secondary);">Saves personal user notes for a recipe (isolated per authenticated user).</p>
+                <div style="display: grid; grid-template-columns: 140px 1fr; gap: 0.75rem; margin-bottom: 1rem;">
+                    <div>
+                        <label style="display: block; font-size: 0.75rem; margin-bottom: 0.25rem;">Recipe ID</label>
+                        <input type="text" class="form-control param-id" value="1" style="width: 100%; font-size: 0.85rem;">
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 0.75rem; margin-bottom: 0.25rem;">Request Body</label>
+                        <textarea class="form-control param-body" style="width: 100%; font-family: monospace; font-size: 0.85rem; min-height: 60px;">{ "notes": "Add 50g toasted walnuts on next bake!" }</textarea>
+                    </div>
+                </div>
+                <div class="result-area" style="display: none; margin-top: 1rem;">
+                    <h4 style="font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.4rem; color: var(--text-secondary);">Response</h4>
+                    <pre class="response-pre" style="background: var(--surface-hover); padding: 0.75rem 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); font-size: 0.85rem; max-height: 250px; overflow: auto;"></pre>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- SECTION 3: SHOPPING LIST & MEAL PLAN -->
+    <section style="margin-bottom: 3.5rem;">
+        <h2 style="font-size: 1.4rem; font-weight: 700; margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.5rem; border-bottom: 2px solid var(--accent-color); padding-bottom: 0.5rem;">
+            Shopping List & Meal Planning
+        </h2>
+
+        <!-- GET /shopping-list -->
+        <div class="endpoint-card" style="margin-bottom: 1.5rem; border: 1px solid var(--border-color); border-radius: var(--radius-lg); overflow: hidden; background: var(--surface-color);">
+            <div style="background: var(--surface-hover); padding: 0.85rem 1.25rem; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between;">
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <span style="background: #27ae60; color: white; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 700;">GET</span>
+                    <code style="font-weight: 700; font-size: 1rem;">/shopping-list</code>
+                </div>
+                <button class="btn btn-primary" onclick="tryIt('GET', '/shopping-list', this)">Execute</button>
+            </div>
+            <div style="padding: 1.25rem;">
+                <p style="margin-bottom: 0.75rem; color: var(--text-secondary);">Retrieves the user's saved shopping list with checked items.</p>
+                <div class="result-area" style="display: none; margin-top: 1rem;">
+                    <h4 style="font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.4rem; color: var(--text-secondary);">Response</h4>
+                    <pre class="response-pre" style="background: var(--surface-hover); padding: 0.75rem 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); font-size: 0.85rem; max-height: 250px; overflow: auto;"></pre>
+                </div>
+            </div>
+        </div>
+
+        <!-- POST /shopping-list (Generate combined) -->
+        <div class="endpoint-card" style="margin-bottom: 1.5rem; border: 1px solid var(--border-color); border-radius: var(--radius-lg); overflow: hidden; background: var(--surface-color);">
+            <div style="background: var(--surface-hover); padding: 0.85rem 1.25rem; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between;">
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <span style="background: #e67e22; color: white; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 700;">POST</span>
+                    <code style="font-weight: 700; font-size: 1rem;">/shopping-list</code>
+                </div>
+                <button class="btn btn-primary" onclick="tryIt('POST', '/shopping-list', this)">Execute</button>
+            </div>
+            <div style="padding: 1.25rem;">
+                <p style="margin-bottom: 0.75rem; color: var(--text-secondary);">Aggregates and scales ingredients from multiple recipe IDs into a consolidated grocery list.</p>
+                <div style="margin-bottom: 1rem;">
+                    <label style="display: block; font-size: 0.75rem; margin-bottom: 0.25rem; font-weight: 600;">Request Body</label>
+                    <textarea class="form-control param-body" style="width: 100%; font-family: monospace; font-size: 0.85rem; min-height: 90px;">{
+  "recipe_ids": ["1"],
+  "portions": 4,
+  "unit_system": "metric"
+}</textarea>
+                </div>
+                <div class="result-area" style="display: none; margin-top: 1rem;">
+                    <h4 style="font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.4rem; color: var(--text-secondary);">Response</h4>
+                    <pre class="response-pre" style="background: var(--surface-hover); padding: 0.75rem 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); font-size: 0.85rem; max-height: 250px; overflow: auto;"></pre>
+                </div>
+            </div>
+        </div>
+
+        <!-- GET /meal-plan -->
+        <div class="endpoint-card" style="margin-bottom: 1.5rem; border: 1px solid var(--border-color); border-radius: var(--radius-lg); overflow: hidden; background: var(--surface-color);">
+            <div style="background: var(--surface-hover); padding: 0.85rem 1.25rem; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between;">
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <span style="background: #27ae60; color: white; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 700;">GET</span>
+                    <code style="font-weight: 700; font-size: 1rem;">/meal-plan</code>
+                </div>
+                <button class="btn btn-primary" onclick="tryIt('GET', '/meal-plan', this)">Execute</button>
+            </div>
+            <div style="padding: 1.25rem;">
+                <p style="margin-bottom: 0.75rem; color: var(--text-secondary);">Fetches meal plan entries for a given date range or current week.</p>
+                <div class="result-area" style="display: none; margin-top: 1rem;">
+                    <h4 style="font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.4rem; color: var(--text-secondary);">Response</h4>
+                    <pre class="response-pre" style="background: var(--surface-hover); padding: 0.75rem 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); font-size: 0.85rem; max-height: 250px; overflow: auto;"></pre>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- SECTION 4: CULINARY CALCULATORS & TOOLS -->
+    <section style="margin-bottom: 3.5rem;">
+        <h2 style="font-size: 1.4rem; font-weight: 700; margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.5rem; border-bottom: 2px solid var(--accent-color); padding-bottom: 0.5rem;">
+            Culinary Calculators & Tools
+        </h2>
+
+        <!-- GET /temps -->
+        <div class="endpoint-card" style="margin-bottom: 1.5rem; border: 1px solid var(--border-color); border-radius: var(--radius-lg); overflow: hidden; background: var(--surface-color);">
+            <div style="background: var(--surface-hover); padding: 0.85rem 1.25rem; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between;">
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <span style="background: #27ae60; color: white; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 700;">GET</span>
+                    <code style="font-weight: 700; font-size: 1rem;">/temps</code>
+                </div>
+                <button class="btn btn-primary" onclick="tryIt('GET', '/temps', this)">Execute</button>
+            </div>
+            <div style="padding: 1.25rem;">
+                <p style="margin-bottom: 0.75rem; color: var(--text-secondary);">Returns recommended doneness and cooking temperatures for meats and poultry.</p>
+                <div class="result-area" style="display: none; margin-top: 1rem;">
+                    <h4 style="font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.4rem; color: var(--text-secondary);">Response</h4>
+                    <pre class="response-pre" style="background: var(--surface-hover); padding: 0.75rem 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); font-size: 0.85rem; max-height: 250px; overflow: auto;"></pre>
                 </div>
             </div>
         </div>
 
         <!-- GET /log7 -->
-        <div class="endpoint-card" style="margin-bottom: 2rem; border: 1px solid var(--border-color); border-radius: var(--radius-lg); overflow: hidden;">
-            <div style="background: var(--surface-hover); padding: 1rem 1.5rem; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; gap: 1rem;">
-                <span style="background: #27ae60; color: white; padding: 0.2rem 0.6rem; border-radius: 4px; font-size: 0.8rem; font-weight: 700;">GET</span>
-                <code style="font-weight: 700; font-size: 1.1rem;">/log7</code>
+        <div class="endpoint-card" style="margin-bottom: 1.5rem; border: 1px solid var(--border-color); border-radius: var(--radius-lg); overflow: hidden; background: var(--surface-color);">
+            <div style="background: var(--surface-hover); padding: 0.85rem 1.25rem; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between;">
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <span style="background: #27ae60; color: white; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 700;">GET</span>
+                    <code style="font-weight: 700; font-size: 1rem;">/log7</code>
+                </div>
+                <button class="btn btn-primary" onclick="tryIt('GET', '/log7', this)">Execute</button>
             </div>
-            <div style="padding: 1.5rem;">
-                <p style="margin-bottom: 1rem;">Calculates USDA Log 7 Salmonella lethality hold time for poultry.</p>
-                <div style="margin-bottom: 1.5rem; background: var(--surface-color); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+            <div style="padding: 1.25rem;">
+                <p style="margin-bottom: 0.75rem; color: var(--text-secondary);">Calculates USDA Log 7 Salmonella reduction hold time for chicken and turkey.</p>
+                <div style="max-width: 200px; margin-bottom: 1rem;">
                     <label style="display: block; font-size: 0.75rem; margin-bottom: 0.25rem;">Internal Temp (°C)</label>
                     <input type="number" class="form-control param-temp" value="65.0" step="0.5" style="width: 100%; font-size: 0.85rem;">
                 </div>
-                <div style="text-align: right;">
-                    <button class="btn btn-primary" onclick="tryIt('GET', '/log7', this)">Try it out</button>
-                </div>
-                <div class="result-area" style="display: none; margin-top: 1.5rem;">
-                    <h4 style="font-size: 0.8rem; text-transform: uppercase; margin-bottom: 0.5rem;">Response</h4>
-                    <pre class="response-pre" style="background: var(--surface-color); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); font-size: 0.85rem; max-height: 300px; overflow: auto;"></pre>
+                <div class="result-area" style="display: none; margin-top: 1rem;">
+                    <h4 style="font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.4rem; color: var(--text-secondary);">Response</h4>
+                    <pre class="response-pre" style="background: var(--surface-hover); padding: 0.75rem 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); font-size: 0.85rem; max-height: 250px; overflow: auto;"></pre>
                 </div>
             </div>
         </div>
 
         <!-- GET /ferment -->
-        <div class="endpoint-card" style="margin-bottom: 2rem; border: 1px solid var(--border-color); border-radius: var(--radius-lg); overflow: hidden;">
-            <div style="background: var(--surface-hover); padding: 1rem 1.5rem; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; gap: 1rem;">
-                <span style="background: #27ae60; color: white; padding: 0.2rem 0.6rem; border-radius: 4px; font-size: 0.8rem; font-weight: 700;">GET</span>
-                <code style="font-weight: 700; font-size: 1.1rem;">/ferment</code>
+        <div class="endpoint-card" style="margin-bottom: 1.5rem; border: 1px solid var(--border-color); border-radius: var(--radius-lg); overflow: hidden; background: var(--surface-color);">
+            <div style="background: var(--surface-hover); padding: 0.85rem 1.25rem; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between;">
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <span style="background: #27ae60; color: white; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 700;">GET</span>
+                    <code style="font-weight: 700; font-size: 1rem;">/ferment</code>
+                </div>
+                <button class="btn btn-primary" onclick="tryIt('GET', '/ferment', this)">Execute</button>
             </div>
-            <div style="padding: 1.5rem;">
-                <p style="margin-bottom: 1rem;">Calculates estimated fermentation times.</p>
-                <div style="margin-bottom: 1.5rem; background: var(--surface-color); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 1rem;">
-                        <div>
-                            <label style="display: block; font-size: 0.75rem; margin-bottom: 0.25rem;">Type</label>
-                            <select class="form-control param-type" style="width: 100%; font-size: 0.85rem;">
-                                <option value="yeast">Yeast</option>
-                                <option value="starter">Starter</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label style="display: block; font-size: 0.75rem; margin-bottom: 0.25rem;">Amount (%)</label>
-                            <input type="number" class="form-control param-amount" value="1.0" step="0.1" style="width: 100%; font-size: 0.85rem;">
-                        </div>
-                        <div>
-                            <label style="display: block; font-size: 0.75rem; margin-bottom: 0.25rem;">Temp (°C)</label>
-                            <input type="number" class="form-control param-temp" value="21.0" style="width: 100%; font-size: 0.85rem;">
-                        </div>
-                    </div>
-                </div>
-                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+            <div style="padding: 1.25rem;">
+                <p style="margin-bottom: 0.75rem; color: var(--text-secondary);">Calculates estimated bread dough fermentation times based on temperature and starter/yeast percentages.</p>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.75rem; margin-bottom: 1rem;">
                     <div>
-                        <h4 style="font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); margin-bottom: 0.5rem;">Query Parameters</h4>
-                        <p style="font-size: 0.9rem; color: var(--text-secondary);">type, amount, temp</p>
+                        <label style="display: block; font-size: 0.75rem; margin-bottom: 0.25rem;">Type</label>
+                        <select class="form-control param-type" style="width: 100%; font-size: 0.85rem;">
+                            <option value="yeast">Instant Yeast</option>
+                            <option value="starter" selected>Sourdough Starter</option>
+                        </select>
                     </div>
-                    <button class="btn btn-primary" onclick="tryIt('GET', '/ferment', this)">Try it out</button>
+                    <div>
+                        <label style="display: block; font-size: 0.75rem; margin-bottom: 0.25rem;">Amount (%)</label>
+                        <input type="number" class="form-control param-amount" value="20.0" step="1.0" style="width: 100%; font-size: 0.85rem;">
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 0.75rem; margin-bottom: 0.25rem;">Temp (°C)</label>
+                        <input type="number" class="form-control param-ferment-temp" value="24.0" step="0.5" style="width: 100%; font-size: 0.85rem;">
+                    </div>
                 </div>
-                <div class="result-area" style="display: none; margin-top: 1.5rem;">
-                    <h4 style="font-size: 0.8rem; text-transform: uppercase; margin-bottom: 0.5rem;">Response</h4>
-                    <pre class="response-pre" style="background: var(--surface-color); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); font-size: 0.85rem; max-height: 300px; overflow: auto;"></pre>
+                <div class="result-area" style="display: none; margin-top: 1rem;">
+                    <h4 style="font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.4rem; color: var(--text-secondary);">Response</h4>
+                    <pre class="response-pre" style="background: var(--surface-hover); padding: 0.75rem 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); font-size: 0.85rem; max-height: 250px; overflow: auto;"></pre>
                 </div>
             </div>
         </div>
 
         <!-- POST /import -->
-        <div class="endpoint-card" style="margin-bottom: 2rem; border: 1px solid var(--border-color); border-radius: var(--radius-lg); overflow: hidden;">
-            <div style="background: var(--surface-hover); padding: 1rem 1.5rem; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; gap: 1rem;">
-                <span style="background: #e67e22; color: white; padding: 0.2rem 0.6rem; border-radius: 4px; font-size: 0.8rem; font-weight: 700;">POST</span>
-                <code style="font-weight: 700; font-size: 1.1rem;">/import</code>
+        <div class="endpoint-card" style="margin-bottom: 1.5rem; border: 1px solid var(--border-color); border-radius: var(--radius-lg); overflow: hidden; background: var(--surface-color);">
+            <div style="background: var(--surface-hover); padding: 0.85rem 1.25rem; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between;">
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <span style="background: #e67e22; color: white; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 700;">POST</span>
+                    <code style="font-weight: 700; font-size: 1rem;">/import</code>
+                </div>
+                <button class="btn btn-primary" onclick="tryIt('POST', '/import', this)">Execute</button>
             </div>
-            <div style="padding: 1.5rem;">
-                <p style="margin-bottom: 1rem;">Import a recipe from a URL using AI processing.</p>
-                <div style="margin-bottom: 1.5rem; background: var(--surface-color); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
-                    <label style="display: block; font-size: 0.75rem; margin-bottom: 0.25rem;">JSON Body</label>
-                    <textarea class="form-control param-body" style="width: 100%; font-family: monospace; font-size: 0.85rem; min-height: 80px;">{
-  "url": "https://example.com/great-bread"
+            <div style="padding: 1.25rem;">
+                <p style="margin-bottom: 0.75rem; color: var(--text-secondary);">Scrapes and parses a recipe from an external web page or parses photo recipe text with AI.</p>
+                <div style="margin-bottom: 1rem;">
+                    <label style="display: block; font-size: 0.75rem; margin-bottom: 0.25rem; font-weight: 600;">Request Body</label>
+                    <textarea class="form-control param-body" style="width: 100%; font-family: monospace; font-size: 0.85rem; min-height: 70px;">{
+  "url": "https://www.seriouseats.com/the-best-slow-cooked-bolognese-sauce-recipe"
 }</textarea>
                 </div>
-                <div style="text-align: right;">
-                    <button class="btn btn-primary" onclick="tryIt('POST', '/import', this)">Try it out</button>
-                </div>
-                <div class="result-area" style="display: none; margin-top: 1.5rem;">
-                    <h4 style="font-size: 0.8rem; text-transform: uppercase; margin-bottom: 0.5rem;">Response</h4>
-                    <pre class="response-pre" style="background: var(--surface-color); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); font-size: 0.85rem; max-height: 300px; overflow: auto;"></pre>
-                </div>
-            </div>
-        </div>
-
-        <!-- POST /shopping-list -->
-        <div class="endpoint-card" style="margin-bottom: 2rem; border: 1px solid var(--border-color); border-radius: var(--radius-lg); overflow: hidden;">
-            <div style="background: var(--surface-hover); padding: 1rem 1.5rem; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; gap: 1rem;">
-                <span style="background: #e67e22; color: white; padding: 0.2rem 0.6rem; border-radius: 4px; font-size: 0.8rem; font-weight: 700;">POST</span>
-                <code style="font-weight: 700; font-size: 1.1rem;">/shopping-list</code>
-            </div>
-            <div style="padding: 1.5rem;">
-                <p style="margin-bottom: 1rem;">Generate a scaled, combined shopping list from multiple recipes.</p>
-                <div style="margin-bottom: 1.5rem; background: var(--surface-color); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
-                    <label style="display: block; font-size: 0.75rem; margin-bottom: 0.25rem;">JSON Body</label>
-                    <textarea class="form-control param-body" style="width: 100%; font-family: monospace; font-size: 0.85rem; min-height: 120px;">{
-  "recipe_ids": ["recipe-1-id", "recipe-2-id"],
-  "portions": 4,
-  "unit_system": "metric"
-}</textarea>
-                </div>
-                <div style="text-align: right;">
-                    <button class="btn btn-primary" onclick="tryIt('POST', '/shopping-list', this)">Try it out</button>
-                </div>
-                <div class="result-area" style="display: none; margin-top: 1.5rem;">
-                    <h4 style="font-size: 0.8rem; text-transform: uppercase; margin-bottom: 0.5rem;">Response</h4>
-                    <pre class="response-pre" style="background: var(--surface-color); padding: 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); font-size: 0.85rem; max-height: 300px; overflow: auto;"></pre>
+                <div class="result-area" style="display: none; margin-top: 1rem;">
+                    <h4 style="font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.4rem; color: var(--text-secondary);">Response</h4>
+                    <pre class="response-pre" style="background: var(--surface-hover); padding: 0.75rem 1rem; border-radius: var(--radius-sm); border: 1px solid var(--border-color); font-size: 0.85rem; max-height: 250px; overflow: auto;"></pre>
                 </div>
             </div>
         </div>
@@ -246,7 +441,7 @@
 </div>
 
 <script>
-    // Persistent settings
+    // Local persistence for playground settings
     document.addEventListener('DOMContentLoaded', () => {
         const savedUrl = localStorage.getItem('api_base_url');
         const savedToken = localStorage.getItem('api_token');
@@ -276,7 +471,7 @@
 
     async function tryIt(method, pathTemplate, btn) {
         const baseUrl = document.getElementById('base-url-input').value.replace(/\/$/, '');
-        const token = document.getElementById('api-token-input').value;
+        const token = document.getElementById('api-token-input').value.trim();
         const card = btn.closest('.endpoint-card');
         const resultArea = card.querySelector('.result-area');
         const responsePre = card.querySelector('.response-pre');
@@ -287,11 +482,26 @@
         const idInput = card.querySelector('.param-id');
         if (idInput) path = path.replace('{id}', idInput.value || '1');
 
+        const searchInput = card.querySelector('.param-search');
+        if (searchInput && searchInput.value) params.append('search', searchInput.value);
+
+        const tagInput = card.querySelector('.param-tag');
+        if (tagInput && tagInput.value) params.append('tag', tagInput.value);
+
+        const limitInput = card.querySelector('.param-limit');
+        if (limitInput && limitInput.value) params.append('limit', limitInput.value);
+
+        const scaleInput = card.querySelector('.param-scale');
+        if (scaleInput && scaleInput.value && scaleInput.value !== '1') params.append('scale', scaleInput.value);
+
         const unitInput = card.querySelector('.param-unit');
-        if (unitInput) params.append('unit', unitInput.value);
+        if (unitInput && unitInput.value) params.append('unit', unitInput.value);
+
+        const tempUnitInput = card.querySelector('.param-temp-unit');
+        if (tempUnitInput && tempUnitInput.value) params.append('temp', tempUnitInput.value);
         
         const bakersInput = card.querySelector('.param-bakers');
-        if (bakersInput) params.append('bakers', bakersInput.value);
+        if (bakersInput && bakersInput.value === 'true') params.append('bakers', 'true');
 
         const typeInput = card.querySelector('.param-type');
         if (typeInput) params.append('type', typeInput.value);
@@ -299,14 +509,20 @@
         const amountInput = card.querySelector('.param-amount');
         if (amountInput) params.append('amount', amountInput.value);
 
+        const fermentTempInput = card.querySelector('.param-ferment-temp');
+        if (fermentTempInput) params.append('temp', fermentTempInput.value);
+
         const tempInput = card.querySelector('.param-temp');
         if (tempInput) params.append('temp', tempInput.value);
 
         const bodyInput = card.querySelector('.param-body');
         let body = null;
-        if (bodyInput) body = bodyInput.value;
+        if (bodyInput && method !== 'GET') {
+            body = bodyInput.value;
+        }
 
-        const url = `${baseUrl}${path}${params.toString() ? '?' + params.toString() : ''}`;
+        const queryString = params.toString() ? '?' + params.toString() : '';
+        const url = `${baseUrl}${path}${queryString}`;
 
         btn.disabled = true;
         const oldText = btn.textContent;
@@ -320,7 +536,7 @@
                 'Content-Type': 'application/json'
             };
             if (token) {
-                headers['Authorization'] = `Bearer ${token.replace('Bearer ', '')}`;
+                headers['Authorization'] = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
             }
 
             const start = performance.now();
@@ -338,10 +554,11 @@
             }
 
             const duration = (end - start).toFixed(0);
-            responsePre.innerHTML = `<div style="color: var(--text-secondary); margin-bottom: 0.5rem;">Status: <span style="color: ${status < 300 ? '#27ae60' : '#e74c3c'}">${status} ${statusText}</span> • Time: ${duration}ms</div>` + 
-                JSON.stringify(data, null, 2);
+            const statusColor = status < 300 ? '#27ae60' : (status < 400 ? '#3498db' : '#e74c3c');
+            responsePre.innerHTML = `<div style="color: var(--text-secondary); margin-bottom: 0.5rem; font-family: sans-serif;">Status: <strong style="color: ${statusColor}">${status} ${statusText}</strong> • Latency: ${duration}ms</div>` + 
+                (typeof data === 'string' ? data : JSON.stringify(data, null, 2));
         } catch (e) {
-            responsePre.textContent = 'Error: ' + e.message;
+            responsePre.textContent = 'Network or Execution Error: ' + e.message;
         } finally {
             btn.disabled = false;
             btn.textContent = oldText;
@@ -349,3 +566,4 @@
     }
 </script>
 {% endblock %}
+

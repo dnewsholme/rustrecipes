@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChefHat, Plus, ShoppingCart, Calendar, LogIn, LogOut, Key, Moon, Sun, BookOpen, Search } from 'lucide-react';
+import { ChefHat, Plus, ShoppingCart, Calendar, LogIn, LogOut, Key, Moon, Sun, BookOpen, Search, Download } from 'lucide-react';
 import type { AuthState } from '../types';
 
 interface HeaderProps {
@@ -183,6 +183,15 @@ export const Header: React.FC<HeaderProps> = ({
               >
                 <Key size={18} />
               </button>
+              <a
+                href="/api/v1/user/export"
+                download
+                className="btn btn-ghost btn-sm"
+                title="Export All My Data (JSON)"
+                style={{ padding: '0.45rem' }}
+              >
+                <Download size={18} />
+              </a>
               <button
                 onClick={onLogout}
                 className="btn btn-ghost btn-sm"

@@ -219,3 +219,22 @@ pub struct UserPasskey {
     pub passkey_json: String,
     pub created_at: String,
 }
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+pub struct UserRecipeNote {
+    pub recipe_id: String,
+    pub notes: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct UserDataExport {
+    pub exported_at: String,
+    pub user_id: String,
+    pub email: Option<String>,
+    pub recipes: Vec<Recipe>,
+    pub favorites: Vec<String>,
+    pub shopping_list: Vec<ShoppingItem>,
+    pub meal_plan: Vec<PlannedMeal>,
+    pub recipe_notes: Vec<UserRecipeNote>,
+}

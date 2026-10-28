@@ -8,7 +8,7 @@ use axum::{
 };
 use axum_extra::extract::cookie::{Cookie, Key, PrivateCookieJar, SameSite};
 use serde::{Deserialize, Serialize};
-use tracing::{debug, error, warn};
+use tracing::{debug, error, info, warn};
 
 // ---------------------------------------------------------------------------
 // Limits used for request validation
@@ -69,6 +69,7 @@ pub fn router(_state: AppState) -> Router<AppState> {
         .route("/auth/me", get(get_current_user_api))
         .route("/auth/login", post(api_login))
         .route("/auth/logout", post(api_logout))
+        .route("/user/export", get(export_user_data_api))
 }
 
 // ---------------------------------------------------------------------------
@@ -344,6 +345,10 @@ async fn list_recipes(
     }
 
     let user_id = user.map(|u| u.id);
+    info!(
+        "API list_recipes: user={:?}, q={:?}, tag={:?}",
+        user_id, query.q, query.tag
+    );
     let recipes = blocking(move || storage::list_recipes_for_user(user_id.as_deref())).await?;
 
     let q = query
@@ -420,6 +425,7 @@ async fn get_recipe(
     }
 
     let user_id = user.as_ref().map(|u| u.id.clone());
+    info!("API get_recipe: id='{}', user={:?}", id, user_id);
     let recipe = blocking(move || storage::read_recipe_for_user(&id, user_id.as_deref()))
         .await?
         .ok_or(ApiError::NotFound)?;
@@ -561,6 +567,10 @@ async fn create_recipe(
     Json(input): Json<RecipeInput>,
 ) -> ApiResult<Response> {
     input.validate()?;
+    info!(
+        "API create_recipe: user='{}', title='{}'",
+        user.id, input.title
+    );
 
     let recipe = blocking(move || -> Result<Recipe, std::io::Error> {
         let id = unique_recipe_id(&input.title);
@@ -586,6 +596,7 @@ async fn update_recipe(
     Json(input): Json<RecipeInput>,
 ) -> ApiResult<Json<Recipe>> {
     input.validate()?;
+    info!("API update_recipe: user='{}', id='{}'", user.id, id);
 
     let lookup_id = id.clone();
     let existing = blocking(move || storage::read_recipe(&lookup_id))
@@ -611,6 +622,7 @@ async fn update_recipe(
 }
 
 async fn delete_recipe(user: CurrentUser, Path(id): Path<String>) -> ApiResult<StatusCode> {
+    info!("API delete_recipe: user='{}', id='{}'", user.id, id);
     let lookup_id = id.clone();
     let existing = blocking(move || storage::read_recipe(&lookup_id))
         .await?
@@ -670,6 +682,7 @@ async fn save_recipe_notes_api(
     Json(payload): Json<SaveNotesRequest>,
 ) -> ApiResult<Json<NotesResponse>> {
     check_len("notes", &payload.notes, MAX_NOTES_LEN)?;
+    info!("API save_recipe_notes: user='{}', id='{}'", user.id, id);
     load_viewable_recipe(&user, &id).await?;
 
     let notes = payload.notes;
@@ -702,6 +715,7 @@ async fn import_recipe(
     if req.url.trim().is_empty() {
         return Err(bad_request("'url' must not be empty"));
     }
+    info!("API import_recipe: user='{}', url='{}'", user.id, req.url);
     check_len("url", &req.url, MAX_URL_LEN)?;
 
     match crate::importer::import_recipe_from_url(&req.url).await {
@@ -735,6 +749,10 @@ async fn generate_shopping_list(
     Json(payload): Json<ShoppingListRequest>,
 ) -> ApiResult<Json<ShoppingListResponse>> {
     check_ids("recipe_ids", &payload.recipe_ids)?;
+    info!(
+        "API generate_shopping_list: recipes={:?}, portions={}",
+        payload.recipe_ids, payload.portions
+    );
     if payload.portions == 0 || payload.portions > MAX_PORTIONS {
         return Err(bad_request(format!(
             "'portions' must be between 1 and {MAX_PORTIONS}"
@@ -785,6 +803,7 @@ async fn generate_shopping_list(
 }
 
 async fn get_shopping_list(user: CurrentUser) -> ApiResult<impl IntoResponse> {
+    info!("API get_shopping_list: user='{}'", user.id);
     // An empty list is a valid state, so return `[]` rather than 404.
     let items = blocking(move || storage::read_shopping_list(&user.id))
         .await?
@@ -796,6 +815,11 @@ async fn update_shopping_list(
     user: CurrentUser,
     Json(payload): Json<Vec<crate::models::ShoppingItem>>,
 ) -> ApiResult<StatusCode> {
+    info!(
+        "API update_shopping_list: user='{}', count={}",
+        user.id,
+        payload.len()
+    );
     if payload.len() > MAX_LIST_ITEMS {
         return Err(bad_request(format!(
             "Shopping list must contain at most {MAX_LIST_ITEMS} items"
@@ -812,6 +836,7 @@ async fn update_shopping_list(
 }
 
 async fn clear_shopping_list(user: CurrentUser) -> ApiResult<StatusCode> {
+    info!("API clear_shopping_list: user='{}'", user.id);
     blocking(move || storage::delete_shopping_list(&user.id))
         .await?
         .map_err(|e| ApiError::Internal(format!("failed to clear shopping list: {e}")))?;
@@ -863,6 +888,10 @@ struct FermentResult {
 async fn calculate_fermentation(
     Query(query): Query<FermentQuery>,
 ) -> ApiResult<Json<FermentResult>> {
+    info!(
+        "API calculate_fermentation: type='{}', amount={}, temp={}",
+        query.leaven_type, query.amount, query.temp
+    );
     if !query.amount.is_finite() || query.amount <= 0.0 || query.amount > 1_000.0 {
         return Err(bad_request(
             "'amount' must be greater than 0 and at most 1000",
@@ -895,6 +924,7 @@ async fn calculate_fermentation(
 }
 
 async fn get_cooking_temps() -> impl IntoResponse {
+    info!("API get_cooking_temps");
     let temps = vec![
         CookingTempGroup {
             category: "Beef, Lamb, Veal, Pork".to_string(),
@@ -1045,7 +1075,7 @@ struct ToggleMealRequest {
 }
 
 async fn get_meal_plan(user: CurrentUser) -> ApiResult<impl IntoResponse> {
-    debug!("get_meal_plan called for user_id={}", user.id);
+    info!("API get_meal_plan: user_id='{}'", user.id);
     let viewer = user.clone();
     let items = blocking(move || {
         storage::read_meal_plan(&viewer.id)
@@ -1099,6 +1129,10 @@ async fn add_to_meal_plan(
     Json(payload): Json<AddMealPlanRequest>,
 ) -> ApiResult<StatusCode> {
     check_ids("recipe_ids", &payload.recipe_ids)?;
+    info!(
+        "API add_to_meal_plan: user='{}', recipe_ids={:?}",
+        user.id, payload.recipe_ids
+    );
 
     let uid = user.id.clone();
     let mut meals = blocking(move || storage::read_meal_plan(&uid)).await?;
@@ -1119,6 +1153,10 @@ async fn toggle_meal_plan(
     user: CurrentUser,
     Json(payload): Json<ToggleMealRequest>,
 ) -> ApiResult<StatusCode> {
+    info!(
+        "API toggle_meal_plan: user='{}', recipe_id='{}'",
+        user.id, payload.recipe_id
+    );
     let uid = user.id.clone();
     let mut meals = blocking(move || storage::read_meal_plan(&uid)).await?;
     let meal = meals
@@ -1140,6 +1178,10 @@ async fn delete_meal_plan_item(
     user: CurrentUser,
     Path(recipe_id): Path<String>,
 ) -> ApiResult<StatusCode> {
+    info!(
+        "API delete_meal_plan_item: user='{}', recipe_id='{}'",
+        user.id, recipe_id
+    );
     let uid = user.id.clone();
     let mut meals = blocking(move || storage::read_meal_plan(&uid)).await?;
     let original_len = meals.len();
@@ -1172,6 +1214,7 @@ pub async fn api_login(
     };
 
     let user = storage::find_user_by_email(&email_lookup).ok_or(ApiError::Unauthorized)?;
+    info!("API login attempt for email: {}", email_lookup);
     if !bcrypt::verify(&payload.password, &user.password_hash).unwrap_or(false) {
         return Err(ApiError::Unauthorized);
     }
@@ -1210,6 +1253,7 @@ pub async fn api_logout(
     State(state): State<AppState>,
     jar: PrivateCookieJar,
 ) -> (PrivateCookieJar, Json<serde_json::Value>) {
+    info!("API logout called");
     let cookie_path = if state.app_base.is_empty() {
         "/"
     } else {
@@ -1245,6 +1289,27 @@ pub async fn get_current_user_api(
         "user": user_info,
         "config": config,
     }))
+}
+
+pub async fn export_user_data_api(user: CurrentUser) -> ApiResult<Response> {
+    info!("API export_user_data: user_id='{}'", user.id);
+    let data = blocking(move || storage::export_user_data(&user.id))
+        .await?
+        .map_err(|e| ApiError::Internal(format!("failed to export user data: {e}")))?;
+
+    let json_bytes = serde_json::to_vec_pretty(&data)
+        .map_err(|e| ApiError::Internal(format!("failed to serialize export data: {e}")))?;
+
+    let filename = format!("recipe-manager-export-{}.json", data.user_id);
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "application/json")
+        .header(
+            header::CONTENT_DISPOSITION,
+            format!("attachment; filename=\"{filename}\""),
+        )
+        .body(axum::body::Body::from(json_bytes))
+        .map_err(|e| ApiError::Internal(format!("failed to build response: {e}")))
 }
 
 #[cfg(test)]

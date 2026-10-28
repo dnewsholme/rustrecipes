@@ -28,8 +28,10 @@ This document defines mandatory guidelines, architecture blueprints, build/test 
 ## 🛠️ Tech Stack & Architecture
 
 - **Backend Framework**: [Axum 0.8](file:///home/daryl/git/recipemanager/Cargo.toml#L9) running on [Tokio](file:///home/daryl/git/recipemanager/Cargo.toml#L23) async engine.
-- **Database Layer**: SQLite managed via `rusqlite` (bundled edition) with connection pooling, migrations, and local storage in `data/recipemanager.db`.
+- **Database Layer**: SQLite managed via `rusqlite` (bundled edition) with connection pooling, migrations, and local storage in `data/recipes.db`.
 - **HTML Server-Side Rendering**: [Askama 0.16](file:///home/daryl/git/recipemanager/Cargo.toml#L8) template engine.
+- **SPA Frontend**: Vite + React 18 TypeScript application in [frontend/](file:///home/daryl/git/recipemanager/frontend/) served at `/app/`.
+- **OpenAPI / Swagger**: OpenAPI 3.0 specification generated in [src/openapi.rs](file:///home/daryl/git/recipemanager/src/openapi.rs) served at `/api/v1/openapi.json` and interactive Swagger UI at `/api/docs`.
 - **Sanitization & Security**: [Ammonia 4.0](file:///home/daryl/git/recipemanager/Cargo.toml#L7) HTML XSS sanitizer; custom CSRF & SSRF verification middleware.
 - **Authentication**: WebAuthn / Passkeys ([webauthn-rs 0.5](file:///home/daryl/git/recipemanager/Cargo.toml#L38)) in [src/passkeys.rs](file:///home/daryl/git/recipemanager/src/passkeys.rs), OpenID Connect (OIDC / Pocket ID) and Google OAuth in [src/main.rs](file:///home/daryl/git/recipemanager/src/main.rs) + persistent session cookies (`admin_session`).
 - **Frontend**: Vanilla HTML5, CSS3 ([static/styles.css](file:///home/daryl/git/recipemanager/static/styles.css)), and progressive JS enhancement.
@@ -39,14 +41,16 @@ This document defines mandatory guidelines, architecture blueprints, build/test 
 
 ## 📂 Repository Layout & Module Blueprint
 
-- [src/main.rs](file:///home/daryl/git/recipemanager/src/main.rs): App entry point, Tokio runtime, Axum router initialization, static asset mounting, `AppState` setup, and HTML page route handlers.
-- [src/api.rs](file:///home/daryl/git/recipemanager/src/api.rs): RESTful JSON API routes (`/recipes`, `/ferment`, `/temps`, `/spices`, `/log7`, `/import`, `/shopping-list`, `/meal-plan`) and bearer token auth middleware (`require_api_token`).
-- [src/storage.rs](file:///home/daryl/git/recipemanager/src/storage.rs): DB migration, initialization, prepared statement CRUD operations (`save_recipe`, `get_recipe`, user/passkey models, meal planning, shopping list).
-- [src/models.rs](file:///home/daryl/git/recipemanager/src/models.rs): Core database entity structs (`Recipe`, `User`, `UserPasskey`, `ShoppingListItem`, `MealPlanItem`).
+- [src/main.rs](file:///home/daryl/git/recipemanager/src/main.rs): App entry point, Tokio runtime, Axum router initialization, static asset mounting (`/static`, `/assets`, `/app`), `AppState` setup, data export handler, and HTML page route handlers.
+- [src/api.rs](file:///home/daryl/git/recipemanager/src/api.rs): RESTful JSON API routes (`/recipes`, `/ferment`, `/temps`, `/spices`, `/log7`, `/import`, `/shopping-list`, `/meal-plan`, `/user/export`) and bearer token auth middleware (`require_api_token`).
+- [src/openapi.rs](file:///home/daryl/git/recipemanager/src/openapi.rs): OpenAPI 3.0 specification definition and Swagger UI HTML renderer.
+- [src/storage.rs](file:///home/daryl/git/recipemanager/src/storage.rs): DB migration, initialization, prepared statement CRUD operations (`save_recipe`, `get_recipe`, user/passkey models, meal planning, shopping list, `export_user_data`).
+- [src/models.rs](file:///home/daryl/git/recipemanager/src/models.rs): Core database entity structs (`Recipe`, `User`, `UserPasskey`, `ShoppingListItem`, `MealPlanItem`, `UserDataExport`).
 - [src/conversions.rs](file:///home/daryl/git/recipemanager/src/conversions.rs): Unit conversion engine (imperial/metric, weight, volume, fraction parsing, sourdough baker's percentage).
 - [src/importer.rs](file:///home/daryl/git/recipemanager/src/importer.rs): External recipe web scraper & importer with SSRF IP validation defenses.
 - [src/passkeys.rs](file:///home/daryl/git/recipemanager/src/passkeys.rs): WebAuthn passkey registration & authentication endpoints and challenge storage.
 - [src/bin/hash_password.rs](file:///home/daryl/git/recipemanager/src/bin/hash_password.rs): Utility CLI binary to hash passwords using bcrypt.
+- [frontend/](file:///home/daryl/git/recipemanager/frontend/): Vite + React single page app with instant search, unit conversion, and passkeys integration.
 - [templates/](file:///home/daryl/git/recipemanager/templates/): Askama HTML templates extending [templates/base.html](file:///home/daryl/git/recipemanager/templates/base.html).
 - [static/](file:///home/daryl/git/recipemanager/static/): Cascading stylesheets ([static/styles.css](file:///home/daryl/git/recipemanager/static/styles.css)) and static images/assets.
 - [tests/ui/](file:///home/daryl/git/recipemanager/tests/ui/): Integration and E2E Playwright tests.

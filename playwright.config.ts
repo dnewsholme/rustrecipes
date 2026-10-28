@@ -55,6 +55,7 @@ export default defineConfig({
     timeout: 120 * 1000,
     env: {
       COOKIE_SECURE: 'false',
+      ADMIN_EMAIL: 'admin@example.com',
     },
   },
 });

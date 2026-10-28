@@ -1992,7 +1992,12 @@ async fn login_oidc_callback(
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt::init();
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "recipemanager=info,tower_http=info".into()),
+        )
+        .init();
 
     let admin_email = match std::env::var("ADMIN_EMAIL") {
         Ok(email) => email,
@@ -2193,14 +2198,12 @@ async fn main() {
     let static_assets = Router::new()
         .nest_service("/static", ServeDir::new("static"))
         .nest_service("/uploads", ServeDir::new("data/uploads"))
+        .nest_service("/assets", ServeDir::new("frontend/dist/assets"))
+        .nest_service("/app/assets", ServeDir::new("frontend/dist/assets"))
         .nest_service(
             "/app",
             ServeDir::new("frontend/dist").fallback(ServeFile::new("frontend/dist/index.html")),
-        )
-        .layer(tower_http::set_header::SetResponseHeaderLayer::overriding(
-            axum::http::header::CACHE_CONTROL,
-            axum::http::HeaderValue::from_static("public, max-age=31536000, immutable"),
-        ));
+        );
 
     let public_routes = Router::new()
         .route("/", get(index))
@@ -2213,6 +2216,9 @@ async fn main() {
         .route("/login/oidc/callback", get(login_oidc_callback))
         .route("/register", get(register_form).post(register_submit))
         .route("/logout", get(logout).post(logout))
+        .route("/export", get(export_data_page))
+        .route("/spa", get(redirect_to_app))
+        .route("/spa/", get(redirect_to_app))
         .route("/api", get(api_guide))
         .route("/api/", get(api_guide))
         .route("/api/docs", get(docs_page))
@@ -2240,6 +2246,59 @@ async fn main() {
     info!("Server starting at http://{}", addr);
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
+}
+
+async fn redirect_to_app(State(state): State<AppState>) -> impl IntoResponse {
+    let target = if state.app_base.is_empty() {
+        "/app/".to_string()
+    } else {
+        format!("{}/app/", state.app_base)
+    };
+    Redirect::temporary(&target)
+}
+
+async fn export_data_page(
+    State(state): State<AppState>,
+    jar: PrivateCookieJar,
+) -> impl IntoResponse {
+    let user_id = match get_session_user_id(&jar).await {
+        Some(id) => id,
+        None => return Redirect::to(&format!("{}/login", state.app_base)).into_response(),
+    };
+    info!("Web export_data_page: user_id='{}'", user_id);
+    match storage::export_user_data(&user_id) {
+        Ok(export) => match serde_json::to_string_pretty(&export) {
+            Ok(json_str) => {
+                let prefix = &user_id[..8.min(user_id.len())];
+                let filename = format!("recipe_manager_export_{}.json", prefix);
+                Response::builder()
+                    .status(StatusCode::OK)
+                    .header(
+                        axum::http::header::CONTENT_TYPE,
+                        "application/json; charset=utf-8",
+                    )
+                    .header(
+                        axum::http::header::CONTENT_DISPOSITION,
+                        format!("attachment; filename=\"{}\"", filename),
+                    )
+                    .body(axum::body::Body::from(json_str))
+                    .unwrap()
+                    .into_response()
+            }
+            Err(e) => {
+                error!("Failed to serialize user export data: {:?}", e);
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to serialize export data",
+                )
+                    .into_response()
+            }
+        },
+        Err(e) => {
+            error!("Failed to generate user export data: {:?}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to export data").into_response()
+        }
+    }
 }
 
 async fn docs_page(State(state): State<AppState>) -> impl IntoResponse {
@@ -2364,7 +2423,13 @@ mod oauth_tests {
 
         let static_assets = Router::new()
             .nest_service("/static", ServeDir::new("static"))
-            .nest_service("/uploads", ServeDir::new("data/uploads"));
+            .nest_service("/uploads", ServeDir::new("data/uploads"))
+            .nest_service("/assets", ServeDir::new("frontend/dist/assets"))
+            .nest_service("/app/assets", ServeDir::new("frontend/dist/assets"))
+            .nest_service(
+                "/app",
+                ServeDir::new("frontend/dist").fallback(ServeFile::new("frontend/dist/index.html")),
+            );
 
         let public_routes = Router::new()
             .route("/", get(index))
@@ -2375,6 +2440,9 @@ mod oauth_tests {
             .route("/login/oidc/callback", get(login_oidc_callback))
             .route("/register", get(register_form).post(register_submit))
             .route("/logout", get(logout).post(logout))
+            .route("/export", get(export_data_page))
+            .route("/spa", get(redirect_to_app))
+            .route("/spa/", get(redirect_to_app))
             .merge(static_assets);
 
         Router::new().merge(public_routes).with_state(state)
@@ -2690,5 +2758,46 @@ mod oauth_tests {
             .to_str()
             .unwrap();
         assert!(cookie_header.contains("admin_session=;"));
+    }
+
+    #[tokio::test]
+    async fn test_spa_routing() {
+        let app = build_test_app(None, None).await;
+
+        // /app serves index.html directly
+        let req_app = Request::builder().uri("/app").body(Body::empty()).unwrap();
+        let res_app = app.clone().oneshot(req_app).await.unwrap();
+        assert_eq!(res_app.status(), StatusCode::OK);
+
+        // /spa redirects to /app/
+        let req_spa = Request::builder().uri("/spa").body(Body::empty()).unwrap();
+        let res_spa = app.clone().oneshot(req_spa).await.unwrap();
+        assert_eq!(res_spa.status(), StatusCode::TEMPORARY_REDIRECT);
+        assert_eq!(
+            res_spa.headers().get("location").unwrap().to_str().unwrap(),
+            "/app/"
+        );
+
+        // /app/ returns 200 OK index.html
+        let req_slash = Request::builder().uri("/app/").body(Body::empty()).unwrap();
+        let res_slash = app.clone().oneshot(req_slash).await.unwrap();
+        assert_eq!(res_slash.status(), StatusCode::OK);
+
+        // /export unauthenticated redirects to /login
+        let req_export = Request::builder()
+            .uri("/export")
+            .body(Body::empty())
+            .unwrap();
+        let res_export = app.oneshot(req_export).await.unwrap();
+        assert_eq!(res_export.status(), StatusCode::SEE_OTHER);
+        assert_eq!(
+            res_export
+                .headers()
+                .get("location")
+                .unwrap()
+                .to_str()
+                .unwrap(),
+            "/login"
+        );
     }
 }

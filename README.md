@@ -46,31 +46,45 @@ A fast, self-hosted recipe manager built with Rust, Axum, and Askama. Designed f
 - **Shopping Lists** — Select multiple recipes, scale portions, and generate a combined ingredient list. Lists are persisted server-side with check-off state and can be cleared.
 - **Multi-User & Access Control** — Self-service registration, bcrypt passwords, Google OAuth 2.0, per-user recipe ownership, and public/private visibility toggles.
 - **Admin Panel** — Manage users, reset passwords, and delete accounts from a responsive admin interface.
-- **REST API** — Full CRUD API (`/api/v1`) with token auth for programmatic access. Built-in interactive API guide at `/api`.
+- **Modern Vite + React SPA** — High-performance single page application served at `/app/`, featuring instantaneous search, tag filters, live unit scaling, and dark/light mode.
+- **User Data Export** — One-click backup of all user data (`/export` or `/api/v1/user/export`), downloading a comprehensive JSON archive containing owned recipes, ingredients, instructions, notes, meal plans, shopping list, and favorites.
+- **Structured Logging & Observability** — Built-in tracing powered by `tracing_subscriber` and `tower_http::TraceLayer`, configurable via `RUST_LOG` (defaults to `recipemanager=info,tower_http=info`).
+- **REST API** — Full CRUD API (`/api/v1`) with token auth for programmatic access. Built-in interactive API guide at `/api` and OpenAPI 3.0 spec at `/api/docs`.
 
 ---
 
 ## 🔌 API
 
-**Base URL**: `/api/v1` — [Interactive docs at `/api`]
+**Base URL**: `/api/v1` — [Interactive Swagger UI at `/api/docs`](/api/docs) • [OpenAPI 3.0 Specification at `/api/v1/openapi.json`](/api/v1/openapi.json) • [Interactive Playground at `/api`](/api)
 
 | Endpoint | Method | Description |
 | :--- | :--- | :--- |
-| `/recipes` | `GET` | List all recipes. |
-| `/recipes` | `POST` | Create a recipe. |
-| `/recipes/{id}` | `GET` | Get a recipe (supports unit/scale query params). |
+| `/openapi.json` | `GET` | OpenAPI 3.0.3 specification JSON. |
+| `/auth/me` | `GET` | Current user identity and admin status. |
+| `/auth/login` | `POST` | Authenticate with email/password and establish session. |
+| `/auth/logout` | `POST` | Terminate session and clear cookie. |
+| `/user/export` | `GET` | Download full user data export (recipes, notes, meal plans, shopping list, favorites) as JSON. |
+| `/recipes` | `GET` | List recipes with search, tag filtering, and pagination. |
+| `/recipes` | `POST` | Create a recipe (normalized into relational SQLite tables). |
+| `/recipes/{id}` | `GET` | Get recipe with server-side conversion (`scale`, `unit`, `temp`, `bakers`). |
 | `/recipes/{id}` | `PUT` | Update a recipe. |
 | `/recipes/{id}` | `DELETE` | Delete a recipe. |
-| `/temps` | `GET` | Internal meat temperature reference. |
-| `/log7` | `GET` | USDA Log 7 hold-time calculator. |
-| `/ferment` | `GET` | Fermentation time estimator. |
-| `/import` | `POST` | Import a recipe from a URL via AI. |
-| `/shopping-list` | `POST` | Generate a shopping list from selected recipes. |
-| `/shopping-list` | `GET` | Retrieve the saved shopping list. |
-| `/shopping-list` | `PUT` | Save/update shopping list state. |
+| `/recipes/{id}/notes` | `GET`, `POST` | Read or save per-user private recipe notes. |
+| `/shopping-list` | `GET` | Retrieve saved shopping list items and checked state. |
+| `/shopping-list` | `POST` | Generate consolidated list from recipe IDs and portions. |
+| `/shopping-list` | `PUT` | Save/update shopping list items and checked state. |
 | `/shopping-list` | `DELETE` | Clear the saved shopping list. |
+| `/meal-plan` | `GET` | Weekly meal planner schedule. |
+| `/meal-plan` | `POST` | Schedule recipe or custom meal entry. |
+| `/meal-plan/{id}` | `DELETE` | Remove meal plan item. |
+| `/meal-plan/toggle` | `POST` | Quick toggle recipe on meal planner. |
+| `/temps` | `GET` | Internal meat doneness temperature reference. |
+| `/spices` | `GET` | Common kitchen pantry spices list. |
+| `/log7` | `GET` | USDA Log 7 poultry pasteurization hold-time calculator. |
+| `/ferment` | `GET` | Sourdough starter and yeast dough fermentation estimator. |
+| `/import` | `POST` | Scrape recipe from URL or photo via AI. |
 
-Mutable endpoints require an `API_TOKEN` via `Authorization: Bearer <token>`.
+Bearer token authentication (`Authorization: Bearer <token>`) or active browser session cookies are supported across all endpoints.
 
 ---
 
@@ -112,17 +126,24 @@ Copy the output (e.g., `$2y$12$...`) and use it as `ADMIN_PASSWORD_HASH`.
 | `GOOGLE_CLIENT_SECRET` | No | Google OAuth 2.0 Client Secret. |
 | `GOOGLE_REDIRECT_URI` | No | OAuth callback URL (defaults to `<app_base>/login/google/callback`). |
 | `APP_BASE` | No | Subpath prefix for reverse proxy setups (e.g., `/recipes`). |
+| `RUST_LOG` | No | Logging filter string (defaults to `recipemanager=info,tower_http=info`). |
 
 ```bash
 git clone https://github.com/dnewsholme/recipemanager.git
 cd recipemanager
+
+# Optional: Build the modern SPA frontend (prebuilt assets are also bundled)
+cd frontend && npm install && npm run build && cd ..
+
+# Launch server
+export ADMIN_EMAIL='admin@example.com'
 export ADMIN_PASSWORD_HASH='<your_generated_hash>'
 export API_TOKEN='your_api_token_here'
 export SESSION_SECRET='your_random_secret_string'
 cargo run
 ```
 
-Available at `http://localhost:3000`.
+Available at `http://localhost:3000` (traditional UI) and `http://localhost:3000/app/` (modern SPA UI).
 
 ---
 

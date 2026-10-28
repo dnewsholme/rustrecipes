@@ -1,4 +1,12 @@
-# Stage 1: Build the Rust application
+# Stage 1: Build the Vite frontend SPA
+FROM node:20-bookworm-slim AS frontend-builder
+WORKDIR /app/frontend
+COPY frontend/package*.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+
+# Stage 2: Build the Rust application
 FROM rust:1.93-slim-bookworm AS builder
 
 # Install required system dependencies (like OpenSSL for reqwest)
@@ -27,7 +35,7 @@ COPY static static
 # Touch main.rs to force recompilation of the actual code
 RUN touch src/main.rs && APP_VERSION=$APP_VERSION cargo build --release
 
-# Stage 2: Create a minimal runtime image
+# Stage 3: Create a minimal runtime image
 FROM debian:bookworm-slim
 
 # Install runtime dependencies (OpenSSL is needed for HTTPS requests)
@@ -41,6 +49,7 @@ COPY --from=builder /app/target/release/hash_password ./
 
 # Copy static assets (served directly by axum)
 COPY --from=builder /app/static ./static
+COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
 
 # Ensure the data directories exist and set appropriate permissions
 RUN mkdir -p data/recipes data/uploads
