@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Key, LogIn, UserPlus } from 'lucide-react';
-import { startAuthentication } from '@simplewebauthn/browser';
+import { decodeRequestOptions, serializeAssertion } from '../webauthn';
 import type { AuthState } from '../types';
 import { api } from '../api';
 
@@ -16,6 +16,15 @@ export const LoginModal: React.FC<LoginModalProps> = ({ auth, onClose, onLoginSu
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [config, setConfig] = useState(auth.config);
+
+  useEffect(() => {
+    if (!config?.oidc_auth_enabled && !config?.google_auth_enabled) {
+      api.getAuth().then((res) => {
+        if (res.config) setConfig(res.config);
+      }).catch(() => {});
+    }
+  }, [config]);
 
   const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,24 +56,32 @@ export const LoginModal: React.FC<LoginModalProps> = ({ auth, onClose, onLoginSu
   };
 
   const handlePasskeyLogin = async () => {
+    if (!email.trim()) {
+      setError('Please enter your email or username first to authenticate with a passkey');
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
-      const startRes = await fetch('/api/v1/auth/passkeys/login/start', { method: 'POST' });
-      if (!startRes.ok) throw new Error('Failed to start passkey authentication');
-      const startData = await startRes.json();
-      
-      const authResult = await startAuthentication({ optionsJSON: startData.publicKey });
-
-      const finishRes = await fetch('/api/v1/auth/passkeys/login/finish', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(authResult),
-      });
-
-      if (!finishRes.ok) {
-        throw new Error('Passkey verification failed');
+      const emailLookup = email.trim();
+      const startData = await api.loginPasskeyStart(emailLookup);
+      const rawOptions = startData.challenge?.publicKey || startData.publicKey;
+      if (!rawOptions) {
+        throw new Error('Invalid authentication challenge received from server');
       }
+
+      const publicKey = decodeRequestOptions(rawOptions);
+      const credential = await navigator.credentials.get({ publicKey });
+      if (!credential) {
+        throw new Error('Passkey authentication was not completed');
+      }
+
+      await api.loginPasskeyFinish({
+        auth_id: startData.auth_id,
+        email: emailLookup,
+        credential: serializeAssertion(credential),
+      });
 
       const authData = await api.getAuth();
       if (authData.user) {
@@ -173,20 +190,24 @@ export const LoginModal: React.FC<LoginModalProps> = ({ auth, onClose, onLoginSu
         </form>
 
         {/* OIDC / Google OAuth */}
-        {(auth.config?.google_auth_enabled || auth.config?.oidc_auth_enabled) && (
+        {(config?.google_auth_enabled || config?.oidc_auth_enabled) && (
           <div style={{ marginTop: '1.5rem', paddingTop: '1.25rem', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-            {auth.config.oidc_auth_enabled && (
+            {config.oidc_auth_enabled && (
               <a
+                id="oidc-login-btn"
                 href="/login/oidc"
+                onClick={() => console.info(`[Auth] Navigating to OIDC login: /login/oidc (${config.oidc_provider_name || 'OpenID'})`)}
                 className="btn btn-secondary"
                 style={{ width: '100%', textDecoration: 'none', justifyContent: 'center' }}
               >
-                Sign in with {auth.config.oidc_provider_name || 'OpenID'}
+                Sign in with {config.oidc_provider_name || 'OpenID'}
               </a>
             )}
-            {auth.config.google_auth_enabled && (
+            {config.google_auth_enabled && (
               <a
+                id="google-login-btn"
                 href="/login/google"
+                onClick={() => console.info('[Auth] Navigating to Google OAuth login: /login/google')}
                 className="btn btn-secondary"
                 style={{ width: '100%', textDecoration: 'none', justifyContent: 'center' }}
               >

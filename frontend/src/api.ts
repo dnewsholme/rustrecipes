@@ -16,6 +16,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   }
 
   const res = await fetch(`${API_BASE}${endpoint}`, {
+    credentials: 'include',
     ...options,
     headers,
   });
@@ -37,7 +38,11 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     return {} as T;
   }
 
-  return res.json();
+  const contentType = res.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    return res.json();
+  }
+  return (await res.text()) as unknown as T;
 }
 
 export const api = {
@@ -209,6 +214,34 @@ export const api = {
 
   async deletePasskey(id: string): Promise<void> {
     await request(`/auth/passkeys/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  },
+
+  async registerPasskeyStart(key_name: string): Promise<{ reg_id: string; challenge: any; publicKey?: any }> {
+    return request('/auth/passkeys/register/start', {
+      method: 'POST',
+      body: JSON.stringify({ key_name }),
+    });
+  },
+
+  async registerPasskeyFinish(payload: { reg_id: string; key_name: string; credential: any }): Promise<{ status: string }> {
+    return request('/auth/passkeys/register/finish', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  async loginPasskeyStart(email: string): Promise<{ auth_id: string; challenge: any; publicKey?: any }> {
+    return request('/auth/passkeys/login/start', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+  },
+
+  async loginPasskeyFinish(payload: { auth_id: string; email: string; credential: any }): Promise<{ status: string }> {
+    return request('/auth/passkeys/login/finish', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
   },
 
   // Import

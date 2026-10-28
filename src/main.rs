@@ -473,6 +473,37 @@ async fn get_session_user_id(jar: &PrivateCookieJar) -> Option<String> {
     None
 }
 
+async fn default_index(
+    State(state): State<AppState>,
+    jar: PrivateCookieJar,
+    headers: axum::http::HeaderMap,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Response {
+    let ui_param = params.get("ui").map(|s| s.as_str());
+    let prefer_classic = if ui_param == Some("modern") {
+        false
+    } else if ui_param == Some("classic") {
+        true
+    } else {
+        std::env::var("DEFAULT_UI")
+            .map(|v| v.to_lowercase() == "classic")
+            .unwrap_or(false)
+            || jar
+                .get("ui_preference")
+                .is_some_and(|c| c.value() == "classic")
+            || headers.get("x-ui-mode").is_some_and(|v| v == "classic")
+    };
+
+    if prefer_classic {
+        index(State(state), jar).await.into_response()
+    } else {
+        match tokio::fs::read_to_string("frontend/dist/index.html").await {
+            Ok(content) => Html(content).into_response(),
+            Err(_) => index(State(state), jar).await.into_response(),
+        }
+    }
+}
+
 async fn index(State(state): State<AppState>, jar: PrivateCookieJar) -> impl IntoResponse {
     let user_id = get_session_user_id(&jar).await;
     let user_email = if let Some(uid) = &user_id {
@@ -955,16 +986,25 @@ async fn upload_image(mut multipart: Multipart) -> impl IntoResponse {
     .into_response()
 }
 
+#[allow(clippy::result_large_err)]
 async fn require_admin(
     State(state): State<AppState>,
     jar: PrivateCookieJar,
     req: Request,
     next: Next,
-) -> Result<Response, Redirect> {
+) -> Result<Response, Response> {
     if get_session_user_id(&jar).await.is_some() {
         Ok(next.run(req).await)
+    } else if req.uri().path().starts_with("/api/") {
+        Err((
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({
+                "error": { "code": "UNAUTHORIZED", "message": "Authentication required" }
+            })),
+        )
+            .into_response())
     } else {
-        Err(Redirect::to(&format!("{}/login", state.app_base)))
+        Err(Redirect::to(&format!("{}/login", state.app_base)).into_response())
     }
 }
 
@@ -1340,6 +1380,7 @@ async fn login_google(State(state): State<AppState>, jar: PrivateCookieJar) -> i
     let config = match &state.google_oauth {
         Some(c) => c,
         None => {
+            warn!("Google OAuth login requested but Google OAuth is not configured");
             return Redirect::to(&format!(
                 "{}/login?error=Google+OAuth+not+configured",
                 state.app_base
@@ -1347,6 +1388,8 @@ async fn login_google(State(state): State<AppState>, jar: PrivateCookieJar) -> i
             .into_response();
         }
     };
+
+    info!("Google OAuth login initiated");
 
     let state_token = uuid::Uuid::new_v4().to_string();
     let cookie_path = if state.app_base.is_empty() {
@@ -1406,6 +1449,7 @@ async fn login_google_callback(
     let config = match &state.google_oauth {
         Some(c) => c,
         None => {
+            warn!("Google OAuth callback received but Google OAuth is not configured");
             return Redirect::to(&format!(
                 "{}/login?error=Google+OAuth+not+configured",
                 state.app_base
@@ -1413,6 +1457,8 @@ async fn login_google_callback(
             .into_response();
         }
     };
+
+    info!("Google OAuth callback received");
 
     let stored_state = jar.get("oauth_state").map(|c| c.value().to_string());
 
@@ -1602,6 +1648,7 @@ async fn login_oidc(State(state): State<AppState>, jar: PrivateCookieJar) -> imp
     let config = match &state.oidc {
         Some(c) => c,
         None => {
+            warn!("OIDC login requested but OIDC is not configured");
             return Redirect::to(&format!(
                 "{}/login?error=OIDC+not+configured",
                 state.app_base
@@ -1609,6 +1656,11 @@ async fn login_oidc(State(state): State<AppState>, jar: PrivateCookieJar) -> imp
             .into_response();
         }
     };
+
+    info!(
+        "OIDC login initiated for provider: {}",
+        config.provider_name
+    );
 
     let (auth_endpoint, _, _) = match config.resolve_endpoints().await {
         Ok(res) => res,
@@ -1715,6 +1767,7 @@ async fn login_oidc_callback(
     let config = match &state.oidc {
         Some(c) => c,
         None => {
+            warn!("OIDC callback received but OIDC is not configured");
             return Redirect::to(&format!(
                 "{}/login?error=OIDC+not+configured",
                 state.app_base
@@ -1722,6 +1775,11 @@ async fn login_oidc_callback(
             .into_response();
         }
     };
+
+    info!(
+        "OIDC callback received for provider: {}",
+        config.provider_name
+    );
 
     let stored_state = jar.get("oidc_state").map(|c| c.value().to_string());
 
@@ -2207,7 +2265,8 @@ async fn main() {
         );
 
     let public_routes = Router::new()
-        .route("/", get(index))
+        .route("/", get(default_index))
+        .route("/classic", get(index))
         .route("/recipe/{id}", get(view_recipe))
         .route("/recipe/favorite/{id}", post(toggle_favorite))
         .route("/login", get(login_form).post(login_submit))
@@ -2441,7 +2500,8 @@ mod oauth_tests {
             );
 
         let public_routes = Router::new()
-            .route("/", get(index))
+            .route("/", get(default_index))
+            .route("/classic", get(index))
             .route("/login", get(login_form).post(login_submit))
             .route("/login/google", get(login_google))
             .route("/login/google/callback", get(login_google_callback))
@@ -2772,6 +2832,19 @@ mod oauth_tests {
     #[tokio::test]
     async fn test_spa_routing() {
         let app = build_test_app(None, None).await;
+
+        // / serves modern UI index.html (200 OK)
+        let req_root = Request::builder().uri("/").body(Body::empty()).unwrap();
+        let res_root = app.clone().oneshot(req_root).await.unwrap();
+        assert_eq!(res_root.status(), StatusCode::OK);
+
+        // /classic serves classic template index (200 OK)
+        let req_classic = Request::builder()
+            .uri("/classic")
+            .body(Body::empty())
+            .unwrap();
+        let res_classic = app.clone().oneshot(req_classic).await.unwrap();
+        assert_eq!(res_classic.status(), StatusCode::OK);
 
         // /app serves index.html directly
         let req_app = Request::builder().uri("/app").body(Body::empty()).unwrap();

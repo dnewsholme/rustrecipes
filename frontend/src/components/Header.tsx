@@ -150,6 +150,15 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </button>
 
+          {/* Classic UI Link */}
+          <a
+            href="/classic"
+            className="btn btn-ghost btn-sm"
+            title="Switch to Classic Server-Rendered UI"
+          >
+            <span className="hide-mobile">Classic</span>
+          </a>
+
           {/* API Docs Link */}
           <a
             href="/api/docs"
@@ -176,6 +185,7 @@ export const Header: React.FC<HeaderProps> = ({
           {auth.user ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
               <button
+                id="modern-manage-passkeys-btn"
                 onClick={onOpenPasskeys}
                 className="btn btn-ghost btn-sm"
                 title="Manage Passkeys"
@@ -204,6 +214,7 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           ) : (
             <button
+              id="modern-login-btn"
               onClick={onOpenLogin}
               className="btn btn-secondary btn-sm"
               style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}

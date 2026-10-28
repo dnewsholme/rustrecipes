@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Key, Trash2, Plus } from 'lucide-react';
-import { startRegistration } from '@simplewebauthn/browser';
+import { decodeCreationOptions, serializeCredential } from '../webauthn';
 import { api } from '../api';
 
 interface PasskeysModalProps {
@@ -38,34 +38,25 @@ export const PasskeysModal: React.FC<PasskeysModalProps> = ({ onClose }) => {
 
     try {
       // 1. Get registration options from server
-      const startRes = await fetch('/api/v1/auth/passkeys/register/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: keyName.trim() }),
-      });
-
-      if (!startRes.ok) {
-        throw new Error('Failed to start passkey registration');
+      const startData = await api.registerPasskeyStart(keyName.trim());
+      const rawOptions = startData.challenge?.publicKey || startData.publicKey;
+      if (!rawOptions) {
+        throw new Error('Invalid registration challenge received from server');
       }
 
-      const startData = await startRes.json();
-
-      // 2. Browser WebAuthn prompt
-      const attResp = await startRegistration({ optionsJSON: startData.publicKey });
+      // 2. Native WebAuthn prompt
+      const publicKey = decodeCreationOptions(rawOptions);
+      const credential = await navigator.credentials.create({ publicKey });
+      if (!credential) {
+        throw new Error('WebAuthn credential creation was not completed');
+      }
 
       // 3. Send attestation response to server
-      const finishRes = await fetch('/api/v1/auth/passkeys/register/finish', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: keyName.trim(),
-          response: attResp,
-        }),
+      await api.registerPasskeyFinish({
+        reg_id: startData.reg_id,
+        key_name: keyName.trim(),
+        credential: serializeCredential(credential),
       });
-
-      if (!finishRes.ok) {
-        throw new Error('Server passkey registration verification failed');
-      }
 
       setKeyName('');
       await loadPasskeys();
@@ -109,6 +100,7 @@ export const PasskeysModal: React.FC<PasskeysModalProps> = ({ onClose }) => {
         {/* Register New Passkey Form */}
         <form onSubmit={handleRegister} style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem' }}>
           <input
+            id="modern-passkey-name-input"
             type="text"
             required
             value={keyName}
@@ -118,6 +110,7 @@ export const PasskeysModal: React.FC<PasskeysModalProps> = ({ onClose }) => {
             style={{ fontSize: '0.9rem' }}
           />
           <button
+            id="modern-register-passkey-btn"
             type="submit"
             disabled={registering}
             className="btn btn-primary btn-sm"
@@ -129,7 +122,7 @@ export const PasskeysModal: React.FC<PasskeysModalProps> = ({ onClose }) => {
         </form>
 
         {/* Passkeys List */}
-        <div>
+        <div id="modern-passkeys-list">
           <h3 style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.75rem', textTransform: 'uppercase' }}>
             Registered Passkeys ({passkeys.length})
           </h3>

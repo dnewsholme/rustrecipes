@@ -13,7 +13,8 @@ use webauthn_rs::prelude::*;
 #[derive(Deserialize)]
 pub struct RegisterStartRequest {
     #[allow(dead_code)]
-    pub key_name: String,
+    #[serde(alias = "name")]
+    pub key_name: Option<String>,
 }
 
 pub async fn passkeys_register_start(
@@ -71,10 +72,19 @@ pub async fn passkeys_register_start(
             struct RegisterStartResponse {
                 reg_id: String,
                 challenge: CreationChallengeResponse,
+                #[serde(rename = "publicKey")]
+                public_key: serde_json::Value,
             }
+            let public_key =
+                serde_json::to_value(&challenge.public_key).unwrap_or(serde_json::Value::Null);
+            tracing::info!("Passkey registration started for user_id='{}'", user_id);
             (
                 StatusCode::OK,
-                Json(RegisterStartResponse { reg_id, challenge }),
+                Json(RegisterStartResponse {
+                    reg_id,
+                    challenge,
+                    public_key,
+                }),
             )
                 .into_response()
         }
@@ -92,7 +102,9 @@ pub async fn passkeys_register_start(
 #[derive(Deserialize)]
 pub struct RegisterFinishRequest {
     pub reg_id: String,
-    pub key_name: String,
+    #[serde(alias = "name")]
+    pub key_name: Option<String>,
+    #[serde(alias = "response")]
     pub credential: RegisterPublicKeyCredential,
 }
 
@@ -130,14 +142,15 @@ pub async fn passkeys_register_finish(
             let cred_id_str =
                 base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(passkey.cred_id());
 
+            let key_name_final = req
+                .key_name
+                .filter(|s| !s.trim().is_empty())
+                .unwrap_or_else(|| "Passkey".to_string());
+
             let user_passkey = UserPasskey {
                 id: cred_id_str,
-                user_id,
-                name: if req.key_name.trim().is_empty() {
-                    "Passkey".to_string()
-                } else {
-                    req.key_name
-                },
+                user_id: user_id.clone(),
+                name: key_name_final,
                 passkey_json,
                 created_at: "".to_string(),
             };
@@ -148,6 +161,7 @@ pub async fn passkeys_register_finish(
                     .into_response();
             }
 
+            tracing::info!("Passkey registered successfully for user_id='{}'", user_id);
             (StatusCode::OK, "Passkey registered successfully").into_response()
         }
         Err(e) => {
@@ -211,10 +225,19 @@ pub async fn passkeys_login_start(
             struct LoginStartResponse {
                 auth_id: String,
                 challenge: RequestChallengeResponse,
+                #[serde(rename = "publicKey")]
+                public_key: serde_json::Value,
             }
+            let public_key =
+                serde_json::to_value(&challenge.public_key).unwrap_or(serde_json::Value::Null);
+            tracing::info!("Passkey login started for email='{}'", email_lookup);
             (
                 StatusCode::OK,
-                Json(LoginStartResponse { auth_id, challenge }),
+                Json(LoginStartResponse {
+                    auth_id,
+                    challenge,
+                    public_key,
+                }),
             )
                 .into_response()
         }
@@ -233,6 +256,7 @@ pub async fn passkeys_login_start(
 pub struct LoginFinishRequest {
     pub auth_id: String,
     pub email: String,
+    #[serde(alias = "response")]
     pub credential: PublicKeyCredential,
 }
 
@@ -286,6 +310,8 @@ pub async fn passkeys_login_finish(
                 .build();
             let jar = jar.add(cookie);
 
+            tracing::info!("Passkey login successful for user: {}", user.email);
+
             #[derive(Serialize)]
             struct LoginFinishResponse {
                 status: String,
@@ -334,6 +360,11 @@ pub async fn passkeys_list(jar: PrivateCookieJar) -> impl IntoResponse {
         })
         .collect::<Vec<_>>();
 
+    tracing::info!(
+        "Listing passkeys for user_id='{}', found={}",
+        user_id,
+        resp.len()
+    );
     (StatusCode::OK, Json(resp)).into_response()
 }
 
@@ -344,7 +375,10 @@ pub async fn passkeys_delete(jar: PrivateCookieJar, Path(id): Path<String>) -> i
     };
 
     match storage::delete_passkey_by_id(&id, &user_id) {
-        Ok(_) => (StatusCode::OK, "Passkey deleted").into_response(),
+        Ok(_) => {
+            tracing::info!("Passkey deleted: id='{}' for user_id='{}'", id, user_id);
+            (StatusCode::OK, "Passkey deleted").into_response()
+        }
         Err(e) => {
             tracing::error!("Failed to delete passkey: {:?}", e);
             (
