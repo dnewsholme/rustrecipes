@@ -13,6 +13,7 @@
   
   --radius-lg: 16px;
   --radius-md: 8px;
+  --radius-sm: 4px;
   --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
@@ -31,6 +32,7 @@
   --border-color: #404040;
   --header-bg: rgba(23, 23, 23, 0.8);
   --importer-bg: linear-gradient(145deg, #262626, #171717);
+  --radius-sm: 4px;
 }
 
 * {
@@ -62,6 +64,19 @@ a {
 
 a:hover {
   color: var(--accent-hover);
+}
+
+code, pre {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+code {
+  font-size: 0.9em;
+  padding: 0.15rem 0.4rem;
+  background-color: var(--surface-hover);
+  color: var(--accent-color);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
 }
 
 /* Layout */
@@ -973,3 +988,29 @@ main {
     display: block;
   }
 }
+
+/* API Guide & Playground */
+.api-guide .endpoint-card {
+  transition: var(--transition);
+}
+
+.api-guide .endpoint-card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.api-guide code {
+  color: var(--text-primary);
+}
+
+.api-guide pre.response-pre {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.api-guide .form-control {
+  font-size: 0.875rem;
+}
+

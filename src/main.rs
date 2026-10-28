@@ -473,14 +473,13 @@ async fn get_session_user_id(jar: &PrivateCookieJar) -> Option<String> {
     None
 }
 
-async fn default_index(
-    State(state): State<AppState>,
-    jar: PrivateCookieJar,
-    headers: axum::http::HeaderMap,
-    Query(params): Query<std::collections::HashMap<String, String>>,
-) -> Response {
+fn is_classic_preferred(
+    jar: &PrivateCookieJar,
+    headers: &axum::http::HeaderMap,
+    params: &std::collections::HashMap<String, String>,
+) -> bool {
     let ui_param = params.get("ui").map(|s| s.as_str());
-    let prefer_classic = if ui_param == Some("modern") {
+    if ui_param == Some("modern") {
         false
     } else if ui_param == Some("classic") {
         true
@@ -492,9 +491,35 @@ async fn default_index(
                 .get("ui_preference")
                 .is_some_and(|c| c.value() == "classic")
             || headers.get("x-ui-mode").is_some_and(|v| v == "classic")
-    };
+    }
+}
 
-    if prefer_classic {
+async fn spa_fallback(
+    State(state): State<AppState>,
+    jar: PrivateCookieJar,
+    headers: axum::http::HeaderMap,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+    uri: axum::http::Uri,
+) -> Response {
+    let path = uri.path();
+    if path.starts_with("/api/")
+        || path.starts_with("/static/")
+        || path.starts_with("/assets/")
+        || path.starts_with("/uploads/")
+    {
+        return (StatusCode::NOT_FOUND, "Not Found").into_response();
+    }
+
+    default_index(State(state), jar, headers, Query(params)).await
+}
+
+async fn default_index(
+    State(state): State<AppState>,
+    jar: PrivateCookieJar,
+    headers: axum::http::HeaderMap,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Response {
+    if is_classic_preferred(&jar, &headers, &params) {
         index(State(state), jar).await.into_response()
     } else {
         match tokio::fs::read_to_string("frontend/dist/index.html").await {
@@ -565,7 +590,7 @@ async fn api_guide(State(state): State<AppState>, jar: PrivateCookieJar) -> impl
     Html(template.render().unwrap())
 }
 
-async fn shopping_list_page(
+async fn shopping_list_classic(
     State(state): State<AppState>,
     jar: PrivateCookieJar,
 ) -> impl IntoResponse {
@@ -585,7 +610,21 @@ async fn shopping_list_page(
     Html(template.render().unwrap())
 }
 
-async fn view_recipe(
+async fn shopping_list_page(
+    State(state): State<AppState>,
+    jar: PrivateCookieJar,
+    headers: axum::http::HeaderMap,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Response {
+    if !is_classic_preferred(&jar, &headers, &params) {
+        return default_index(State(state), jar, headers, Query(params)).await;
+    }
+    shopping_list_classic(State(state), jar)
+        .await
+        .into_response()
+}
+
+async fn view_recipe_classic(
     State(state): State<AppState>,
     jar: PrivateCookieJar,
     Path(id): Path<String>,
@@ -618,6 +657,21 @@ async fn view_recipe(
     } else {
         Err((StatusCode::NOT_FOUND, "Recipe not found"))
     }
+}
+
+async fn view_recipe(
+    State(state): State<AppState>,
+    jar: PrivateCookieJar,
+    headers: axum::http::HeaderMap,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+    Path(id): Path<String>,
+) -> Response {
+    if !is_classic_preferred(&jar, &headers, &params) {
+        return default_index(State(state), jar, headers, Query(params)).await;
+    }
+    view_recipe_classic(State(state), jar, Path(id))
+        .await
+        .into_response()
 }
 
 async fn new_recipe(State(state): State<AppState>, jar: PrivateCookieJar) -> impl IntoResponse {
@@ -2283,6 +2337,12 @@ async fn main() {
     let public_routes = Router::new()
         .route("/", get(default_index))
         .route("/classic", get(index))
+        .route("/classic/recipe/{id}", get(view_recipe_classic))
+        .route("/classic/shopping-list", get(shopping_list_classic))
+        .route("/meal-plan", get(default_index))
+        .route("/meal-plan/", get(default_index))
+        .route("/shopping-list", get(shopping_list_page))
+        .route("/shopping-list/", get(shopping_list_page))
         .route("/recipe/{id}", get(view_recipe))
         .route("/recipe/favorite/{id}", post(toggle_favorite))
         .route("/login", get(login_form).post(login_submit))
@@ -2298,7 +2358,6 @@ async fn main() {
         .route("/api", get(api_guide))
         .route("/api/", get(api_guide))
         .route("/api/docs", get(docs_page))
-        .route("/shopping-list", get(shopping_list_page))
         .route(
             "/api/v1/auth/passkeys/login/start",
             post(passkeys::passkeys_login_start),
@@ -2312,7 +2371,12 @@ async fn main() {
     let app = Router::new()
         .merge(public_routes.with_state(state.clone()))
         .merge(protected_routes.with_state(state.clone()))
-        .nest("/api/v1", api::router(state.clone()).with_state(state))
+        .nest(
+            "/api/v1",
+            api::router(state.clone()).with_state(state.clone()),
+        )
+        .fallback(spa_fallback)
+        .with_state(state)
         .layer(axum::middleware::from_fn(add_security_headers))
         .layer(axum::middleware::from_fn(csrf_header_check))
         .layer(TraceLayer::new_for_http())
@@ -2403,7 +2467,7 @@ async fn add_security_headers(req: Request, next: Next) -> Response {
         axum::http::HeaderValue::from_static("strict-origin-when-cross-origin"),
     );
     headers.insert("Content-Security-Policy", axum::http::HeaderValue::from_static(
-        "default-src 'self'; img-src 'self' data: https: http:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com https://maxcdn.bootstrapcdn.com; font-src 'self' https://fonts.gstatic.com https://maxcdn.bootstrapcdn.com; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; frame-src 'self' https://www.youtube-nocookie.com https://www.youtube.com; connect-src 'self' https://cdn.jsdelivr.net;"
+        "default-src 'self'; img-src 'self' data: https: http:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com https://maxcdn.bootstrapcdn.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com https://maxcdn.bootstrapcdn.com https://cdn.jsdelivr.net; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; frame-src 'self' https://www.youtube-nocookie.com https://www.youtube.com; connect-src 'self' https://cdn.jsdelivr.net;"
     ));
     response
 }
@@ -2530,6 +2594,10 @@ mod oauth_tests {
         let public_routes = Router::new()
             .route("/", get(default_index))
             .route("/classic", get(index))
+            .route("/classic/recipe/{id}", get(view_recipe_classic))
+            .route("/classic/shopping-list", get(shopping_list_classic))
+            .route("/meal-plan", get(default_index))
+            .route("/meal-plan/", get(default_index))
             .route("/login", get(login_form).post(login_submit))
             .route("/login/google", get(login_google))
             .route("/login/google/callback", get(login_google_callback))
@@ -2542,7 +2610,10 @@ mod oauth_tests {
             .route("/spa/", get(redirect_to_app))
             .merge(static_assets);
 
-        Router::new().merge(public_routes).with_state(state)
+        Router::new()
+            .merge(public_routes)
+            .fallback(spa_fallback)
+            .with_state(state)
     }
 
     #[tokio::test]
