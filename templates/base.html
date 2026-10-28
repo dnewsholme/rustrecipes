@@ -141,6 +141,12 @@
                         
                         <div class="dropdown-divider"></div>
 
+                        <!-- Modern Vite SPA UI -->
+                        <a href="{{ app_base }}/app/" class="dropdown-item">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+                            Modern SPA UI
+                        </a>
+
                         <!-- Shopping List Link -->
                         <a href="{{ app_base }}/shopping-list" class="dropdown-item">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path></svg>
@@ -886,8 +892,11 @@
             });
         }
 
+    </script>
+
+    {% if current_user_id.is_some() %}
+    <script>
         // Passkey (WebAuthn) Management Logic
-        {% if current_user_id.is_some() %}
         function bufferToBase64url(buffer) {
             const bytes = new Uint8Array(buffer);
             let binary = '';
@@ -1073,9 +1082,7 @@
                 regBtn.textContent = 'Register Key';
             }
         }
-        {% endif %}
-
-
     </script>
+    {% endif %}
 </body>
 </html>

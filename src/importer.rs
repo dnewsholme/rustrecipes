@@ -310,6 +310,7 @@ fn convert_ld_to_recipe(ld: LdRecipe, url: &str) -> Recipe {
         owner_id: "admin".to_string(),
         is_public: true,
         owner_email: None,
+        ..Default::default()
     }
 }
 
@@ -498,6 +499,7 @@ pub async fn import_paprika_archive(bytes: &[u8]) -> Vec<Recipe> {
                             owner_id: "admin".to_string(),
                             is_public: true,
                             owner_email: None,
+                            ..Default::default()
                         };
                         imported.push(recipe);
                     }
@@ -561,6 +563,7 @@ fn gemini_recipe_to_recipe(gemini: GeminiRecipe) -> Recipe {
         owner_id: "admin".to_string(),
         is_public: true,
         owner_email: None,
+        ..Default::default()
     }
 }
 

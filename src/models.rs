@@ -4,7 +4,32 @@ fn default_true() -> bool {
     true
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub struct RecipeIngredient {
+    #[serde(default)]
+    pub id: Option<i64>,
+    #[serde(default)]
+    pub recipe_id: Option<String>,
+    pub raw_text: String,
+    pub amount: Option<f64>,
+    pub unit: Option<String>,
+    pub name: String,
+    pub is_header: bool,
+    #[serde(default)]
+    pub sort_order: i32,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub struct RecipeStep {
+    #[serde(default)]
+    pub id: Option<i64>,
+    #[serde(default)]
+    pub recipe_id: Option<String>,
+    pub step_number: i32,
+    pub instruction: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct Recipe {
     #[serde(default)]
     pub id: String,
@@ -35,6 +60,10 @@ pub struct Recipe {
     pub is_public: bool,
     #[serde(default)]
     pub owner_email: Option<String>,
+    #[serde(default)]
+    pub structured_ingredients: Vec<RecipeIngredient>,
+    #[serde(default)]
+    pub steps: Vec<RecipeStep>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

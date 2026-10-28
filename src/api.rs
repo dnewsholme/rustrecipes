@@ -6,7 +6,7 @@ use axum::{
     response::{IntoResponse, Json, Response},
     routing::{delete, get, post},
 };
-use axum_extra::extract::cookie::{Key, PrivateCookieJar};
+use axum_extra::extract::cookie::{Cookie, Key, PrivateCookieJar, SameSite};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error, warn};
 
@@ -65,6 +65,10 @@ pub fn router(_state: AppState) -> Router<AppState> {
         )
         .route("/meal-plan/{id}", delete(delete_meal_plan_item))
         .route("/meal-plan/toggle", post(toggle_meal_plan))
+        .route("/openapi.json", get(crate::openapi::openapi_json))
+        .route("/auth/me", get(get_current_user_api))
+        .route("/auth/login", post(api_login))
+        .route("/auth/logout", post(api_logout))
 }
 
 // ---------------------------------------------------------------------------
@@ -527,6 +531,7 @@ impl RecipeInput {
             owner_id,
             is_public: self.is_public.unwrap_or(default_public),
             owner_email: None,
+            ..Default::default()
         }
     }
 }
@@ -1148,6 +1153,100 @@ async fn delete_meal_plan_item(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[derive(Deserialize)]
+pub struct LoginPayload {
+    pub email: String,
+    pub password: String,
+}
+
+pub async fn api_login(
+    State(state): State<AppState>,
+    jar: PrivateCookieJar,
+    Json(payload): Json<LoginPayload>,
+) -> ApiResult<(PrivateCookieJar, Json<serde_json::Value>)> {
+    let admin_email = std::env::var("ADMIN_EMAIL").unwrap_or_default();
+    let email_lookup = if payload.email.trim().to_lowercase() == "admin" {
+        admin_email
+    } else {
+        payload.email.trim().to_string()
+    };
+
+    let user = storage::find_user_by_email(&email_lookup).ok_or(ApiError::Unauthorized)?;
+    if !bcrypt::verify(&payload.password, &user.password_hash).unwrap_or(false) {
+        return Err(ApiError::Unauthorized);
+    }
+
+    let cookie_path = if state.app_base.is_empty() {
+        "/"
+    } else {
+        state.app_base
+    };
+
+    let cookie = Cookie::build(("admin_session", user.id.clone()))
+        .path(cookie_path)
+        .http_only(true)
+        .secure(crate::is_cookie_secure())
+        .same_site(SameSite::Lax)
+        .max_age(time::Duration::days(30))
+        .build();
+    let updated_jar = jar.add(cookie);
+
+    let is_admin = admin_user_id().as_deref() == Some(&user.id);
+
+    Ok((
+        updated_jar,
+        Json(serde_json::json!({
+            "success": true,
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "is_admin": is_admin
+            }
+        })),
+    ))
+}
+
+pub async fn api_logout(
+    State(state): State<AppState>,
+    jar: PrivateCookieJar,
+) -> (PrivateCookieJar, Json<serde_json::Value>) {
+    let cookie_path = if state.app_base.is_empty() {
+        "/"
+    } else {
+        state.app_base
+    };
+    let updated_jar = jar.remove(Cookie::build("admin_session").path(cookie_path).build());
+    (updated_jar, Json(serde_json::json!({ "success": true })))
+}
+
+pub async fn get_current_user_api(
+    State(state): State<AppState>,
+    MaybeUser(user): MaybeUser,
+) -> impl IntoResponse {
+    let user_info = if let Some(u) = user {
+        let email = storage::find_user_by_id(&u.id).map(|user| user.email);
+        Some(serde_json::json!({
+            "id": u.id,
+            "email": email,
+            "is_admin": u.is_admin,
+        }))
+    } else {
+        None
+    };
+
+    let config = serde_json::json!({
+        "app_base": state.app_base,
+        "google_auth_enabled": state.google_oauth.is_some(),
+        "oidc_auth_enabled": state.oidc.is_some(),
+        "oidc_provider_name": state.oidc.as_ref().map(|o| o.provider_name.clone()).unwrap_or_default(),
+    });
+
+    Json(serde_json::json!({
+        "user": user_info,
+        "config": config,
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1231,6 +1330,7 @@ mod tests {
             owner_id: owner_id.to_string(),
             is_public,
             owner_email: None,
+            ..Default::default()
         }
     }
 
@@ -1774,5 +1874,153 @@ mod tests {
 
         // Clean up
         let _ = storage::delete_user(user_id);
+    }
+
+    #[tokio::test]
+    async fn test_openapi_spec() {
+        let state = test_state();
+        let app = router(state.clone()).with_state(state);
+        let req = Request::builder()
+            .method("GET")
+            .uri("/openapi.json")
+            .body(Body::empty())
+            .unwrap();
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let val = json_body(response).await;
+        assert_eq!(val["openapi"], "3.0.3");
+        assert_eq!(val["info"]["title"], "Recipe Manager API");
+        assert!(val["paths"]["/recipes"].is_object());
+        assert!(val["paths"]["/recipes/{id}"].is_object());
+    }
+
+    #[tokio::test]
+    async fn test_auth_endpoints() {
+        let state = test_state();
+        let app = router(state.clone()).with_state(state.clone());
+
+        // 1. Unauthenticated /auth/me
+        let req = Request::builder()
+            .method("GET")
+            .uri("/auth/me")
+            .body(Body::empty())
+            .unwrap();
+        let response = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let val = json_body(response).await;
+        assert!(val["user"].is_null());
+
+        // Create a test user with valid bcrypt hash
+        let test_pass = "testpassword";
+        let hash = bcrypt::hash(test_pass, 4).unwrap();
+        storage::save_user(&crate::models::User {
+            id: "auth-test-user".to_string(),
+            email: "authtest@example.com".to_string(),
+            password_hash: hash,
+            created_at: "".to_string(),
+        })
+        .unwrap();
+
+        // 2. Successful Login
+        let req = Request::builder()
+            .method("POST")
+            .uri("/auth/login")
+            .header("Content-Type", "application/json")
+            .body(Body::from(
+                serde_json::to_vec(&serde_json::json!({
+                    "email": "authtest@example.com",
+                    "password": "testpassword"
+                }))
+                .unwrap(),
+            ))
+            .unwrap();
+        let response = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let login_res = json_body(response).await;
+        assert_eq!(login_res["success"], true);
+
+        // 3. Bad Password Login
+        let req = Request::builder()
+            .method("POST")
+            .uri("/auth/login")
+            .header("Content-Type", "application/json")
+            .body(Body::from(
+                serde_json::to_vec(&serde_json::json!({
+                    "email": "authtest@example.com",
+                    "password": "wrongpassword"
+                }))
+                .unwrap(),
+            ))
+            .unwrap();
+        let response = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        // 4. Logout
+        let req = Request::builder()
+            .method("POST")
+            .uri("/auth/logout")
+            .body(Body::empty())
+            .unwrap();
+        let response = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let _ = storage::delete_user("auth-test-user");
+    }
+
+    #[tokio::test]
+    async fn test_recipe_structured_api() {
+        let state = test_state();
+        let app = router(state.clone()).with_state(state);
+        let admin_id = storage::find_user_by_email("admin@example.com").unwrap().id;
+        let r = Recipe {
+            id: "api-struct-test".to_string(),
+            title: "Structured API Recipe".to_string(),
+            description: Some("Oven 350°F".to_string()),
+            image: None,
+            source_url: None,
+            tags: vec!["bread".to_string()],
+            servings: Some(2),
+            prep_time: None,
+            cook_time: None,
+            ingredients: vec![
+                "## Starter".to_string(),
+                "100g sourdough starter".to_string(),
+                "## Dough".to_string(),
+                "500g bread flour".to_string(),
+                "350g water".to_string(),
+            ],
+            markdown: "1. Mix starter and water.\n2. Add flour and autolyse.".to_string(),
+            owner_id: admin_id,
+            is_public: true,
+            ..Default::default()
+        };
+        storage::save_recipe(&r).unwrap();
+
+        // Query with scaling x2 and metric unit
+        let req = Request::builder()
+            .method("GET")
+            .uri("/recipes/api-struct-test?scale=2&unit=metric&temp=c&bakers=true")
+            .body(Body::empty())
+            .unwrap();
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = json_body(response).await;
+        assert_eq!(body["id"], "api-struct-test");
+        assert_eq!(body["servings"], 4);
+        assert!(body["structured_ingredients"].is_array());
+        let structured = body["structured_ingredients"].as_array().unwrap();
+        assert_eq!(structured.len(), 5);
+        assert_eq!(structured[0]["is_header"], true);
+        assert_eq!(structured[0]["name"], "Starter");
+        assert_eq!(structured[2]["is_header"], true);
+        assert_eq!(structured[2]["name"], "Dough");
+
+        assert!(body["steps"].is_array());
+        let steps = body["steps"].as_array().unwrap();
+        assert_eq!(steps.len(), 2);
+        assert_eq!(steps[0]["instruction"], "Mix starter and water.");
+
+        // Cleanup
+        let _ = storage::delete_recipe("api-struct-test");
     }
 }

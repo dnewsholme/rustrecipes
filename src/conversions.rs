@@ -149,17 +149,31 @@ fn get_grams(amount: f64, unit: &str) -> f64 {
     grams
 }
 
-#[derive(serde::Serialize, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct ConvertedRecipe {
     pub id: String,
     pub title: String,
     pub description: Option<String>,
+    pub image: Option<String>,
+    pub source_url: Option<String>,
+    pub tags: Vec<String>,
+    pub prep_time: Option<String>,
+    pub cook_time: Option<String>,
     pub ingredients: Vec<String>,
+    pub structured_ingredients: Vec<crate::models::RecipeIngredient>,
+    pub steps: Vec<crate::models::RecipeStep>,
     pub markdown: String,
     pub html: String,
     pub servings: Option<u32>,
     pub overall_hydration: Option<f64>,
     pub combustion_csv: Option<String>,
+    pub video_url: Option<String>,
+    pub youtube_id: Option<String>,
+    pub favorite: bool,
+    pub is_public: bool,
+    pub owner_id: String,
+    pub owner_email: Option<String>,
+    pub is_owner: bool,
     pub leaven_type: Option<String>,
     pub leaven_amount: Option<f64>,
     pub total_flour: f64,
@@ -435,18 +449,40 @@ pub fn convert_recipe(
         })
         .collect();
     recipe.markdown = replace_text(&recipe.markdown, false);
-    let description = recipe.description.map(|d| replace_text(&d, false));
+    let description = recipe.description.as_ref().map(|d| replace_text(d, false));
 
     let parser = pulldown_cmark::Parser::new(&recipe.markdown);
     let mut html_output = String::new();
     pulldown_cmark::html::push_html(&mut html_output, parser);
     let html = html_output;
 
+    let structured_ingredients: Vec<crate::models::RecipeIngredient> = recipe
+        .ingredients
+        .iter()
+        .enumerate()
+        .map(|(idx, line)| parse_ingredient_line(line, idx as i32))
+        .collect();
+
+    let youtube_id = recipe.youtube_id();
+
+    let steps = if !recipe.steps.is_empty() {
+        recipe.steps
+    } else {
+        parse_recipe_steps(&recipe.markdown)
+    };
+
     ConvertedRecipe {
         id: recipe.id,
         title: recipe.title,
         description,
+        image: recipe.image,
+        source_url: recipe.source_url,
+        tags: recipe.tags,
+        prep_time: recipe.prep_time,
+        cook_time: recipe.cook_time,
         ingredients: recipe.ingredients,
+        structured_ingredients,
+        steps,
         markdown: recipe.markdown,
         html,
         servings: recipe.servings,
@@ -456,6 +492,13 @@ pub fn convert_recipe(
             None
         },
         combustion_csv: recipe.combustion_csv,
+        video_url: recipe.video_url,
+        youtube_id,
+        favorite: recipe.favorite,
+        is_public: recipe.is_public,
+        owner_id: recipe.owner_id,
+        owner_email: recipe.owner_email,
+        is_owner: false,
         leaven_type: if detected_starter > 0.0 {
             Some("starter".to_string())
         } else if detected_yeast > 0.0 {
@@ -477,6 +520,122 @@ pub fn convert_recipe(
         total_flour,
         total_water,
     }
+}
+
+pub fn parse_ingredient_line(raw: &str, sort_order: i32) -> crate::models::RecipeIngredient {
+    let trimmed = raw.trim();
+    if is_ingredient_header(trimmed) {
+        return crate::models::RecipeIngredient {
+            id: None,
+            recipe_id: None,
+            raw_text: trimmed.to_string(),
+            amount: None,
+            unit: None,
+            name: format_ingredient_header(trimmed),
+            is_header: true,
+            sort_order,
+        };
+    }
+
+    if let Some(cap) = START_AMOUNT_REGEX.captures(trimmed) {
+        let full_match = cap.get(0).unwrap().as_str();
+        let num_str = cap.get(1).map_or("", |m| m.as_str());
+        let unit_str = cap.get(2).map(|m| m.as_str().to_string());
+        let amount = Some(parse_num_str(num_str));
+
+        let remainder = trimmed[full_match.len()..].trim();
+        let name = remainder
+            .trim_start_matches(['-', ',', ' ', ':'])
+            .trim()
+            .to_string();
+
+        crate::models::RecipeIngredient {
+            id: None,
+            recipe_id: None,
+            raw_text: trimmed.to_string(),
+            amount,
+            unit: unit_str,
+            name: if name.is_empty() {
+                trimmed.to_string()
+            } else {
+                name
+            },
+            is_header: false,
+            sort_order,
+        }
+    } else {
+        crate::models::RecipeIngredient {
+            id: None,
+            recipe_id: None,
+            raw_text: trimmed.to_string(),
+            amount: None,
+            unit: None,
+            name: trimmed.to_string(),
+            is_header: false,
+            sort_order,
+        }
+    }
+}
+
+pub fn parse_recipe_steps(markdown: &str) -> Vec<crate::models::RecipeStep> {
+    let mut steps = Vec::new();
+    let mut step_num = 1;
+    let step_num_re = regex::Regex::new(r"^\d+\.\s*").ok();
+
+    for block in markdown.split("\n\n") {
+        let block = block.trim();
+        if block.is_empty() {
+            continue;
+        }
+
+        let lines: Vec<&str> = block
+            .lines()
+            .map(|l| l.trim())
+            .filter(|l| !l.is_empty())
+            .collect();
+        let all_numbered = !lines.is_empty()
+            && lines
+                .iter()
+                .all(|l| l.chars().next().is_some_and(|c| c.is_ascii_digit()) && l.contains('.'));
+
+        if all_numbered && lines.len() > 1 {
+            for line in lines {
+                let text = if let Some(idx) = line.find('.') {
+                    line[idx + 1..].trim()
+                } else {
+                    line
+                };
+                if !text.is_empty() {
+                    steps.push(crate::models::RecipeStep {
+                        id: None,
+                        recipe_id: None,
+                        step_number: step_num,
+                        instruction: text.to_string(),
+                    });
+                    step_num += 1;
+                }
+            }
+        } else {
+            let mut text = block;
+            if let Some(cap) = step_num_re.as_ref().and_then(|r| r.find(block)) {
+                text = &block[cap.end()..];
+            } else if let Some(stripped) = block.strip_prefix("- ") {
+                text = stripped;
+            } else if let Some(stripped) = block.strip_prefix("* ") {
+                text = stripped;
+            }
+
+            steps.push(crate::models::RecipeStep {
+                id: None,
+                recipe_id: None,
+                step_number: step_num,
+                instruction: text.trim().to_string(),
+            });
+            step_num += 1;
+        }
+    }
+
+    steps
 }
 
 #[cfg(test)]
@@ -517,6 +676,7 @@ mod tests {
             owner_id: "admin".to_string(),
             is_public: true,
             owner_email: None,
+            ..Default::default()
         };
 
         // Scale by 2
@@ -563,6 +723,7 @@ mod tests {
             owner_id: "admin".to_string(),
             is_public: true,
             owner_email: None,
+            ..Default::default()
         };
 
         let bakers = convert_recipe(r.clone(), None, None, None, true);
@@ -592,6 +753,7 @@ mod tests {
             owner_id: "admin".to_string(),
             is_public: true,
             owner_email: None,
+            ..Default::default()
         };
 
         let r2 = Recipe {
@@ -617,6 +779,7 @@ mod tests {
             owner_id: "admin".to_string(),
             is_public: true,
             owner_email: None,
+            ..Default::default()
         };
 
         let res = crate::conversions::generate_combined_shopping_list(vec![r1, r2], 4, "metric");

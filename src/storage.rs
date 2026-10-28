@@ -87,6 +87,45 @@ pub fn db_init(
         [],
     )?;
 
+    // Create normalized recipe_ingredients table
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS recipe_ingredients (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            recipe_id TEXT NOT NULL,
+            raw_text TEXT NOT NULL,
+            amount REAL,
+            unit TEXT,
+            name TEXT NOT NULL,
+            is_header INTEGER DEFAULT 0,
+            sort_order INTEGER NOT NULL,
+            FOREIGN KEY(recipe_id) REFERENCES recipes(id) ON DELETE CASCADE
+        )",
+        [],
+    )?;
+
+    // Create normalized recipe_steps table
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS recipe_steps (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            recipe_id TEXT NOT NULL,
+            step_number INTEGER NOT NULL,
+            instruction TEXT NOT NULL,
+            FOREIGN KEY(recipe_id) REFERENCES recipes(id) ON DELETE CASCADE
+        )",
+        [],
+    )?;
+
+    // Create normalized recipe_tags table
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS recipe_tags (
+            recipe_id TEXT NOT NULL,
+            tag TEXT NOT NULL,
+            PRIMARY KEY (recipe_id, tag),
+            FOREIGN KEY(recipe_id) REFERENCES recipes(id) ON DELETE CASCADE
+        )",
+        [],
+    )?;
+
     // Create user_recipe_notes table
     conn.execute(
         "CREATE TABLE IF NOT EXISTS user_recipe_notes (
@@ -404,6 +443,96 @@ pub fn db_init(
         let _ = std::fs::rename(meal_plan_path, bak_path);
     }
 
+    // AUTOMATIC NORMALIZATION MIGRATION FOR RECIPES
+    {
+        let mut stmt = conn.prepare(
+            "SELECT id, ingredients, markdown, tags FROM recipes 
+             WHERE id NOT IN (SELECT DISTINCT recipe_id FROM recipe_ingredients)
+                OR id NOT IN (SELECT DISTINCT recipe_id FROM recipe_steps)
+                OR id NOT IN (SELECT DISTINCT recipe_id FROM recipe_tags)",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, Option<String>>(1)?.unwrap_or_default(),
+                row.get::<_, Option<String>>(2)?.unwrap_or_default(),
+                row.get::<_, Option<String>>(3)?.unwrap_or_default(),
+            ))
+        })?;
+
+        for r in rows.flatten() {
+            let (recipe_id, ings_str, md_str, tags_str) = r;
+            let ing_count: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM recipe_ingredients WHERE recipe_id = ?1",
+                    [&recipe_id],
+                    |row| row.get(0),
+                )
+                .unwrap_or(0);
+            if ing_count == 0 {
+                let lines: Vec<&str> = ings_str
+                    .lines()
+                    .map(|s| s.trim())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+                for (idx, line) in lines.iter().enumerate() {
+                    let ing = crate::conversions::parse_ingredient_line(line, idx as i32);
+                    let _ = conn.execute(
+                        "INSERT INTO recipe_ingredients (recipe_id, raw_text, amount, unit, name, is_header, sort_order)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                        rusqlite::params![
+                            recipe_id,
+                            ing.raw_text,
+                            ing.amount,
+                            ing.unit,
+                            ing.name,
+                            if ing.is_header { 1 } else { 0 },
+                            ing.sort_order,
+                        ],
+                    );
+                }
+            }
+
+            let step_count: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM recipe_steps WHERE recipe_id = ?1",
+                    [&recipe_id],
+                    |row| row.get(0),
+                )
+                .unwrap_or(0);
+            if step_count == 0 {
+                let steps = crate::conversions::parse_recipe_steps(&md_str);
+                for step in steps {
+                    let _ = conn.execute(
+                        "INSERT INTO recipe_steps (recipe_id, step_number, instruction)
+                         VALUES (?1, ?2, ?3)",
+                        rusqlite::params![recipe_id, step.step_number, step.instruction],
+                    );
+                }
+            }
+
+            let tag_count: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM recipe_tags WHERE recipe_id = ?1",
+                    [&recipe_id],
+                    |row| row.get(0),
+                )
+                .unwrap_or(0);
+            if tag_count == 0 {
+                for tag in tags_str
+                    .split(',')
+                    .map(|s| s.trim())
+                    .filter(|s| !s.is_empty())
+                {
+                    let _ = conn.execute(
+                        "INSERT OR IGNORE INTO recipe_tags (recipe_id, tag) VALUES (?1, ?2)",
+                        rusqlite::params![recipe_id, tag],
+                    );
+                }
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -490,6 +619,7 @@ pub fn list_recipes_for_user(user_id: Option<&str>) -> Vec<Recipe> {
             owner_id: row.get(14)?,
             is_public: is_public_int != 0,
             owner_email,
+            ..Default::default()
         };
 
         let parser = Parser::new(&recipe.markdown);
@@ -570,6 +700,7 @@ pub fn read_recipe_for_user(id: &str, user_id: Option<&str>) -> Option<Recipe> {
             owner_id: row.get(14)?,
             is_public: is_public_int != 0,
             owner_email,
+            ..Default::default()
         };
 
         let parser = Parser::new(&recipe.markdown);
@@ -597,6 +728,63 @@ pub fn read_recipe_for_user(id: &str, user_id: Option<&str>) -> Option<Recipe> {
                 *csv = csv[1..].to_string();
             }
         }
+
+        // Load normalized ingredients
+        if let Ok(mut ing_stmt) = conn.prepare(
+            "SELECT id, raw_text, amount, unit, name, is_header, sort_order 
+             FROM recipe_ingredients WHERE recipe_id = ?1 ORDER BY sort_order ASC",
+        ) && let Ok(ing_rows) = ing_stmt.query_map([&recipe.id], |row| {
+            Ok(crate::models::RecipeIngredient {
+                id: row.get(0)?,
+                recipe_id: Some(recipe.id.clone()),
+                raw_text: row.get(1)?,
+                amount: row.get(2)?,
+                unit: row.get(3)?,
+                name: row.get(4)?,
+                is_header: row.get::<_, i32>(5)? != 0,
+                sort_order: row.get(6)?,
+            })
+        }) {
+            let structured_ingredients: Vec<crate::models::RecipeIngredient> =
+                ing_rows.flatten().collect();
+            if !structured_ingredients.is_empty() {
+                recipe.ingredients = structured_ingredients
+                    .iter()
+                    .map(|i| i.raw_text.clone())
+                    .collect();
+                recipe.structured_ingredients = structured_ingredients;
+            }
+        }
+
+        // Load normalized steps
+        if let Ok(mut step_stmt) = conn.prepare(
+            "SELECT id, step_number, instruction 
+             FROM recipe_steps WHERE recipe_id = ?1 ORDER BY step_number ASC",
+        ) && let Ok(step_rows) = step_stmt.query_map([&recipe.id], |row| {
+            Ok(crate::models::RecipeStep {
+                id: row.get(0)?,
+                recipe_id: Some(recipe.id.clone()),
+                step_number: row.get(1)?,
+                instruction: row.get(2)?,
+            })
+        }) {
+            let steps: Vec<crate::models::RecipeStep> = step_rows.flatten().collect();
+            if !steps.is_empty() {
+                recipe.steps = steps;
+            }
+        }
+
+        // Load normalized tags
+        if let Ok(mut tag_stmt) =
+            conn.prepare("SELECT tag FROM recipe_tags WHERE recipe_id = ?1 ORDER BY tag ASC")
+            && let Ok(tag_rows) = tag_stmt.query_map([&recipe.id], |row| row.get::<_, String>(0))
+        {
+            let tags: Vec<String> = tag_rows.flatten().collect();
+            if !tags.is_empty() {
+                recipe.tags = tags;
+            }
+        }
+
         Some(recipe)
     } else {
         None
@@ -640,13 +828,95 @@ fn save_recipe_db(conn: &rusqlite::Connection, recipe: &Recipe) -> Result<(), st
             is_public_int,
         ),
     )
-    .map(|_| ())
-    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+    // Clear existing normalized entries
+    let _ = conn.execute(
+        "DELETE FROM recipe_ingredients WHERE recipe_id = ?1",
+        [&recipe.id],
+    );
+    let _ = conn.execute(
+        "DELETE FROM recipe_steps WHERE recipe_id = ?1",
+        [&recipe.id],
+    );
+    let _ = conn.execute("DELETE FROM recipe_tags WHERE recipe_id = ?1", [&recipe.id]);
+
+    // Save normalized ingredients
+    if !recipe.structured_ingredients.is_empty() {
+        for ing in &recipe.structured_ingredients {
+            let _ = conn.execute(
+                "INSERT INTO recipe_ingredients (recipe_id, raw_text, amount, unit, name, is_header, sort_order)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                rusqlite::params![
+                    &recipe.id,
+                    &ing.raw_text,
+                    ing.amount,
+                    &ing.unit,
+                    &ing.name,
+                    if ing.is_header { 1 } else { 0 },
+                    ing.sort_order,
+                ],
+            );
+        }
+    } else {
+        for (idx, line) in recipe.ingredients.iter().enumerate() {
+            let ing = crate::conversions::parse_ingredient_line(line, idx as i32);
+            let _ = conn.execute(
+                "INSERT INTO recipe_ingredients (recipe_id, raw_text, amount, unit, name, is_header, sort_order)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                rusqlite::params![
+                    &recipe.id,
+                    &ing.raw_text,
+                    ing.amount,
+                    &ing.unit,
+                    &ing.name,
+                    if ing.is_header { 1 } else { 0 },
+                    ing.sort_order,
+                ],
+            );
+        }
+    }
+
+    // Save normalized steps
+    if !recipe.steps.is_empty() {
+        for step in &recipe.steps {
+            let _ = conn.execute(
+                "INSERT INTO recipe_steps (recipe_id, step_number, instruction)
+                 VALUES (?1, ?2, ?3)",
+                rusqlite::params![&recipe.id, step.step_number, &step.instruction],
+            );
+        }
+    } else {
+        let steps = crate::conversions::parse_recipe_steps(&recipe.markdown);
+        for step in steps {
+            let _ = conn.execute(
+                "INSERT INTO recipe_steps (recipe_id, step_number, instruction)
+                 VALUES (?1, ?2, ?3)",
+                rusqlite::params![&recipe.id, step.step_number, &step.instruction],
+            );
+        }
+    }
+
+    // Save normalized tags
+    for tag in &recipe.tags {
+        let tag = tag.trim();
+        if !tag.is_empty() {
+            let _ = conn.execute(
+                "INSERT OR IGNORE INTO recipe_tags (recipe_id, tag) VALUES (?1, ?2)",
+                rusqlite::params![&recipe.id, tag],
+            );
+        }
+    }
+
+    Ok(())
 }
 
 pub fn delete_recipe(id: &str) -> Result<(), std::io::Error> {
     let conn = rusqlite::Connection::open(get_db_path())
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    let _ = conn.execute("DELETE FROM recipe_ingredients WHERE recipe_id = ?1", [id]);
+    let _ = conn.execute("DELETE FROM recipe_steps WHERE recipe_id = ?1", [id]);
+    let _ = conn.execute("DELETE FROM recipe_tags WHERE recipe_id = ?1", [id]);
     conn.execute("DELETE FROM recipes WHERE id = ?1", [id])
         .map(|_| ())
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
@@ -1039,6 +1309,7 @@ mod tests {
             owner_id: admin_id,
             is_public: true,
             owner_email: None,
+            ..Default::default()
         };
 
         save_recipe(&recipe).unwrap();
@@ -1048,6 +1319,69 @@ mod tests {
         assert_eq!(read.tags, vec!["test".to_string()]);
         assert_eq!(read.favorite, false);
         assert_eq!(read.is_public, true);
+        assert!(!read.structured_ingredients.is_empty());
+        assert_eq!(read.structured_ingredients[0].raw_text, "Ingredient 1");
+        assert!(!read.steps.is_empty());
+
+        delete_recipe(test_id).unwrap();
+        assert!(read_recipe(test_id).is_none());
+    }
+
+    #[test]
+    fn test_normalization_with_headers_and_steps() {
+        let _ = std::fs::create_dir_all("data");
+        db_init(
+            "$2b$12$xeIhvWgV.yZ2FMHbwZL39.WZSDZWSKIokohV5S7aIwR.spHXuW72G",
+            "admin@example.com",
+        )
+        .unwrap();
+
+        let admin_id = find_user_by_email("admin@example.com").unwrap().id;
+        let test_id = "test-normalized-headers";
+        let recipe = Recipe {
+            id: test_id.to_string(),
+            title: "Header Recipe".to_string(),
+            description: Some("Description".to_string()),
+            image: None,
+            source_url: None,
+            tags: vec!["baking".to_string(), "bread".to_string()],
+            servings: Some(2),
+            prep_time: Some("15m".to_string()),
+            cook_time: Some("30m".to_string()),
+            ingredients: vec![
+                "## Dough".to_string(),
+                "500g bread flour".to_string(),
+                "350g water".to_string(),
+                "## Topping:".to_string(),
+                "2 tbsp sesame seeds".to_string(),
+            ],
+            markdown: "1. Mix dough ingredients together.\n2. Bulk ferment for 4 hours.\n\n3. Shape and bake at 450°F.".to_string(),
+            owner_id: admin_id,
+            is_public: true,
+            ..Default::default()
+        };
+
+        save_recipe(&recipe).unwrap();
+
+        let read = read_recipe(test_id).unwrap();
+        assert_eq!(read.structured_ingredients.len(), 5);
+        assert!(read.structured_ingredients[0].is_header);
+        assert_eq!(read.structured_ingredients[0].name, "Dough");
+        assert!(!read.structured_ingredients[1].is_header);
+        assert_eq!(read.structured_ingredients[1].amount, Some(500.0));
+        assert_eq!(read.structured_ingredients[1].unit.as_deref(), Some("g"));
+        assert_eq!(read.structured_ingredients[1].name, "bread flour");
+        assert!(read.structured_ingredients[3].is_header);
+        assert_eq!(read.structured_ingredients[3].name, "Topping");
+        assert_eq!(read.structured_ingredients[4].amount, Some(2.0));
+        assert_eq!(read.structured_ingredients[4].unit.as_deref(), Some("tbsp"));
+
+        assert_eq!(read.steps.len(), 3);
+        assert_eq!(read.steps[0].instruction, "Mix dough ingredients together.");
+        assert_eq!(read.steps[1].instruction, "Bulk ferment for 4 hours.");
+        assert_eq!(read.steps[2].instruction, "Shape and bake at 450°F.");
+
+        assert_eq!(read.tags, vec!["baking".to_string(), "bread".to_string()]);
 
         delete_recipe(test_id).unwrap();
     }

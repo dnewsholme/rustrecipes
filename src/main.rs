@@ -3,6 +3,7 @@ mod api;
 mod conversions;
 mod importer;
 mod models;
+pub mod openapi;
 mod passkeys;
 mod storage;
 
@@ -19,9 +20,11 @@ use axum::{
 use axum_extra::extract::cookie::{Cookie, Key, PrivateCookieJar, SameSite};
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
-use std::env;
 use std::net::SocketAddr;
-use tower_http::{services::ServeDir, trace::TraceLayer};
+use tower_http::{
+    services::{ServeDir, ServeFile},
+    trace::TraceLayer,
+};
 use tracing::{error, info, warn};
 
 #[derive(Clone)]
@@ -597,6 +600,7 @@ async fn new_recipe(State(state): State<AppState>, jar: PrivateCookieJar) -> imp
             owner_id: user_id.clone(),
             is_public: true,
             owner_email: None,
+            ..Default::default()
         },
         is_new: true,
         app_base: state.app_base,
@@ -647,6 +651,7 @@ async fn create_recipe(
         owner_id: user_id,
         is_public: form.is_public,
         owner_email: None,
+        ..Default::default()
     };
     let _ = storage::save_recipe(&recipe);
     let redirect_url = format!("{}/recipe/{}", state.app_base, id);
@@ -2188,6 +2193,10 @@ async fn main() {
     let static_assets = Router::new()
         .nest_service("/static", ServeDir::new("static"))
         .nest_service("/uploads", ServeDir::new("data/uploads"))
+        .nest_service(
+            "/app",
+            ServeDir::new("frontend/dist").fallback(ServeFile::new("frontend/dist/index.html")),
+        )
         .layer(tower_http::set_header::SetResponseHeaderLayer::overriding(
             axum::http::header::CACHE_CONTROL,
             axum::http::HeaderValue::from_static("public, max-age=31536000, immutable"),
@@ -2206,6 +2215,7 @@ async fn main() {
         .route("/logout", get(logout).post(logout))
         .route("/api", get(api_guide))
         .route("/api/", get(api_guide))
+        .route("/api/docs", get(docs_page))
         .route("/shopping-list", get(shopping_list_page))
         .route(
             "/api/v1/auth/passkeys/login/start",
@@ -2232,7 +2242,11 @@ async fn main() {
     axum::serve(listener, app).await.unwrap();
 }
 
-fn is_cookie_secure() -> bool {
+async fn docs_page(State(state): State<AppState>) -> impl IntoResponse {
+    openapi::swagger_ui(state.app_base).await
+}
+
+pub(crate) fn is_cookie_secure() -> bool {
     std::env::var("COOKIE_SECURE")
         .map(|v| v.to_lowercase() == "true")
         .unwrap_or(true)
