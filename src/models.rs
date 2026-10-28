@@ -74,6 +74,7 @@ pub struct User {
     pub created_at: String,
 }
 
+#[allow(dead_code)]
 impl Recipe {
     pub fn is_owned_by(&self, user_id: &Option<String>) -> bool {
         if let Some(uid) = user_id {

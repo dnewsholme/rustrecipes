@@ -56,6 +56,7 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({
   const [notes, setNotes] = useState<string>('');
   const [savingNotes, setSavingNotes] = useState(false);
   const [notesSaved, setNotesSaved] = useState(false);
+  const [showAllTags, setShowAllTags] = useState(false);
 
   // Cook mode
   const [cookModeOpen, setCookModeOpen] = useState(false);
@@ -283,12 +284,34 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({
 
           {/* Tags */}
           {recipe.tags && recipe.tags.length > 0 && (
-            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
-              {recipe.tags.map((tag) => (
+            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: '0.5rem', alignItems: 'center' }}>
+              {(showAllTags || recipe.tags.length <= 4 ? recipe.tags : recipe.tags.slice(0, 4)).map((tag) => (
                 <span key={tag} className="badge">
                   #{tag}
                 </span>
               ))}
+              {recipe.tags.length > 4 && !showAllTags && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllTags(true)}
+                  className="badge"
+                  style={{ cursor: 'pointer', border: 'none' }}
+                  title="Show all tags"
+                >
+                  +{recipe.tags.length - 4} more
+                </button>
+              )}
+              {recipe.tags.length > 4 && showAllTags && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllTags(false)}
+                  className="badge"
+                  style={{ cursor: 'pointer', border: 'none', opacity: 0.7 }}
+                  title="Collapse tags"
+                >
+                  less
+                </button>
+              )}
             </div>
           )}
         </div>

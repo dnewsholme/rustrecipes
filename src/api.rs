@@ -70,6 +70,12 @@ pub fn router(_state: AppState) -> Router<AppState> {
         .route("/auth/login", post(api_login))
         .route("/auth/logout", post(api_logout))
         .route("/user/export", get(export_user_data_api))
+        .route("/admin/users", get(admin_list_users))
+        .route("/admin/users/{id}", delete(admin_delete_user))
+        .route(
+            "/admin/users/{id}/reset-password",
+            post(admin_reset_password),
+        )
 }
 
 // ---------------------------------------------------------------------------
@@ -1312,6 +1318,92 @@ pub async fn export_user_data_api(user: CurrentUser) -> ApiResult<Response> {
         .map_err(|e| ApiError::Internal(format!("failed to build response: {e}")))
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct AdminUserDto {
+    pub id: String,
+    pub email: String,
+    pub created_at: String,
+    pub is_admin: bool,
+    pub has_password: bool,
+    pub passkey_count: usize,
+}
+
+#[derive(Deserialize)]
+pub struct ResetPasswordPayload {
+    pub password: String,
+}
+
+pub async fn admin_list_users(user: CurrentUser) -> ApiResult<Json<Vec<AdminUserDto>>> {
+    if !user.is_admin {
+        return Err(ApiError::Forbidden);
+    }
+    let users = blocking(storage::list_users).await?;
+    let admin_id = blocking(admin_user_id).await?;
+    let mut dtos = Vec::with_capacity(users.len());
+    for u in users {
+        let uid = u.id.clone();
+        let passkey_count = blocking(move || storage::find_passkeys_by_user_id(&uid).len()).await?;
+        let is_admin = admin_id.as_deref() == Some(&u.id);
+        dtos.push(AdminUserDto {
+            id: u.id,
+            email: u.email,
+            created_at: u.created_at,
+            is_admin,
+            has_password: !u.password_hash.is_empty(),
+            passkey_count,
+        });
+    }
+    Ok(Json(dtos))
+}
+
+pub async fn admin_delete_user(
+    user: CurrentUser,
+    Path(id): Path<String>,
+) -> ApiResult<Json<serde_json::Value>> {
+    if !user.is_admin {
+        return Err(ApiError::Forbidden);
+    }
+    if user.id == id {
+        return Err(ApiError::BadRequest(
+            "Cannot delete your own administrator account.".into(),
+        ));
+    }
+    let target_id = id.clone();
+    blocking(move || storage::delete_user(&target_id))
+        .await?
+        .map_err(|e| ApiError::Internal(format!("Failed to delete user: {e}")))?;
+    Ok(Json(serde_json::json!({ "success": true })))
+}
+
+pub async fn admin_reset_password(
+    user: CurrentUser,
+    Path(id): Path<String>,
+    Json(payload): Json<ResetPasswordPayload>,
+) -> ApiResult<Json<serde_json::Value>> {
+    if !user.is_admin {
+        return Err(ApiError::Forbidden);
+    }
+    if payload.password.trim().is_empty() {
+        return Err(ApiError::BadRequest("Password cannot be empty.".into()));
+    }
+    let target_id = id.clone();
+    let target_user = blocking(move || storage::find_user_by_id(&target_id))
+        .await?
+        .ok_or(ApiError::NotFound)?;
+    if target_user.password_hash.is_empty() {
+        return Err(ApiError::BadRequest(
+            "Cannot reset password for users who registered via external authentication (OAuth/OIDC).".into()
+        ));
+    }
+    let hashed = bcrypt::hash(&payload.password, bcrypt::DEFAULT_COST)
+        .map_err(|e| ApiError::Internal(format!("Failed to hash password: {e}")))?;
+    let target_id2 = id.clone();
+    blocking(move || storage::update_user_password(&target_id2, &hashed))
+        .await?
+        .map_err(|e| ApiError::Internal(format!("Failed to update password: {e}")))?;
+    Ok(Json(serde_json::json!({ "success": true })))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2087,5 +2179,84 @@ mod tests {
 
         // Cleanup
         let _ = storage::delete_recipe("api-struct-test");
+    }
+
+    #[tokio::test]
+    async fn test_admin_user_management_api() {
+        let state = test_state();
+        let app = router(state.clone()).with_state(state);
+
+        // 1. Non-admin or unauthenticated access should be rejected
+        let req = Request::builder()
+            .method("GET")
+            .uri("/admin/users")
+            .body(Body::empty())
+            .unwrap();
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::UNAUTHORIZED);
+
+        // 2. Admin access with bearer token
+        let req = Request::builder()
+            .method("GET")
+            .uri("/admin/users")
+            .header("Authorization", format!("Bearer {TEST_TOKEN}"))
+            .body(Body::empty())
+            .unwrap();
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        let users: Vec<AdminUserDto> = serde_json::from_slice(
+            &axum::body::to_bytes(res.into_body(), 1024 * 1024)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert!(!users.is_empty());
+        let admin_entry = users
+            .iter()
+            .find(|u| u.email == "admin@example.com")
+            .unwrap();
+        assert!(admin_entry.is_admin);
+
+        // 3. Create a secondary test user directly
+        let test_user_id = "test-user-admin-mgmt-uuid";
+        storage::save_user(&crate::models::User {
+            id: test_user_id.to_string(),
+            email: "testuser@example.com".to_string(),
+            password_hash: "hashedpass".to_string(),
+            created_at: String::new(),
+        })
+        .unwrap();
+
+        // 4. Reset password via admin API
+        let req = Request::builder()
+            .method("POST")
+            .uri(format!("/admin/users/{test_user_id}/reset-password"))
+            .header("Authorization", format!("Bearer {TEST_TOKEN}"))
+            .header("Content-Type", "application/json")
+            .body(Body::from(r#"{"password": "newsecretpassword123"}"#))
+            .unwrap();
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+
+        // 5. Delete test user via admin API
+        let req = Request::builder()
+            .method("DELETE")
+            .uri(format!("/admin/users/{test_user_id}"))
+            .header("Authorization", format!("Bearer {TEST_TOKEN}"))
+            .body(Body::empty())
+            .unwrap();
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+
+        // 6. Attempting to delete own admin account should fail
+        let admin_id = storage::find_user_by_email("admin@example.com").unwrap().id;
+        let req = Request::builder()
+            .method("DELETE")
+            .uri(format!("/admin/users/{admin_id}"))
+            .header("Authorization", format!("Bearer {TEST_TOKEN}"))
+            .body(Body::empty())
+            .unwrap();
+        let res = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::BAD_REQUEST);
     }
 }

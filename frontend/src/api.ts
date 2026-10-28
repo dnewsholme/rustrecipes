@@ -1,4 +1,5 @@
 import type {
+  AdminUser,
   AuthState,
   CookingTemp,
   MealPlanItem,
@@ -295,5 +296,21 @@ export const api = {
     if (!res.ok) throw new Error('File upload failed');
     const data = await res.json();
     return data.url || data.path || '';
+  },
+
+  // Admin User Management
+  async listAdminUsers(): Promise<AdminUser[]> {
+    return request<AdminUser[]>('/admin/users');
+  },
+
+  async deleteAdminUser(id: string): Promise<void> {
+    await request(`/admin/users/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  },
+
+  async resetAdminUserPassword(id: string, password: string): Promise<void> {
+    await request(`/admin/users/${encodeURIComponent(id)}/reset-password`, {
+      method: 'POST',
+      body: JSON.stringify({ password }),
+    });
   },
 };

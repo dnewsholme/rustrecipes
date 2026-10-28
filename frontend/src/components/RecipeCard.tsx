@@ -20,6 +20,8 @@ export const RecipeCard: React.FC<RecipeCardProps> = ({
   isPlanned = false,
   canFavorite = false,
 }) => {
+  const [showAllTags, setShowAllTags] = React.useState(false);
+
   return (
     <div
       className="card card-hover"
@@ -147,13 +149,38 @@ export const RecipeCard: React.FC<RecipeCardProps> = ({
           {/* Tags */}
           {recipe.tags && recipe.tags.length > 0 && (
             <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
-              {recipe.tags.slice(0, 2).map((tag) => (
+              {(showAllTags ? recipe.tags : recipe.tags.slice(0, 2)).map((tag) => (
                 <span key={tag} className="badge">
                   #{tag}
                 </span>
               ))}
-              {recipe.tags.length > 2 && (
-                <span className="badge">+{recipe.tags.length - 2}</span>
+              {recipe.tags.length > 2 && !showAllTags && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowAllTags(true);
+                  }}
+                  className="badge"
+                  style={{ cursor: 'pointer', border: 'none' }}
+                  title="Show all tags"
+                >
+                  +{recipe.tags.length - 2}
+                </button>
+              )}
+              {showAllTags && recipe.tags.length > 2 && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowAllTags(false);
+                  }}
+                  className="badge"
+                  style={{ cursor: 'pointer', border: 'none', opacity: 0.7 }}
+                  title="Show fewer tags"
+                >
+                  less
+                </button>
               )}
             </div>
           )}

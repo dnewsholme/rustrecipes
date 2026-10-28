@@ -142,90 +142,8 @@ impl FromRef<AppState> for Key {
 }
 
 #[derive(Template)]
-#[template(path = "index.html")]
-struct IndexTemplate {
-    recipes: Vec<models::Recipe>,
-    all_tags: Vec<String>,
-    app_base: &'static str,
-    app_version: String,
-    current_user_id: Option<String>,
-    current_user_email: Option<String>,
-    is_admin: bool,
-}
-
-#[derive(Template)]
-#[template(path = "recipe.html")]
-struct RecipeTemplate {
-    recipe: models::Recipe,
-    app_base: &'static str,
-    app_version: String,
-    is_admin: bool,
-    current_user_id: Option<String>,
-    current_user_email: Option<String>,
-}
-
-#[derive(Template)]
-#[template(path = "edit.html")]
-struct EditTemplate {
-    recipe: models::Recipe,
-    is_new: bool,
-    app_base: &'static str,
-    app_version: String,
-    current_user_id: Option<String>,
-    current_user_email: Option<String>,
-    is_admin: bool,
-}
-
-#[derive(Template)]
 #[template(path = "api_guide.html")]
 struct ApiGuideTemplate {
-    app_base: &'static str,
-    app_version: String,
-    current_user_id: Option<String>,
-    current_user_email: Option<String>,
-    is_admin: bool,
-}
-
-#[derive(Template)]
-#[template(path = "login.html")]
-struct LoginTemplate {
-    app_base: &'static str,
-    app_version: String,
-    error: Option<String>,
-    google_auth_enabled: bool,
-    oidc_auth_enabled: bool,
-    oidc_provider_name: String,
-    current_user_id: Option<String>,
-    current_user_email: Option<String>,
-    is_admin: bool,
-}
-
-#[derive(Template)]
-#[template(path = "register.html")]
-struct RegisterTemplate {
-    app_base: &'static str,
-    app_version: String,
-    error: Option<String>,
-    current_user_id: Option<String>,
-    current_user_email: Option<String>,
-    is_admin: bool,
-}
-
-#[derive(Template)]
-#[template(path = "users.html")]
-struct UsersTemplate {
-    users: Vec<crate::models::User>,
-    passkey_counts: std::collections::HashMap<String, usize>,
-    app_base: &'static str,
-    app_version: String,
-    current_user_id: Option<String>,
-    current_user_email: Option<String>,
-    is_admin: bool,
-}
-
-#[derive(Template)]
-#[template(path = "shopping_list.html")]
-struct ShoppingListTemplate {
     app_base: &'static str,
     app_version: String,
     current_user_id: Option<String>,
@@ -237,188 +155,6 @@ const APP_VERSION: &str = match option_env!("APP_VERSION") {
     Some(v) => v,
     None => env!("CARGO_PKG_VERSION"),
 };
-
-struct RecipeFormData {
-    title: String,
-    description: Option<String>,
-    image: Option<String>,
-    combustion_csv: Option<String>,
-    markdown: String,
-    tags: Vec<String>,
-    ingredients: Vec<String>,
-    servings: Option<u32>,
-    prep_time: Option<String>,
-    cook_time: Option<String>,
-    source_url: Option<String>,
-    video_url: Option<String>,
-    remove_combustion_csv: bool,
-    is_public: bool,
-}
-
-async fn parse_recipe_multipart(mut multipart: Multipart) -> Option<RecipeFormData> {
-    let mut title = String::new();
-    let mut description = None;
-    let mut image = None;
-    let mut combustion_csv = None;
-    let mut markdown = String::new();
-    let mut tags = Vec::new();
-    let mut ingredients = Vec::new();
-    let mut servings = None;
-    let mut prep_time = None;
-    let mut cook_time = None;
-    let mut source_url = None;
-    let mut video_url = None;
-    let mut remove_combustion_csv = false;
-    let mut is_public = false;
-
-    while let Some(field) = multipart.next_field().await.unwrap_or(None) {
-        let name = field.name().unwrap_or("").to_string();
-
-        if name == "cover_image" {
-            let filename = field.file_name().unwrap_or("").to_string();
-            if !filename.is_empty() {
-                let extension = std::path::Path::new(&filename)
-                    .extension()
-                    .and_then(|e| e.to_str())
-                    .unwrap_or("png");
-
-                let new_filename = format!("{}.{}", uuid::Uuid::new_v4(), extension);
-                let filepath = format!("data/uploads/{}", new_filename);
-
-                if let Ok(data) = field.bytes().await {
-                    match std::fs::write(&filepath, data) {
-                        Ok(_) => {
-                            info!("Uploaded image saved to {}", filepath);
-                            image = Some(format!("uploads/{}", new_filename));
-                        }
-                        Err(e) => error!("Failed to write image to {}: {:?}", filepath, e),
-                    }
-                }
-            }
-            continue;
-        }
-
-        if name == "combustion_csv_upload" {
-            let filename = field.file_name().unwrap_or("").to_string();
-            if !filename.is_empty() {
-                let extension = std::path::Path::new(&filename)
-                    .extension()
-                    .and_then(|e| e.to_str())
-                    .unwrap_or("csv");
-
-                let new_filename = format!("{}.{}", uuid::Uuid::new_v4(), extension);
-                let filepath = format!("data/uploads/{}", new_filename);
-
-                if let Ok(data) = field.bytes().await {
-                    match std::fs::write(&filepath, data) {
-                        Ok(_) => {
-                            info!("Uploaded CSV saved to {}", filepath);
-                            combustion_csv = Some(format!("uploads/{}", new_filename));
-                        }
-                        Err(e) => error!("Failed to write CSV to {}: {:?}", filepath, e),
-                    }
-                }
-            }
-            continue;
-        }
-
-        if let Ok(text) = field.text().await {
-            match name.as_str() {
-                "title" => title = text,
-                "description" => {
-                    description = if text.trim().is_empty() {
-                        None
-                    } else {
-                        Some(text)
-                    }
-                }
-                "existing_image" => {
-                    if image.is_none() && !text.trim().is_empty() {
-                        image = Some(text)
-                    }
-                }
-                "existing_combustion_csv" => {
-                    if combustion_csv.is_none() && !text.trim().is_empty() {
-                        combustion_csv = Some(text)
-                    }
-                }
-                "markdown" => markdown = text,
-                "tags" => {
-                    tags = text
-                        .split(',')
-                        .map(|s| s.trim().to_string())
-                        .filter(|s| !s.is_empty())
-                        .collect();
-                }
-                "ingredients" => {
-                    ingredients = text
-                        .lines()
-                        .map(|s| s.trim().to_string())
-                        .filter(|s| !s.is_empty())
-                        .collect();
-                }
-                "servings" => servings = text.parse::<u32>().ok(),
-                "prep_time" => {
-                    prep_time = if text.trim().is_empty() {
-                        None
-                    } else {
-                        Some(text)
-                    }
-                }
-                "cook_time" => {
-                    cook_time = if text.trim().is_empty() {
-                        None
-                    } else {
-                        Some(text)
-                    }
-                }
-                "source_url" => {
-                    source_url = if text.trim().is_empty() {
-                        None
-                    } else {
-                        Some(text)
-                    }
-                }
-                "video_url" => {
-                    video_url = if text.trim().is_empty() {
-                        None
-                    } else {
-                        Some(text)
-                    }
-                }
-                "remove_combustion_csv" => remove_combustion_csv = text == "true",
-                "is_public" => is_public = text == "true" || text == "on",
-                _ => {}
-            }
-        }
-    }
-
-    if title.is_empty() {
-        return None;
-    }
-
-    Some(RecipeFormData {
-        title,
-        description,
-        image,
-        combustion_csv,
-        markdown,
-        tags,
-        ingredients,
-        servings,
-        prep_time,
-        cook_time,
-        source_url,
-        video_url,
-        remove_combustion_csv,
-        is_public,
-    })
-}
-
-#[derive(Deserialize)]
-struct ImportForm {
-    url: String,
-}
 
 #[derive(Serialize)]
 struct UploadResponse {
@@ -473,32 +209,11 @@ async fn get_session_user_id(jar: &PrivateCookieJar) -> Option<String> {
     None
 }
 
-fn is_classic_preferred(
-    jar: &PrivateCookieJar,
-    headers: &axum::http::HeaderMap,
-    params: &std::collections::HashMap<String, String>,
-) -> bool {
-    let ui_param = params.get("ui").map(|s| s.as_str());
-    if ui_param == Some("modern") {
-        false
-    } else if ui_param == Some("classic") {
-        true
-    } else {
-        std::env::var("DEFAULT_UI")
-            .map(|v| v.to_lowercase() == "classic")
-            .unwrap_or(false)
-            || jar
-                .get("ui_preference")
-                .is_some_and(|c| c.value() == "classic")
-            || headers.get("x-ui-mode").is_some_and(|v| v == "classic")
-    }
-}
-
 async fn spa_fallback(
     State(state): State<AppState>,
-    jar: PrivateCookieJar,
-    headers: axum::http::HeaderMap,
-    Query(params): Query<std::collections::HashMap<String, String>>,
+    _jar: PrivateCookieJar,
+    _headers: axum::http::HeaderMap,
+    Query(_params): Query<std::collections::HashMap<String, String>>,
     uri: axum::http::Uri,
 ) -> Response {
     let path = uri.path();
@@ -510,67 +225,34 @@ async fn spa_fallback(
         return (StatusCode::NOT_FOUND, "Not Found").into_response();
     }
 
-    default_index(State(state), jar, headers, Query(params)).await
+    default_index(State(state)).await
 }
 
-async fn default_index(
-    State(state): State<AppState>,
-    jar: PrivateCookieJar,
-    headers: axum::http::HeaderMap,
-    Query(params): Query<std::collections::HashMap<String, String>>,
-) -> Response {
-    if is_classic_preferred(&jar, &headers, &params) {
-        index(State(state), jar).await.into_response()
-    } else {
-        match tokio::fs::read_to_string("frontend/dist/index.html").await {
-            Ok(content) => {
-                let base_href = if state.app_base.is_empty() {
-                    "/".to_string()
-                } else {
-                    format!("{}/", state.app_base.trim_end_matches('/'))
-                };
-                let injected = format!(
-                    "<base href=\"{}\" />\n    <script>window.__APP_BASE__ = {:?};</script>",
-                    base_href, state.app_base
-                );
-                let html = if content.contains("<head>") {
-                    content.replacen("<head>", &format!("<head>\n    {}", injected), 1)
-                } else {
-                    content
-                };
-                Html(html).into_response()
-            }
-            Err(_) => index(State(state), jar).await.into_response(),
+async fn default_index(State(state): State<AppState>) -> Response {
+    match tokio::fs::read_to_string("frontend/dist/index.html").await {
+        Ok(content) => {
+            let base_href = if state.app_base.is_empty() {
+                "/".to_string()
+            } else {
+                format!("{}/", state.app_base.trim_end_matches('/'))
+            };
+            let injected = format!(
+                "<base href=\"{}\" />\n    <script>window.__APP_BASE__ = {:?};</script>",
+                base_href, state.app_base
+            );
+            let html = if content.contains("<head>") {
+                content.replacen("<head>", &format!("<head>\n    {}", injected), 1)
+            } else {
+                content
+            };
+            Html(html).into_response()
         }
+        Err(_) => (
+            StatusCode::NOT_FOUND,
+            "Modern UI bundle not found. Please build frontend.",
+        )
+            .into_response(),
     }
-}
-
-async fn index(State(state): State<AppState>, jar: PrivateCookieJar) -> impl IntoResponse {
-    let user_id = get_session_user_id(&jar).await;
-    let user_email = if let Some(uid) = &user_id {
-        storage::find_user_by_id(uid).map(|u| u.email)
-    } else {
-        None
-    };
-    let recipes = storage::list_recipes_for_user(user_id.as_deref());
-    let mut all_tags: Vec<String> = recipes
-        .iter()
-        .flat_map(|r| r.tags.clone())
-        .map(|t| t.to_lowercase())
-        .collect();
-    all_tags.sort();
-    all_tags.dedup();
-
-    let template = IndexTemplate {
-        recipes,
-        all_tags,
-        app_base: state.app_base,
-        app_version: APP_VERSION.to_string(),
-        current_user_id: user_id.clone(),
-        current_user_email: user_email,
-        is_admin: is_admin_session(&jar),
-    };
-    Html(template.render().unwrap())
 }
 
 async fn api_guide(State(state): State<AppState>, jar: PrivateCookieJar) -> impl IntoResponse {
@@ -588,176 +270,6 @@ async fn api_guide(State(state): State<AppState>, jar: PrivateCookieJar) -> impl
         is_admin: is_admin_session(&jar),
     };
     Html(template.render().unwrap())
-}
-
-async fn shopping_list_classic(
-    State(state): State<AppState>,
-    jar: PrivateCookieJar,
-) -> impl IntoResponse {
-    let user_id = get_session_user_id(&jar).await;
-    let user_email = if let Some(uid) = &user_id {
-        storage::find_user_by_id(uid).map(|u| u.email)
-    } else {
-        None
-    };
-    let template = ShoppingListTemplate {
-        app_base: state.app_base,
-        app_version: APP_VERSION.to_string(),
-        current_user_id: user_id,
-        current_user_email: user_email,
-        is_admin: is_admin_session(&jar),
-    };
-    Html(template.render().unwrap())
-}
-
-async fn shopping_list_page(
-    State(state): State<AppState>,
-    jar: PrivateCookieJar,
-    headers: axum::http::HeaderMap,
-    Query(params): Query<std::collections::HashMap<String, String>>,
-) -> Response {
-    if !is_classic_preferred(&jar, &headers, &params) {
-        return default_index(State(state), jar, headers, Query(params)).await;
-    }
-    shopping_list_classic(State(state), jar)
-        .await
-        .into_response()
-}
-
-async fn view_recipe_classic(
-    State(state): State<AppState>,
-    jar: PrivateCookieJar,
-    Path(id): Path<String>,
-) -> Result<Html<String>, (StatusCode, &'static str)> {
-    let user_id = get_session_user_id(&jar).await;
-    if let Some(recipe) = storage::read_recipe_for_user(&id, user_id.as_deref()) {
-        let user_email = if let Some(uid) = &user_id {
-            storage::find_user_by_id(uid).map(|u| u.email)
-        } else {
-            None
-        };
-        let is_owner = user_id.as_ref() == Some(&recipe.owner_id);
-
-        if recipe.is_public || is_owner {
-            let template = RecipeTemplate {
-                recipe,
-                app_base: state.app_base,
-                app_version: APP_VERSION.to_string(),
-                is_admin: is_admin_session(&jar),
-                current_user_id: user_id.clone(),
-                current_user_email: user_email,
-            };
-            Ok(Html(template.render().unwrap()))
-        } else {
-            Err((
-                StatusCode::FORBIDDEN,
-                "Access denied. This recipe is private.",
-            ))
-        }
-    } else {
-        Err((StatusCode::NOT_FOUND, "Recipe not found"))
-    }
-}
-
-async fn view_recipe(
-    State(state): State<AppState>,
-    jar: PrivateCookieJar,
-    headers: axum::http::HeaderMap,
-    Query(params): Query<std::collections::HashMap<String, String>>,
-    Path(id): Path<String>,
-) -> Response {
-    if !is_classic_preferred(&jar, &headers, &params) {
-        return default_index(State(state), jar, headers, Query(params)).await;
-    }
-    view_recipe_classic(State(state), jar, Path(id))
-        .await
-        .into_response()
-}
-
-async fn new_recipe(State(state): State<AppState>, jar: PrivateCookieJar) -> impl IntoResponse {
-    let user_id = match get_session_user_id(&jar).await {
-        Some(id) => id,
-        None => return Redirect::to(&format!("{}/login", state.app_base)).into_response(),
-    };
-    let user_email = storage::find_user_by_id(&user_id).map(|u| u.email);
-
-    let template = EditTemplate {
-        recipe: models::Recipe {
-            id: String::new(),
-            title: String::new(),
-            description: None,
-            image: None,
-            combustion_csv: None,
-            source_url: None,
-            tags: vec![],
-            servings: None,
-            prep_time: None,
-            cook_time: None,
-            ingredients: vec![],
-            markdown: String::new(),
-            html: None,
-            video_url: None,
-            favorite: false,
-            owner_id: user_id.clone(),
-            is_public: true,
-            owner_email: None,
-            ..Default::default()
-        },
-        is_new: true,
-        app_base: state.app_base,
-        app_version: APP_VERSION.to_string(),
-        current_user_id: Some(user_id),
-        current_user_email: user_email,
-        is_admin: is_admin_session(&jar),
-    };
-    Html(template.render().unwrap()).into_response()
-}
-
-#[axum::debug_handler]
-async fn create_recipe(
-    State(state): State<AppState>,
-    jar: PrivateCookieJar,
-    multipart: Multipart,
-) -> impl IntoResponse {
-    let user_id = match get_session_user_id(&jar).await {
-        Some(id) => id,
-        None => return Err((StatusCode::UNAUTHORIZED, "Unauthorized")),
-    };
-
-    let form = match parse_recipe_multipart(multipart).await {
-        Some(f) => f,
-        None => return Err((StatusCode::BAD_REQUEST, "Invalid form data")),
-    };
-
-    let mut id = slug::slugify(&form.title);
-    if id.is_empty() {
-        id = uuid::Uuid::new_v4().to_string();
-    }
-    let recipe = models::Recipe {
-        id: id.clone(),
-        title: form.title,
-        description: form.description,
-        image: form.image,
-        source_url: form.source_url,
-        tags: form.tags,
-        servings: form.servings,
-        prep_time: form.prep_time,
-        cook_time: form.cook_time,
-        ingredients: form.ingredients,
-        markdown: form.markdown,
-        html: None,
-        combustion_csv: form.combustion_csv,
-        video_url: form.video_url,
-        favorite: false,
-        owner_id: user_id,
-        is_public: form.is_public,
-        owner_email: None,
-        ..Default::default()
-    };
-    let _ = storage::save_recipe(&recipe);
-    let redirect_url = format!("{}/recipe/{}", state.app_base, id);
-    info!("Redirecting to: {}", redirect_url);
-    Ok(Redirect::to(&redirect_url))
 }
 
 async fn toggle_favorite(jar: PrivateCookieJar, Path(id): Path<String>) -> impl IntoResponse {
@@ -783,191 +295,16 @@ async fn toggle_favorite(jar: PrivateCookieJar, Path(id): Path<String>) -> impl 
     }
 }
 
-async fn edit_recipe(
-    State(state): State<AppState>,
-    jar: PrivateCookieJar,
-    Path(id): Path<String>,
-) -> impl IntoResponse {
+async fn import_photo(jar: PrivateCookieJar, mut multipart: Multipart) -> impl IntoResponse {
     let user_id = match get_session_user_id(&jar).await {
         Some(id) => id,
         None => return (StatusCode::UNAUTHORIZED, "Unauthorized").into_response(),
     };
-    let user_email = storage::find_user_by_id(&user_id).map(|u| u.email);
-
-    if let Some(recipe) = storage::read_recipe(&id) {
-        if recipe.owner_id != user_id && !is_admin_session(&jar) {
-            return (StatusCode::FORBIDDEN, "Access denied").into_response();
-        }
-        let template = EditTemplate {
-            recipe,
-            is_new: false,
-            app_base: state.app_base,
-            app_version: APP_VERSION.to_string(),
-            current_user_id: Some(user_id),
-            current_user_email: user_email,
-            is_admin: is_admin_session(&jar),
-        };
-        Html(template.render().unwrap()).into_response()
-    } else {
-        (StatusCode::NOT_FOUND, "Recipe not found").into_response()
-    }
-}
-
-#[axum::debug_handler]
-async fn update_recipe(
-    State(state): State<AppState>,
-    jar: PrivateCookieJar,
-    Path(id): Path<String>,
-    multipart: Multipart,
-) -> impl IntoResponse {
-    let user_id = match get_session_user_id(&jar).await {
-        Some(id) => id,
-        None => return Err((StatusCode::UNAUTHORIZED, "Unauthorized")),
-    };
-
-    let form = match parse_recipe_multipart(multipart).await {
-        Some(f) => f,
-        None => return Err((StatusCode::BAD_REQUEST, "Invalid form data")),
-    };
-
-    if let Some(mut recipe) = storage::read_recipe(&id) {
-        if recipe.owner_id != user_id && !is_admin_session(&jar) {
-            return Err((StatusCode::FORBIDDEN, "Forbidden"));
-        }
-        recipe.title = form.title;
-        recipe.description = form.description;
-        if form.image.is_some() {
-            recipe.image = form.image;
-        }
-        if form.remove_combustion_csv {
-            recipe.combustion_csv = None;
-        } else if form.combustion_csv.is_some() {
-            recipe.combustion_csv = form.combustion_csv;
-        }
-        recipe.source_url = form.source_url;
-        recipe.tags = form.tags;
-        recipe.servings = form.servings;
-        recipe.prep_time = form.prep_time;
-        recipe.cook_time = form.cook_time;
-        recipe.ingredients = form.ingredients;
-        recipe.markdown = form.markdown;
-        recipe.video_url = form.video_url;
-        recipe.is_public = form.is_public;
-        let _ = storage::save_recipe(&recipe);
-        info!("Updated recipe: {} ({})", recipe.title, id);
-        Ok(Redirect::to(&format!("{}/recipe/{}", state.app_base, id)))
-    } else {
-        Err((StatusCode::NOT_FOUND, "Recipe not found"))
-    }
-}
-
-async fn delete_recipe(
-    State(state): State<AppState>,
-    jar: PrivateCookieJar,
-    Path(id): Path<String>,
-) -> impl IntoResponse {
-    let user_id = match get_session_user_id(&jar).await {
-        Some(id) => id,
-        None => return Err((StatusCode::UNAUTHORIZED, "Unauthorized")),
-    };
-
-    if let Some(recipe) = storage::read_recipe(&id) {
-        if recipe.owner_id != user_id && !is_admin_session(&jar) {
-            return Err((StatusCode::FORBIDDEN, "Forbidden"));
-        }
-        let _ = storage::delete_recipe(&id);
-        info!("Deleted recipe: {}", id);
-        Ok(Redirect::to(&format!("{}/", state.app_base)))
-    } else {
-        Err((StatusCode::NOT_FOUND, "Recipe not found"))
-    }
-}
-
-#[axum::debug_handler]
-async fn import_recipe(
-    State(state): State<AppState>,
-    jar: PrivateCookieJar,
-    Form(form): Form<ImportForm>,
-) -> impl IntoResponse {
-    let user_id = match get_session_user_id(&jar).await {
-        Some(id) => id,
-        None => return Redirect::to(&format!("{}/login", state.app_base)).into_response(),
-    };
-    let user_email = storage::find_user_by_id(&user_id).map(|u| u.email);
-    match importer::import_recipe_from_url(&form.url).await {
-        Ok(mut recipe) => {
-            info!("Successfully imported recipe from URL: {}", form.url);
-            recipe.owner_id = user_id.clone();
-            let template = EditTemplate {
-                recipe,
-                is_new: true,
-                app_base: state.app_base,
-                app_version: APP_VERSION.to_string(),
-                current_user_id: Some(user_id),
-                current_user_email: user_email,
-                is_admin: is_admin_session(&jar),
-            };
-            Html(template.render().unwrap()).into_response()
-        }
-        Err(e) => {
-            warn!("Failed to import recipe from URL {}: {:?}", form.url, e);
-            let msg = format!("Failed to import: {}", e);
-            (StatusCode::BAD_REQUEST, msg).into_response()
-        }
-    }
-}
-
-async fn import_paprika(
-    State(state): State<AppState>,
-    jar: PrivateCookieJar,
-    mut multipart: Multipart,
-) -> impl IntoResponse {
-    let user_id = match get_session_user_id(&jar).await {
-        Some(id) => id,
-        None => return Redirect::to(&format!("{}/login", state.app_base)).into_response(),
-    };
-    let mut count = 0;
-    info!("Starting Paprika archive import");
     while let Some(field) = multipart.next_field().await.unwrap_or(None) {
         let name = field.name().unwrap_or("").to_string();
-        if name == "paprika_file"
+        if (name == "photo" || name == "file")
             && let Ok(data) = field.bytes().await
         {
-            println!("Received Paprika file: {} bytes", data.len());
-            let recipes = importer::import_paprika_archive(&data).await;
-            info!("Parsed {} recipes from archive", recipes.len());
-            for mut recipe in recipes {
-                recipe.owner_id = user_id.clone();
-                if let Err(e) = storage::save_recipe(&recipe) {
-                    error!("Failed to save recipe {}: {:?}", recipe.title, e);
-                } else {
-                    count += 1;
-                }
-            }
-        }
-    }
-
-    info!("Successfully imported {} Paprika recipes", count);
-
-    // Redirect to index after import
-    Redirect::to(&format!("{}/", state.app_base)).into_response()
-}
-
-async fn import_photo(
-    State(state): State<AppState>,
-    jar: PrivateCookieJar,
-    mut multipart: Multipart,
-) -> Response {
-    let user_id = match get_session_user_id(&jar).await {
-        Some(id) => id,
-        None => return Redirect::to(&format!("{}/login", state.app_base)).into_response(),
-    };
-    while let Some(field) = multipart.next_field().await.unwrap_or(None) {
-        let name = field.name().unwrap_or("").to_string();
-        if name == "photo"
-            && let Ok(data) = field.bytes().await
-        {
-            // Process image: resize and compress
             let processed_data = match storage::process_image(&data) {
                 Ok(d) => d,
                 Err(e) => {
@@ -984,28 +321,18 @@ async fn import_photo(
             let filepath = format!("data/uploads/{}", new_filename);
             let _ = std::fs::write(&filepath, &processed_data);
 
-            // Then, call Gemini using the processed image
             match importer::import_recipe_from_photo("image/jpeg", &processed_data).await {
                 Ok(mut recipe) => {
-                    // Set the image
                     recipe.image = Some(format!("uploads/{}", new_filename));
                     recipe.owner_id = user_id.clone();
-
-                    info!(
-                        "Successfully parsed recipe from photo using AI: {}",
-                        recipe.title
-                    );
-                    let user_email = storage::find_user_by_id(&user_id).map(|u| u.email);
-                    let template = EditTemplate {
-                        recipe,
-                        is_new: true,
-                        app_base: state.app_base,
-                        app_version: APP_VERSION.to_string(),
-                        current_user_id: Some(user_id.clone()),
-                        current_user_email: user_email,
-                        is_admin: is_admin_session(&jar),
-                    };
-                    return Html(template.render().unwrap()).into_response();
+                    if let Err(e) = storage::save_recipe(&recipe) {
+                        return (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            format!("Failed to save recipe: {:?}", e),
+                        )
+                            .into_response();
+                    }
+                    return Json(recipe).into_response();
                 }
                 Err(e) => {
                     warn!("Failed to parse recipe from photo using AI: {:?}", e);
@@ -1017,6 +344,30 @@ async fn import_photo(
     }
 
     (StatusCode::BAD_REQUEST, "No photo uploaded").into_response()
+}
+
+async fn import_paprika(jar: PrivateCookieJar, mut multipart: Multipart) -> impl IntoResponse {
+    let user_id = match get_session_user_id(&jar).await {
+        Some(id) => id,
+        None => return (StatusCode::UNAUTHORIZED, "Unauthorized").into_response(),
+    };
+    let mut imported = Vec::new();
+    while let Some(field) = multipart.next_field().await.unwrap_or(None) {
+        let name = field.name().unwrap_or("").to_string();
+        if (name == "paprika_file" || name == "file")
+            && let Ok(data) = field.bytes().await
+        {
+            let recipes = importer::import_paprika_archive(&data).await;
+            for mut recipe in recipes {
+                recipe.owner_id = user_id.clone();
+                if storage::save_recipe(&recipe).is_ok() {
+                    imported.push(recipe);
+                }
+            }
+        }
+    }
+
+    Json(imported).into_response()
 }
 
 async fn upload_image(mut multipart: Multipart) -> impl IntoResponse {
@@ -1078,36 +429,8 @@ async fn require_admin(
     }
 }
 
-#[derive(Deserialize)]
-struct LoginQuery {
-    error: Option<String>,
-}
-
-async fn login_form(
-    State(state): State<AppState>,
-    jar: PrivateCookieJar,
-    Query(query): Query<LoginQuery>,
-) -> impl IntoResponse {
-    if get_session_user_id(&jar).await.is_some() {
-        return Redirect::to(&format!("{}/", state.app_base)).into_response();
-    }
-
-    let template = LoginTemplate {
-        app_base: state.app_base,
-        app_version: APP_VERSION.to_string(),
-        error: query.error,
-        google_auth_enabled: state.google_oauth.is_some(),
-        oidc_auth_enabled: state.oidc.is_some(),
-        oidc_provider_name: state
-            .oidc
-            .as_ref()
-            .map(|o| o.provider_name.clone())
-            .unwrap_or_default(),
-        current_user_id: None,
-        current_user_email: None,
-        is_admin: false,
-    };
-    Html(template.render().unwrap()).into_response()
+async fn login_form(State(state): State<AppState>) -> Response {
+    default_index(State(state)).await
 }
 
 #[derive(Deserialize)]
@@ -1152,22 +475,14 @@ async fn login_submit(
         }
     }
 
-    let template = LoginTemplate {
-        app_base: state.app_base,
-        app_version: APP_VERSION.to_string(),
-        error: Some("Invalid email or password".to_string()),
-        google_auth_enabled: state.google_oauth.is_some(),
-        oidc_auth_enabled: state.oidc.is_some(),
-        oidc_provider_name: state
-            .oidc
-            .as_ref()
-            .map(|o| o.provider_name.clone())
-            .unwrap_or_default(),
-        current_user_id: None,
-        current_user_email: None,
-        is_admin: false,
-    };
-    Html(template.render().unwrap()).into_response()
+    (
+        StatusCode::UNAUTHORIZED,
+        Redirect::to(&format!(
+            "{}/login?error=Invalid+credentials",
+            state.app_base
+        )),
+    )
+        .into_response()
 }
 
 async fn logout(State(state): State<AppState>) -> Response {
@@ -1203,154 +518,18 @@ async fn logout(State(state): State<AppState>) -> Response {
     response
 }
 
-async fn admin_users_list(
-    State(state): State<AppState>,
-    jar: PrivateCookieJar,
-) -> impl IntoResponse {
-    if !is_admin_session(&jar) {
-        warn!("Admin session cookie missing from request");
-        return (
-            StatusCode::FORBIDDEN,
-            "Forbidden. Only administrators can access this page.",
-        )
-            .into_response();
-    }
-
-    let user_id = get_session_user_id(&jar).await;
-    let user_email = if let Some(uid) = &user_id {
-        storage::find_user_by_id(uid).map(|u| u.email)
-    } else {
-        None
-    };
-
-    let users = storage::list_users();
-    let passkey_counts: std::collections::HashMap<String, usize> = users
-        .iter()
-        .map(|u| {
-            let count = storage::find_passkeys_by_user_id(&u.id).len();
-            (u.id.clone(), count)
-        })
-        .collect();
-    let template = UsersTemplate {
-        users,
-        passkey_counts,
-        app_base: state.app_base,
-        app_version: APP_VERSION.to_string(),
-        current_user_id: user_id,
-        current_user_email: user_email,
-        is_admin: true,
-    };
-    Html(template.render().unwrap()).into_response()
-}
-
-async fn admin_users_delete(
-    State(state): State<AppState>,
-    jar: PrivateCookieJar,
-    Path(id): Path<String>,
-) -> impl IntoResponse {
-    if !is_admin_session(&jar) {
-        warn!("Admin session cookie missing from request");
-        return (
-            StatusCode::FORBIDDEN,
-            "Forbidden. Only administrators can perform this action.",
-        )
-            .into_response();
-    }
-
-    let current_uid = get_session_user_id(&jar).await;
-    if current_uid.as_ref() == Some(&id) {
-        return (
-            StatusCode::BAD_REQUEST,
-            "Cannot delete your own administrator account.",
-        )
-            .into_response();
-    }
-
-    match storage::delete_user(&id) {
-        Ok(_) => Redirect::to(&format!("{}/admin/users", state.app_base)).into_response(),
-        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to delete user").into_response(),
-    }
-}
-
 #[derive(Deserialize)]
-struct ResetPasswordFormData {
+struct RegisterFormData {
+    email: String,
     password: String,
-}
-
-async fn admin_users_reset_password(
-    State(state): State<AppState>,
-    jar: PrivateCookieJar,
-    Path(id): Path<String>,
-    Form(form): Form<ResetPasswordFormData>,
-) -> impl IntoResponse {
-    if !is_admin_session(&jar) {
-        warn!("Admin session cookie missing from request");
-        return (
-            StatusCode::FORBIDDEN,
-            "Forbidden. Only administrators can perform this action.",
-        )
-            .into_response();
-    }
-
-    if form.password.trim().is_empty() {
-        return (StatusCode::BAD_REQUEST, "Password cannot be empty.").into_response();
-    }
-
-    let user_to_reset = match storage::find_user_by_id(&id) {
-        Some(u) => u,
-        None => return (StatusCode::NOT_FOUND, "User not found.").into_response(),
-    };
-
-    if user_to_reset.password_hash.is_empty() {
-        return (
-            StatusCode::BAD_REQUEST,
-            "Cannot reset password for users who registered via external authentication (OAuth/OIDC).",
-        )
-            .into_response();
-    }
-
-    let hashed = match bcrypt::hash(&form.password, bcrypt::DEFAULT_COST) {
-        Ok(h) => h,
-        Err(_) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to hash password.",
-            )
-                .into_response();
-        }
-    };
-
-    match storage::update_user_password(&id, &hashed) {
-        Ok(_) => Redirect::to(&format!("{}/admin/users", state.app_base)).into_response(),
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Failed to update password in database.",
-        )
-            .into_response(),
-    }
+    confirm_password: Option<String>,
 }
 
 async fn register_form(State(state): State<AppState>, jar: PrivateCookieJar) -> impl IntoResponse {
     if get_session_user_id(&jar).await.is_some() {
         return Redirect::to(&format!("{}/", state.app_base)).into_response();
     }
-
-    let template = RegisterTemplate {
-        app_base: state.app_base,
-        app_version: APP_VERSION.to_string(),
-        error: None,
-        current_user_id: None,
-        current_user_email: None,
-        is_admin: false,
-    };
-    Html(template.render().unwrap()).into_response()
-}
-
-#[derive(Deserialize)]
-struct RegisterFormData {
-    email: String,
-    password: String,
-    confirm_password: String,
+    default_index(State(state)).await.into_response()
 }
 
 async fn register_submit(
@@ -1359,53 +538,35 @@ async fn register_submit(
     Form(form): Form<RegisterFormData>,
 ) -> impl IntoResponse {
     if form.email.trim().is_empty() || form.password.is_empty() {
-        let template = RegisterTemplate {
-            app_base: state.app_base,
-            app_version: APP_VERSION.to_string(),
-            error: Some("Email and password cannot be empty".to_string()),
-            current_user_id: None,
-            current_user_email: None,
-            is_admin: false,
-        };
-        return Html(template.render().unwrap()).into_response();
+        return (
+            StatusCode::BAD_REQUEST,
+            "Email and password cannot be empty",
+        )
+            .into_response();
     }
 
-    if form.password != form.confirm_password {
-        let template = RegisterTemplate {
-            app_base: state.app_base,
-            app_version: APP_VERSION.to_string(),
-            error: Some("Passwords do not match".to_string()),
-            current_user_id: None,
-            current_user_email: None,
-            is_admin: false,
-        };
-        return Html(template.render().unwrap()).into_response();
+    if let Some(ref confirm) = form.confirm_password {
+        if &form.password != confirm {
+            return (StatusCode::BAD_REQUEST, "Passwords do not match").into_response();
+        }
     }
 
     if storage::find_user_by_email(&form.email).is_some() {
-        let template = RegisterTemplate {
-            app_base: state.app_base,
-            app_version: APP_VERSION.to_string(),
-            error: Some("A user with this email already exists".to_string()),
-            current_user_id: None,
-            current_user_email: None,
-            is_admin: false,
-        };
-        return Html(template.render().unwrap()).into_response();
+        return (
+            StatusCode::CONFLICT,
+            "A user with this email already exists",
+        )
+            .into_response();
     }
 
     let password_hash = match bcrypt::hash(&form.password, bcrypt::DEFAULT_COST) {
         Ok(h) => h,
         Err(_) => {
-            let template = RegisterTemplate {
-                app_base: state.app_base,
-                app_version: APP_VERSION.to_string(),
-                error: Some("Failed to process password".to_string()),
-                current_user_id: None,
-                current_user_email: None,
-                is_admin: false,
-            };
-            return Html(template.render().unwrap()).into_response();
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to process password",
+            )
+                .into_response();
         }
     };
 
@@ -1419,15 +580,11 @@ async fn register_submit(
 
     if let Err(e) = storage::save_user(&new_user) {
         error!("Failed to save new user: {:?}", e);
-        let template = RegisterTemplate {
-            app_base: state.app_base,
-            app_version: APP_VERSION.to_string(),
-            error: Some("Failed to register account".to_string()),
-            current_user_id: None,
-            current_user_email: None,
-            is_admin: false,
-        };
-        return Html(template.render().unwrap()).into_response();
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to register account",
+        )
+            .into_response();
     }
 
     let cookie_path = if state.app_base.is_empty() {
@@ -2296,19 +1453,9 @@ async fn main() {
     storage::db_init(&state.password_hash, &admin_email).unwrap();
 
     let protected_routes = Router::new()
-        .route("/new", get(new_recipe).post(create_recipe))
-        .route("/edit/{id}", get(edit_recipe).post(update_recipe))
-        .route("/delete/{id}", post(delete_recipe))
-        .route("/import", post(import_recipe))
-        .route("/import/paprika", post(import_paprika))
-        .route("/import/photo", post(import_photo))
         .route("/upload", post(upload_image))
-        .route("/admin/users", get(admin_users_list))
-        .route("/admin/users/delete/{id}", post(admin_users_delete))
-        .route(
-            "/admin/users/reset-password/{id}",
-            post(admin_users_reset_password),
-        )
+        .route("/import/photo", post(import_photo))
+        .route("/import/paprika", post(import_paprika))
         .route("/api/v1/auth/passkeys", get(passkeys::passkeys_list))
         .route(
             "/api/v1/auth/passkeys/register/start",
@@ -2336,14 +1483,16 @@ async fn main() {
 
     let public_routes = Router::new()
         .route("/", get(default_index))
-        .route("/classic", get(index))
-        .route("/classic/recipe/{id}", get(view_recipe_classic))
-        .route("/classic/shopping-list", get(shopping_list_classic))
+        .route("/new", get(default_index))
+        .route("/edit/{id}", get(default_index))
         .route("/meal-plan", get(default_index))
         .route("/meal-plan/", get(default_index))
-        .route("/shopping-list", get(shopping_list_page))
-        .route("/shopping-list/", get(shopping_list_page))
-        .route("/recipe/{id}", get(view_recipe))
+        .route("/shopping-list", get(default_index))
+        .route("/shopping-list/", get(default_index))
+        .route("/recipe/{id}", get(default_index))
+        .route("/recipe/{id}/edit", get(default_index))
+        .route("/admin/users", get(default_index))
+        .route("/admin/users/", get(default_index))
         .route("/recipe/favorite/{id}", post(toggle_favorite))
         .route("/login", get(login_form).post(login_submit))
         .route("/login/google", get(login_google))
@@ -2593,9 +1742,6 @@ mod oauth_tests {
 
         let public_routes = Router::new()
             .route("/", get(default_index))
-            .route("/classic", get(index))
-            .route("/classic/recipe/{id}", get(view_recipe_classic))
-            .route("/classic/shopping-list", get(shopping_list_classic))
             .route("/meal-plan", get(default_index))
             .route("/meal-plan/", get(default_index))
             .route("/login", get(login_form).post(login_submit))
@@ -2612,6 +1758,10 @@ mod oauth_tests {
 
         Router::new()
             .merge(public_routes)
+            .nest(
+                "/api/v1",
+                api::router(state.clone()).with_state(state.clone()),
+            )
             .fallback(spa_fallback)
             .with_state(state)
     }
@@ -2622,7 +1772,7 @@ mod oauth_tests {
 
         let req = Request::builder()
             .method("GET")
-            .uri("/login")
+            .uri("/api/v1/auth/me")
             .body(Body::empty())
             .unwrap();
 
@@ -2630,9 +1780,9 @@ mod oauth_tests {
         assert_eq!(response.status(), StatusCode::OK);
 
         let body = response.into_body().collect().await.unwrap().to_bytes();
-        let body_str = String::from_utf8(body.to_vec()).unwrap();
-        assert!(!body_str.contains("Sign in with Google"));
-        assert!(!body_str.contains("Sign in with Pocket ID"));
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["config"]["google_auth_enabled"], false);
+        assert_eq!(json["config"]["oidc_auth_enabled"], false);
     }
 
     #[tokio::test]
@@ -2647,7 +1797,7 @@ mod oauth_tests {
 
         let req = Request::builder()
             .method("GET")
-            .uri("/login")
+            .uri("/api/v1/auth/me")
             .body(Body::empty())
             .unwrap();
 
@@ -2655,9 +1805,8 @@ mod oauth_tests {
         assert_eq!(response.status(), StatusCode::OK);
 
         let body = response.into_body().collect().await.unwrap().to_bytes();
-        let body_str = String::from_utf8(body.to_vec()).unwrap();
-        assert!(body_str.contains("Sign in with Google"));
-        assert!(body_str.contains("/login/google"));
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["config"]["google_auth_enabled"], true);
     }
 
     #[tokio::test]
@@ -2743,7 +1892,7 @@ mod oauth_tests {
 
         let req = Request::builder()
             .method("GET")
-            .uri("/login")
+            .uri("/api/v1/auth/me")
             .body(Body::empty())
             .unwrap();
 
@@ -2751,10 +1900,10 @@ mod oauth_tests {
         assert_eq!(response.status(), StatusCode::OK);
 
         let body = response.into_body().collect().await.unwrap().to_bytes();
-        let body_str = String::from_utf8(body.to_vec()).unwrap();
-        assert!(body_str.contains("Sign in with Pocket ID"));
-        assert!(body_str.contains("/login/oidc"));
-        assert!(!body_str.contains("Sign in with Google"));
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["config"]["oidc_auth_enabled"], true);
+        assert_eq!(json["config"]["oidc_provider_name"], "Pocket ID");
+        assert_eq!(json["config"]["google_auth_enabled"], false);
     }
 
     #[tokio::test]
@@ -2780,7 +1929,7 @@ mod oauth_tests {
 
         let req = Request::builder()
             .method("GET")
-            .uri("/login")
+            .uri("/api/v1/auth/me")
             .body(Body::empty())
             .unwrap();
 
@@ -2788,9 +1937,9 @@ mod oauth_tests {
         assert_eq!(response.status(), StatusCode::OK);
 
         let body = response.into_body().collect().await.unwrap().to_bytes();
-        let body_str = String::from_utf8(body.to_vec()).unwrap();
-        assert!(body_str.contains("Sign in with Pocket ID"));
-        assert!(body_str.contains("Sign in with Google"));
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["config"]["oidc_auth_enabled"], true);
+        assert_eq!(json["config"]["google_auth_enabled"], true);
     }
 
     #[tokio::test]
@@ -2940,14 +2089,6 @@ mod oauth_tests {
         let root_str = String::from_utf8(root_body.to_vec()).unwrap();
         assert!(root_str.contains("<base href=\"/\" />"));
         assert!(root_str.contains("window.__APP_BASE__ = \"\""));
-
-        // /classic serves classic template index (200 OK)
-        let req_classic = Request::builder()
-            .uri("/classic")
-            .body(Body::empty())
-            .unwrap();
-        let res_classic = app.clone().oneshot(req_classic).await.unwrap();
-        assert_eq!(res_classic.status(), StatusCode::OK);
 
         // /app serves index.html directly
         let req_app = Request::builder().uri("/app").body(Body::empty()).unwrap();

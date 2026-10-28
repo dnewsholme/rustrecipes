@@ -124,7 +124,17 @@ export const LoginModal: React.FC<LoginModalProps> = ({ auth, onClose, onLoginSu
         </div>
 
         {error && (
-          <div style={{ padding: '0.65rem 0.9rem', background: 'rgba(239, 68, 68, 0.15)', color: 'var(--danger)', borderRadius: 'var(--radius-md)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>
+          <div
+            id="client-error-alert"
+            style={{
+              padding: '0.65rem 0.9rem',
+              background: 'rgba(239, 68, 68, 0.15)',
+              color: 'var(--danger)',
+              borderRadius: 'var(--radius-md)',
+              fontSize: '0.85rem',
+              marginBottom: '1.25rem',
+            }}
+          >
             {error}
           </div>
         )}
@@ -133,6 +143,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ auth, onClose, onLoginSu
         {tab === 'login' && (
           <div style={{ marginBottom: '1.25rem' }}>
             <button
+              id="passkey-login-btn"
               type="button"
               onClick={handlePasskeyLogin}
               disabled={loading}
@@ -157,6 +168,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({ auth, onClose, onLoginSu
               Email address
             </label>
             <input
+              id="email"
+              name="email"
               type="text"
               required
               value={email}
@@ -171,6 +184,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({ auth, onClose, onLoginSu
               Password
             </label>
             <input
+              id="password"
+              name="password"
               type="password"
               required
               value={password}
@@ -181,6 +196,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({ auth, onClose, onLoginSu
           </div>
 
           <button
+            id="login-submit-btn"
             type="submit"
             disabled={loading}
             className="btn btn-primary"

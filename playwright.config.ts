@@ -56,7 +56,6 @@ export default defineConfig({
     env: {
       COOKIE_SECURE: 'false',
       ADMIN_EMAIL: 'admin@example.com',
-      DEFAULT_UI: 'classic',
     },
   },
 });

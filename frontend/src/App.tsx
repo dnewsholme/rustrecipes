@@ -8,10 +8,11 @@ import { MealPlanView } from './components/MealPlanView';
 import { LoginModal } from './components/LoginModal';
 import { PasskeysModal } from './components/PasskeysModal';
 import { ImportModal } from './components/ImportModal';
+import { UserManagementView } from './components/UserManagementView';
 import { TimerOverlay } from './components/TimerOverlay';
 import type { Recipe, AuthState, ActiveTimer } from './types';
 import { api, getAppBase } from './api';
-import { Sparkles, Star, Plus } from 'lucide-react';
+import { Sparkles, Star, Plus, Tag, ChevronDown, ChevronUp, X } from 'lucide-react';
 
 export const App: React.FC = () => {
   const [auth, setAuth] = useState<AuthState>({
@@ -33,6 +34,7 @@ export const App: React.FC = () => {
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTag, setActiveTag] = useState<string | null>(null);
+  const [isTagsExpanded, setIsTagsExpanded] = useState<boolean>(false);
   const [filterTab, setFilterTab] = useState<'all' | 'favorites' | 'mine'>('all');
 
   // Modals
@@ -109,6 +111,8 @@ export const App: React.FC = () => {
         setActiveView('shopping-list');
       } else if (path === '/meal-plan') {
         setActiveView('meal-plan');
+      } else if (path === '/admin/users' || path === '/admin/users/') {
+        setActiveView('admin_users');
       } else if (path === '/login') {
         setLoginModalOpen(true);
       }
@@ -136,6 +140,8 @@ export const App: React.FC = () => {
       window.history.pushState(null, '', `${base}/shopping-list`);
     } else if (view === 'meal-plan') {
       window.history.pushState(null, '', `${base}/meal-plan`);
+    } else if (view === 'admin_users') {
+      window.history.pushState(null, '', `${base}/admin/users`);
     }
   };
 
@@ -314,11 +320,61 @@ export const App: React.FC = () => {
                   <Star size={14} fill={filterTab === 'favorites' ? '#fff' : 'none'} />
                   <span>Favorites</span>
                 </button>
+                {allTags.length > 0 && (
+                  <button
+                    onClick={() => setIsTagsExpanded(!isTagsExpanded)}
+                    className={`btn btn-sm ${activeTag || isTagsExpanded ? 'btn-primary' : 'btn-secondary'}`}
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+                    title={isTagsExpanded ? 'Collapse tags' : 'Filter by tag'}
+                  >
+                    <Tag size={14} />
+                    <span>Tags</span>
+                    {activeTag ? (
+                      <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>
+                        (#{activeTag})
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>
+                        ({allTags.length})
+                      </span>
+                    )}
+                    {isTagsExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  </button>
+                )}
+                {activeTag && (
+                  <button
+                    onClick={() => setActiveTag(null)}
+                    className="badge badge-accent"
+                    style={{
+                      cursor: 'pointer',
+                      border: 'none',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.25rem',
+                      padding: '0.25rem 0.6rem',
+                    }}
+                    title="Clear tag filter"
+                  >
+                    <span>#{activeTag}</span>
+                    <X size={12} />
+                  </button>
+                )}
               </div>
 
-              {/* Tag filters */}
-              {allTags.length > 0 && (
-                <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+              {/* Tag filters (collapsed until clicked) */}
+              {allTags.length > 0 && isTagsExpanded && (
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: '0.4rem',
+                    flexWrap: 'wrap',
+                    padding: '0.85rem 1rem',
+                    background: 'var(--surface-color)',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: 'var(--radius-md)',
+                    boxShadow: 'var(--shadow-sm)',
+                  }}
+                >
                   <button
                     onClick={() => setActiveTag(null)}
                     className={`badge ${!activeTag ? 'badge-accent' : ''}`}
@@ -428,6 +484,14 @@ export const App: React.FC = () => {
             onSelectRecipe={(id) => navigateTo('recipe-detail', id)}
             onCountChange={setMealPlanCount}
             onNavigateToShopping={() => navigateTo('shopping-list')}
+          />
+        )}
+
+        {/* ADMIN USER MANAGEMENT VIEW */}
+        {activeView === 'admin_users' && (
+          <UserManagementView
+            currentUser={auth.user}
+            onBack={() => navigateTo('recipes')}
           />
         )}
       </main>

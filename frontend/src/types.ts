@@ -68,6 +68,15 @@ export interface User {
   is_admin: boolean;
 }
 
+export interface AdminUser {
+  id: string;
+  email: string;
+  created_at: string;
+  is_admin: boolean;
+  has_password: boolean;
+  passkey_count: number;
+}
+
 export interface AuthConfig {
   app_base: string;
   google_auth_enabled: boolean;

@@ -13,6 +13,7 @@ export const PasskeysModal: React.FC<PasskeysModalProps> = ({ onClose }) => {
   const [loading, setLoading] = useState(true);
   const [registering, setRegistering] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   const loadPasskeys = async () => {
     try {
@@ -35,6 +36,7 @@ export const PasskeysModal: React.FC<PasskeysModalProps> = ({ onClose }) => {
 
     setRegistering(true);
     setError(null);
+    setSuccess(null);
 
     try {
       // 1. Get registration options from server
@@ -58,6 +60,7 @@ export const PasskeysModal: React.FC<PasskeysModalProps> = ({ onClose }) => {
         credential: serializeCredential(credential),
       });
 
+      setSuccess('Passkey successfully registered!');
       setKeyName('');
       await loadPasskeys();
     } catch (err: any) {
@@ -68,9 +71,10 @@ export const PasskeysModal: React.FC<PasskeysModalProps> = ({ onClose }) => {
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm('Delete this passkey?')) {
+    if (confirm('Are you sure you want to delete this passkey?')) {
       try {
         await api.deletePasskey(id);
+        setSuccess('Passkey deleted successfully');
         setPasskeys(passkeys.filter((p) => p.id !== id));
       } catch (err: any) {
         setError(err.message || 'Failed to delete passkey');
@@ -79,20 +83,50 @@ export const PasskeysModal: React.FC<PasskeysModalProps> = ({ onClose }) => {
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div id="passkeys-modal" className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 500 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <Key size={20} color="var(--accent)" />
             <h2 style={{ fontSize: '1.3rem', fontWeight: 800 }}>Manage Passkeys</h2>
           </div>
-          <button onClick={onClose} className="btn btn-ghost btn-sm" style={{ padding: '0.35rem' }}>
+          <button
+            id="close-passkeys-btn"
+            onClick={onClose}
+            className="btn btn-ghost btn-sm"
+            style={{ padding: '0.35rem' }}
+          >
             <X size={18} />
           </button>
         </div>
 
+        {success && (
+          <div
+            id="passkeys-modal-success"
+            style={{
+              padding: '0.65rem 0.9rem',
+              background: 'rgba(34, 197, 94, 0.15)',
+              color: '#16a34a',
+              borderRadius: 'var(--radius-md)',
+              fontSize: '0.85rem',
+              marginBottom: '1.25rem',
+            }}
+          >
+            {success}
+          </div>
+        )}
+
         {error && (
-          <div style={{ padding: '0.65rem 0.9rem', background: 'rgba(239, 68, 68, 0.15)', color: 'var(--danger)', borderRadius: 'var(--radius-md)', fontSize: '0.85rem', marginBottom: '1.25rem' }}>
+          <div
+            style={{
+              padding: '0.65rem 0.9rem',
+              background: 'rgba(239, 68, 68, 0.15)',
+              color: 'var(--danger)',
+              borderRadius: 'var(--radius-md)',
+              fontSize: '0.85rem',
+              marginBottom: '1.25rem',
+            }}
+          >
             {error}
           </div>
         )}
@@ -100,7 +134,8 @@ export const PasskeysModal: React.FC<PasskeysModalProps> = ({ onClose }) => {
         {/* Register New Passkey Form */}
         <form onSubmit={handleRegister} style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem' }}>
           <input
-            id="modern-passkey-name-input"
+            id="new-key-name"
+            name="new-key-name"
             type="text"
             required
             value={keyName}
@@ -110,7 +145,7 @@ export const PasskeysModal: React.FC<PasskeysModalProps> = ({ onClose }) => {
             style={{ fontSize: '0.9rem' }}
           />
           <button
-            id="modern-register-passkey-btn"
+            id="register-key-btn"
             type="submit"
             disabled={registering}
             className="btn btn-primary btn-sm"
@@ -122,16 +157,16 @@ export const PasskeysModal: React.FC<PasskeysModalProps> = ({ onClose }) => {
         </form>
 
         {/* Passkeys List */}
-        <div id="modern-passkeys-list">
+        <div id="passkeys-list-container">
           <h3 style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.75rem', textTransform: 'uppercase' }}>
             Registered Passkeys ({passkeys.length})
           </h3>
 
           {loading ? (
-            <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)' }}>Loading passkeys...</div>
+            <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)' }}>Loading keys...</div>
           ) : passkeys.length === 0 ? (
             <div style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text-muted)', background: 'var(--bg-input)', borderRadius: 'var(--radius-md)' }}>
-              No passkeys registered yet. Register one above for instant, biometric passwordless sign in!
+              No registered passkeys yet. Register one above for instant, biometric passwordless sign in!
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
@@ -155,8 +190,9 @@ export const PasskeysModal: React.FC<PasskeysModalProps> = ({ onClose }) => {
                   </div>
                   <button
                     onClick={() => handleDelete(p.id)}
-                    className="btn btn-ghost btn-sm"
+                    className="delete-passkey-item-btn btn btn-ghost btn-sm"
                     style={{ color: 'var(--danger)', padding: '0.35rem' }}
+                    title="Delete Passkey"
                   >
                     <Trash2 size={16} />
                   </button>
