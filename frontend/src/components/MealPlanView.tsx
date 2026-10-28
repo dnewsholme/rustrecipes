@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, CheckCircle2, Circle, Trash2, ShoppingCart, Utensils, ArrowRight } from 'lucide-react';
 import type { MealPlanItem } from '../types';
-import { api } from '../api';
+import { api, resolveMediaUrl } from '../api';
 
 interface MealPlanViewProps {
   onSelectRecipe: (id: string) => void;
@@ -156,7 +156,7 @@ export const MealPlanView: React.FC<MealPlanViewProps> = ({
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                   {meal.image ? (
                     <img
-                      src={meal.image.startsWith('http') || meal.image.startsWith('/') ? meal.image : `/${meal.image}`}
+                      src={resolveMediaUrl(meal.image)}
                       alt=""
                       style={{ width: 44, height: 44, borderRadius: 'var(--radius-sm)', objectFit: 'cover' }}
                     />

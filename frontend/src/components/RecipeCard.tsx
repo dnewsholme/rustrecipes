@@ -1,6 +1,7 @@
 import React from 'react';
 import { Star, Clock, Calendar, Check, Utensils } from 'lucide-react';
 import type { Recipe } from '../types';
+import { resolveMediaUrl } from '../api';
 
 interface RecipeCardProps {
   recipe: Recipe;
@@ -35,7 +36,7 @@ export const RecipeCard: React.FC<RecipeCardProps> = ({
       <div style={{ position: 'relative', width: '100%', height: 180, background: 'var(--bg-secondary)', overflow: 'hidden' }}>
         {recipe.image ? (
           <img
-            src={recipe.image.startsWith('http') || recipe.image.startsWith('/') ? recipe.image : `/${recipe.image}`}
+            src={resolveMediaUrl(recipe.image)}
             alt={recipe.title}
             style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.3s ease' }}
             loading="lazy"

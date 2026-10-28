@@ -498,7 +498,23 @@ async fn default_index(
         index(State(state), jar).await.into_response()
     } else {
         match tokio::fs::read_to_string("frontend/dist/index.html").await {
-            Ok(content) => Html(content).into_response(),
+            Ok(content) => {
+                let base_href = if state.app_base.is_empty() {
+                    "/".to_string()
+                } else {
+                    format!("{}/", state.app_base.trim_end_matches('/'))
+                };
+                let injected = format!(
+                    "<base href=\"{}\" />\n    <script>window.__APP_BASE__ = {:?};</script>",
+                    base_href, state.app_base
+                );
+                let html = if content.contains("<head>") {
+                    content.replacen("<head>", &format!("<head>\n    {}", injected), 1)
+                } else {
+                    content
+                };
+                Html(html).into_response()
+            }
             Err(_) => index(State(state), jar).await.into_response(),
         }
     }
@@ -2454,6 +2470,18 @@ mod oauth_tests {
         google_config: Option<GoogleOauthConfig>,
         oidc_config: Option<OidcConfig>,
     ) -> Router {
+        build_test_app_internal(google_config, oidc_config, "").await
+    }
+
+    async fn build_test_app_with_base(app_base: &'static str) -> Router {
+        build_test_app_internal(None, None, app_base).await
+    }
+
+    async fn build_test_app_internal(
+        google_config: Option<GoogleOauthConfig>,
+        oidc_config: Option<OidcConfig>,
+        app_base: &'static str,
+    ) -> Router {
         unsafe {
             std::env::set_var("ADMIN_EMAIL", "admin@example.com");
         }
@@ -2478,7 +2506,7 @@ mod oauth_tests {
         let state = AppState {
             key: axum_extra::extract::cookie::Key::generate(),
             password_hash: "".to_string(),
-            app_base: "",
+            app_base,
             google_oauth: google_config,
             oidc: oidc_config,
             webauthn,
@@ -2833,10 +2861,14 @@ mod oauth_tests {
     async fn test_spa_routing() {
         let app = build_test_app(None, None).await;
 
-        // / serves modern UI index.html (200 OK)
+        // / serves modern UI index.html (200 OK) with injected base and app_base
         let req_root = Request::builder().uri("/").body(Body::empty()).unwrap();
         let res_root = app.clone().oneshot(req_root).await.unwrap();
         assert_eq!(res_root.status(), StatusCode::OK);
+        let root_body = res_root.into_body().collect().await.unwrap().to_bytes();
+        let root_str = String::from_utf8(root_body.to_vec()).unwrap();
+        assert!(root_str.contains("<base href=\"/\" />"));
+        assert!(root_str.contains("window.__APP_BASE__ = \"\""));
 
         // /classic serves classic template index (200 OK)
         let req_classic = Request::builder()
@@ -2881,5 +2913,17 @@ mod oauth_tests {
                 .unwrap(),
             "/login"
         );
+    }
+
+    #[tokio::test]
+    async fn test_spa_subpath_base_injection() {
+        let app = build_test_app_with_base("/recipes").await;
+        let req = Request::builder().uri("/").body(Body::empty()).unwrap();
+        let res = app.oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        let body = res.into_body().collect().await.unwrap().to_bytes();
+        let html = String::from_utf8(body.to_vec()).unwrap();
+        assert!(html.contains("<base href=\"/recipes/\" />"));
+        assert!(html.contains("window.__APP_BASE__ = \"/recipes\""));
     }
 }

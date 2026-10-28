@@ -7,7 +7,37 @@ import type {
   ShoppingListItem,
 } from './types';
 
-const API_BASE = '/api/v1';
+export function getAppBase(): string {
+  if (typeof (window as any).__APP_BASE__ === 'string') {
+    return (window as any).__APP_BASE__.replace(/\/+$/, '');
+  }
+  const baseEl = document.querySelector('base');
+  if (baseEl && baseEl.getAttribute('href')) {
+    const href = baseEl.getAttribute('href')!;
+    if (href !== '/' && href !== './') {
+      return href.replace(/\/+$/, '');
+    }
+  }
+  if (window.location.pathname.startsWith('/recipes')) {
+    return '/recipes';
+  }
+  return '';
+}
+
+export const getApiBase = (): string => `${getAppBase()}/api/v1`;
+
+export function resolveMediaUrl(url: string | null | undefined): string {
+  if (!url) return '';
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
+    return url;
+  }
+  const appBase = getAppBase();
+  const cleanPath = url.startsWith('/') ? url : `/${url}`;
+  if (appBase && !cleanPath.startsWith(appBase)) {
+    return `${appBase}${cleanPath}`;
+  }
+  return cleanPath;
+}
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers || {});
@@ -15,7 +45,8 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     headers.set('Content-Type', 'application/json');
   }
 
-  const res = await fetch(`${API_BASE}${endpoint}`, {
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const res = await fetch(`${getApiBase()}${cleanEndpoint}`, {
     credentials: 'include',
     ...options,
     headers,
@@ -131,8 +162,9 @@ export const api = {
   },
 
   async toggleFavorite(id: string): Promise<void> {
-    const res = await fetch(`/recipe/favorite/${encodeURIComponent(id)}`, {
+    const res = await fetch(`${getAppBase()}/recipe/favorite/${encodeURIComponent(id)}`, {
       method: 'POST',
+      credentials: 'include',
     });
     if (!res.ok) throw new Error('Failed to toggle favorite');
   },
@@ -255,8 +287,9 @@ export const api = {
   async uploadFile(file: File): Promise<string> {
     const formData = new FormData();
     formData.append('file', file);
-    const res = await fetch('/upload', {
+    const res = await fetch(`${getAppBase()}/upload`, {
       method: 'POST',
+      credentials: 'include',
       body: formData,
     });
     if (!res.ok) throw new Error('File upload failed');

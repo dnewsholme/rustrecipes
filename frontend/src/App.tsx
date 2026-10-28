@@ -10,7 +10,7 @@ import { PasskeysModal } from './components/PasskeysModal';
 import { ImportModal } from './components/ImportModal';
 import { TimerOverlay } from './components/TimerOverlay';
 import type { Recipe, AuthState, ActiveTimer } from './types';
-import { api } from './api';
+import { api, getAppBase } from './api';
 import { Sparkles, Star, Plus } from 'lucide-react';
 
 export const App: React.FC = () => {
@@ -87,7 +87,15 @@ export const App: React.FC = () => {
   // Handle URL path routing on mount and popstate
   useEffect(() => {
     const handleLocation = () => {
-      const path = window.location.pathname;
+      const appBase = getAppBase();
+      let path = window.location.pathname;
+      if (appBase && path.startsWith(appBase)) {
+        path = path.slice(appBase.length);
+      }
+      if (!path.startsWith('/')) {
+        path = '/' + path;
+      }
+
       if (path.startsWith('/recipe/')) {
         const id = path.replace('/recipe/', '');
         if (id) {
@@ -113,20 +121,21 @@ export const App: React.FC = () => {
 
   // Sync browser URL
   const navigateTo = (view: string, id?: string) => {
+    const base = getAppBase();
     setActiveView(view);
     if (view === 'recipes') {
       setSelectedRecipeId(null);
       setEditingRecipe(null);
-      window.history.pushState(null, '', '/');
+      window.history.pushState(null, '', base ? `${base}/` : '/');
     } else if (view === 'recipe-detail' && id) {
       setSelectedRecipeId(id);
-      window.history.pushState(null, '', `/recipe/${id}`);
+      window.history.pushState(null, '', `${base}/recipe/${id}`);
     } else if (view === 'recipe-edit') {
-      window.history.pushState(null, '', id ? `/recipe/${id}/edit` : '/new');
+      window.history.pushState(null, '', id ? `${base}/recipe/${id}/edit` : `${base}/new`);
     } else if (view === 'shopping-list') {
-      window.history.pushState(null, '', '/shopping-list');
+      window.history.pushState(null, '', `${base}/shopping-list`);
     } else if (view === 'meal-plan') {
-      window.history.pushState(null, '', '/meal-plan');
+      window.history.pushState(null, '', `${base}/meal-plan`);
     }
   };
 

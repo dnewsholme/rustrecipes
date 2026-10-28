@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X, Globe, Camera, Wand2, Upload } from 'lucide-react';
 import type { Recipe } from '../types';
-import { api } from '../api';
+import { api, getAppBase } from '../api';
 
 interface ImportModalProps {
   onClose: () => void;
@@ -38,8 +38,9 @@ export const ImportModal: React.FC<ImportModalProps> = ({ onClose, onImportSucce
     try {
       const formData = new FormData();
       formData.append('photo', file);
-      const res = await fetch('/import/photo', {
+      const res = await fetch(`${getAppBase()}/import/photo`, {
         method: 'POST',
+        credentials: 'include',
         body: formData,
       });
       if (!res.ok) throw new Error('AI photo extraction failed');
@@ -64,8 +65,9 @@ export const ImportModal: React.FC<ImportModalProps> = ({ onClose, onImportSucce
     try {
       const formData = new FormData();
       formData.append('file', file);
-      const res = await fetch('/import/paprika', {
+      const res = await fetch(`${getAppBase()}/import/paprika`, {
         method: 'POST',
+        credentials: 'include',
         body: formData,
       });
       if (!res.ok) throw new Error('Paprika import failed');

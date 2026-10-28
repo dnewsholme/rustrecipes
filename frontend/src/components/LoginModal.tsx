@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Key, LogIn, UserPlus } from 'lucide-react';
 import { decodeRequestOptions, serializeAssertion } from '../webauthn';
 import type { AuthState } from '../types';
-import { api } from '../api';
+import { api, getAppBase } from '../api';
 
 interface LoginModalProps {
   auth: AuthState;
@@ -37,8 +37,9 @@ export const LoginModal: React.FC<LoginModalProps> = ({ auth, onClose, onLoginSu
         onClose();
       } else {
         // Form post to /register
-        const res = await fetch('/register', {
+        const res = await fetch(`${getAppBase()}/register`, {
           method: 'POST',
+          credentials: 'include',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: new URLSearchParams({ email, password }).toString(),
         });
@@ -195,8 +196,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({ auth, onClose, onLoginSu
             {config.oidc_auth_enabled && (
               <a
                 id="oidc-login-btn"
-                href="/login/oidc"
-                onClick={() => console.info(`[Auth] Navigating to OIDC login: /login/oidc (${config.oidc_provider_name || 'OpenID'})`)}
+                href={`${getAppBase()}/login/oidc`}
+                onClick={() => console.info(`[Auth] Navigating to OIDC login: ${getAppBase()}/login/oidc (${config.oidc_provider_name || 'OpenID'})`)}
                 className="btn btn-secondary"
                 style={{ width: '100%', textDecoration: 'none', justifyContent: 'center' }}
               >
@@ -206,8 +207,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({ auth, onClose, onLoginSu
             {config.google_auth_enabled && (
               <a
                 id="google-login-btn"
-                href="/login/google"
-                onClick={() => console.info('[Auth] Navigating to Google OAuth login: /login/google')}
+                href={`${getAppBase()}/login/google`}
+                onClick={() => console.info(`[Auth] Navigating to Google OAuth login: ${getAppBase()}/login/google`)}
                 className="btn btn-secondary"
                 style={{ width: '100%', textDecoration: 'none', justifyContent: 'center' }}
               >

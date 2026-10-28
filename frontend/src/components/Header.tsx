@@ -1,6 +1,7 @@
 import React from 'react';
 import { ChefHat, Plus, ShoppingCart, Calendar, LogIn, LogOut, Key, Moon, Sun, BookOpen, Search, Download } from 'lucide-react';
 import type { AuthState } from '../types';
+import { getAppBase } from '../api';
 
 interface HeaderProps {
   auth: AuthState;
@@ -152,7 +153,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Classic UI Link */}
           <a
-            href="/classic"
+            href={`${getAppBase()}/classic`}
             className="btn btn-ghost btn-sm"
             title="Switch to Classic Server-Rendered UI"
           >
@@ -161,7 +162,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* API Docs Link */}
           <a
-            href="/api/docs"
+            href={`${getAppBase()}/api/docs`}
             target="_blank"
             rel="noopener noreferrer"
             className="btn btn-ghost btn-sm"
@@ -194,7 +195,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <Key size={18} />
               </button>
               <a
-                href="/api/v1/user/export"
+                href={`${getAppBase()}/api/v1/user/export`}
                 download
                 className="btn btn-ghost btn-sm"
                 title="Export All My Data (JSON)"

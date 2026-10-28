@@ -12,6 +12,7 @@ import {
 } from 'chart.js';
 import { Line } from 'react-chartjs-2';
 import { Activity } from 'lucide-react';
+import { resolveMediaUrl } from '../api';
 
 ChartJS.register(
   CategoryScale,
@@ -38,9 +39,9 @@ export const CombustionChart: React.FC<CombustionChartProps> = ({ csvUrl, tempUn
     setLoading(true);
     setError(null);
 
-    const fullUrl = csvUrl.startsWith('http') || csvUrl.startsWith('/') ? csvUrl : `/${csvUrl}`;
+    const fullUrl = resolveMediaUrl(csvUrl);
 
-    fetch(fullUrl)
+    fetch(fullUrl, { credentials: 'include' })
       .then((res) => {
         if (!res.ok) throw new Error('Failed to load CSV file');
         return res.text();
