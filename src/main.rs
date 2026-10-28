@@ -2009,6 +2009,7 @@ async fn main() {
     // Ensure data directories exist (important for volume mounts)
     let _ = std::fs::create_dir_all("data/recipes");
     let _ = std::fs::create_dir_all("data/uploads");
+    let _ = std::fs::create_dir_all("frontend/dist");
 
     let password_hash = std::env::var("ADMIN_PASSWORD_HASH").unwrap_or_else(|_| {
         warn!("ADMIN_PASSWORD_HASH is not set. Creating a default temporary password 'admin'. Please set this in production!");
@@ -2398,6 +2399,14 @@ mod oauth_tests {
             std::env::set_var("ADMIN_EMAIL", "admin@example.com");
         }
         let _ = std::fs::remove_file("data/recipes.db"); // Deterministic db state
+        let _ = std::fs::create_dir_all("frontend/dist");
+        let index_file = std::path::Path::new("frontend/dist/index.html");
+        if !index_file.exists() {
+            let _ = std::fs::write(
+                index_file,
+                "<!DOCTYPE html><html><head><title>SPA</title></head><body><div id=\"root\"></div></body></html>",
+            );
+        }
         let rp_id = "localhost".to_string();
         let rp_origin = url::Url::parse("http://localhost:3000").unwrap();
         let webauthn_builder = webauthn_rs::WebauthnBuilder::new(&rp_id, &rp_origin).unwrap();
