@@ -494,6 +494,7 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({
                 <img
                   src={resolveMediaUrl(recipe.image)}
                   alt={recipe.title}
+                  referrerPolicy="no-referrer"
                   style={{
                     maxWidth: '100%',
                     maxHeight: 500,

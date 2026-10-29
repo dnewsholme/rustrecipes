@@ -130,7 +130,7 @@ pub async fn import_recipe_from_url(url: &str) -> Result<Recipe, ImportError> {
             .select(&og_selector)
             .next()
             .and_then(|el| el.value().attr("content"))
-            .map(|s| s.to_string());
+            .map(decode_html);
 
         (ld_res, og_image)
     };
@@ -252,19 +252,19 @@ fn convert_ld_to_recipe(ld: LdRecipe, url: &str) -> Recipe {
     let mut image_url = None;
     if let Some(img) = ld.image {
         if let Value::String(s) = img {
-            image_url = Some(s);
+            image_url = Some(decode_html(&s));
         } else if let Value::Array(arr) = img {
             if let Some(first) = arr.first() {
                 if let Value::String(s) = first {
-                    image_url = Some(s.clone());
+                    image_url = Some(decode_html(s));
                 } else if let Some(url_val) = first.get("url").and_then(|v| v.as_str()) {
-                    image_url = Some(url_val.to_string());
+                    image_url = Some(decode_html(url_val));
                 }
             }
         } else if let Value::Object(obj) = img
             && let Some(url_val) = obj.get("url").and_then(|v| v.as_str())
         {
-            image_url = Some(url_val.to_string());
+            image_url = Some(decode_html(url_val));
         }
     }
 

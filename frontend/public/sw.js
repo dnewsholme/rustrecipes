@@ -1,5 +1,5 @@
 // RustRecipes Service Worker for Mobile PWA
-const CACHE_NAME = 'rustrecipes-pwa-v2';
+const CACHE_NAME = 'rustrecipes-pwa-v3';
 const PRECACHE_URLS = [
   './',
   './favicon.svg',
@@ -28,8 +28,13 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Bypass API calls, websockets, and non-GET mutations
-  if (event.request.method !== 'GET' || url.pathname.includes('/api/')) {
+  // Bypass cross-origin requests (external recipe images), API calls, uploads, and non-GET mutations
+  if (
+    event.request.method !== 'GET' ||
+    url.origin !== self.location.origin ||
+    url.pathname.includes('/api/') ||
+    url.pathname.includes('/uploads/')
+  ) {
     return;
   }
 

@@ -286,6 +286,7 @@ export const MealPlanView: React.FC<MealPlanViewProps> = ({
                       <img
                         src={resolveMediaUrl(meal.image)}
                         alt=""
+                        referrerPolicy="no-referrer"
                         onError={() => setFailedImages((prev) => ({ ...prev, [meal.recipe_id]: true }))}
                         style={{ width: 44, height: 44, borderRadius: 'var(--radius-sm)', objectFit: 'cover' }}
                       />

@@ -22,6 +22,11 @@ export const RecipeCard: React.FC<RecipeCardProps> = ({
 }) => {
   const [showAllTags, setShowAllTags] = React.useState(false);
   const [imgError, setImgError] = React.useState(false);
+
+  React.useEffect(() => {
+    setImgError(false);
+  }, [recipe.image]);
+
   const cardTags = (recipe.tags || []).map((t) => t.toLowerCase());
   if (recipe.has_video || recipe.video_url) cardTags.push('has-video');
   if (recipe.has_combustion || recipe.combustion_csv) cardTags.push('has-combustion');
@@ -74,6 +79,7 @@ export const RecipeCard: React.FC<RecipeCardProps> = ({
             alt={recipe.title}
             style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.3s ease' }}
             loading="lazy"
+            referrerPolicy="no-referrer"
             onError={() => setImgError(true)}
           />
         ) : (

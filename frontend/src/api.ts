@@ -29,7 +29,7 @@ export const getApiBase = (): string => `${getAppBase()}/api/v1`;
 
 export function resolveMediaUrl(url: string | null | undefined): string {
   if (!url) return '';
-  const trimmed = url.trim();
+  const trimmed = url.trim().replace(/&amp;/g, '&');
   if (!trimmed) return '';
 
   // Data URLs (e.g. data:image/png;base64,...)
@@ -47,6 +47,16 @@ export function resolveMediaUrl(url: string | null | undefined): string {
     path = '/' + domainUploadMatch[1];
   } else if (path.startsWith('http://') || path.startsWith('https://')) {
     // External images (e.g., Unsplash, King Arthur, Serious Eats, YouTube thumbnails)
+    // Upgrade external http:// URLs to https:// when served over HTTPS to avoid Mixed Content blocking
+    if (
+      path.startsWith('http://') &&
+      !path.startsWith('http://localhost') &&
+      !path.startsWith('http://127.0.0.1') &&
+      typeof window !== 'undefined' &&
+      window.location?.protocol === 'https:'
+    ) {
+      return path.replace(/^http:\/\//i, 'https://');
+    }
     return path;
   }
 
