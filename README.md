@@ -99,20 +99,21 @@ Copy the output (e.g., `$2y$12$...`) and use it as `ADMIN_PASSWORD_HASH`.
 
 | Variable | Required | Description |
 | :--- | :--- | :--- |
-| `ADMIN_EMAIL` | **Yes** | Email address of the admin account. The application will not start if this is unset. |
-| `ADMIN_PASSWORD_HASH` | Yes | Bcrypt hash for admin login. Default password is "admin" if omitted. |
+| `ADMIN_EMAIL` | **Yes*** | Email address of the default admin account (*optional when OIDC is configured). |
+| `ADMIN_PASSWORD_HASH` | **Yes*** | Bcrypt hash for admin login (*optional when OIDC is configured; defaults to password `"admin"` if `ADMIN_EMAIL` is set without a hash). |
 | `API_TOKEN` | Yes | Token for API write access. |
 | `SESSION_SECRET` | Recommended | Signs session cookies. Sessions reset on restart if omitted. |
 | `GEMINI_API_KEY` | No | Enables AI photo/video/URL import via [Google AI Studio](https://aistudio.google.com/app/apikey). |
 | `OIDC_ISSUER_URL` | No | OIDC base issuer URL (e.g., `https://id.example.com`). Fetches `/.well-known/openid-configuration` auto-discovery. |
 | `OIDC_CLIENT_ID` | No | OIDC Client ID. |
 | `OIDC_CLIENT_SECRET` | No | OIDC Client Secret. |
-| `OIDC_REDIRECT_URI` | No | OIDC callback URL (defaults to `<app_base>/login/oidc/callback`). |
+| `OIDC_REDIRECT_URI` | No | OIDC callback URL (defaults to `<app_base>/login/oidc/callback`). Back-channel logout webhook is available at `<app_base>/logout/oidc/backchannel` (and `/oidc/backchannel-logout`). |
 | `OIDC_PROVIDER_NAME` | No | Display name on the login button (defaults to "OIDC"; e.g. "Pocket ID"). |
+| `OIDC_ADMIN_GROUP` | No | OIDC group name whose members are granted administrator privileges in the app (also accepts `OIDC_ADMINS_GROUP`; defaults to `admins`). |
 | `OIDC_AUTH_URL` | No | Manual authorization endpoint override. |
 | `OIDC_TOKEN_URL` | No | Manual token endpoint override. |
 | `OIDC_USERINFO_URL` | No | Manual userinfo endpoint override. |
-| `OIDC_SCOPES` | No | Custom OIDC scopes requested (defaults to `openid email profile`). |
+| `OIDC_SCOPES` | No | Custom OIDC scopes requested (defaults to `openid email profile groups`). |
 | `GOOGLE_CLIENT_ID` | No | Google OAuth 2.0 Client ID. |
 | `GOOGLE_CLIENT_SECRET` | No | Google OAuth 2.0 Client Secret. |
 | `GOOGLE_REDIRECT_URI` | No | OAuth callback URL (defaults to `<app_base>/login/google/callback`). |

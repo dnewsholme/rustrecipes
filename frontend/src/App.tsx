@@ -233,7 +233,7 @@ export const App: React.FC = () => {
 
   useEffect(() => {
     loadRecipes();
-  }, [searchQuery, filterTab]);
+  }, [searchQuery, filterTab, auth.user?.id]);
 
   // Timers countdown ticker
   useEffect(() => {
@@ -462,6 +462,7 @@ export const App: React.FC = () => {
       }
     }
 
+    if (filterTab === 'favorites' && !r.favorite) return false;
     if (selectedTags.has('has-video') && !r.has_video && !r.video_url) return false;
     if (selectedTags.has('has-combustion') && !r.has_combustion && !r.combustion_csv) return false;
     if (selectedTags.has('is-favorite') && !r.favorite) return false;
@@ -713,12 +714,14 @@ export const App: React.FC = () => {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                 <button
+                  id="filter-tab-all"
                   onClick={() => setFilterTab('all')}
                   className={`btn btn-sm ${filterTab === 'all' ? 'btn-primary' : 'btn-secondary'}`}
                 >
                   All Recipes
                 </button>
                 <button
+                  id="filter-tab-favorites"
                   onClick={() => setFilterTab('favorites')}
                   className={`btn btn-sm ${filterTab === 'favorites' ? 'btn-primary' : 'btn-secondary'}`}
                   style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}
@@ -934,8 +937,8 @@ export const App: React.FC = () => {
                     key={recipe.id}
                     recipe={recipe}
                     onSelect={(r) => navigateTo('recipe-detail', r.id)}
-                    onToggleFavorite={auth.user?.is_admin ? handleToggleFavorite : undefined}
-                    canFavorite={!!auth.user?.is_admin}
+                    onToggleFavorite={auth.user ? handleToggleFavorite : undefined}
+                    canFavorite={!!auth.user}
                     isSelected={selectedRecipeIds.has(recipe.id)}
                     onToggleSelect={handleToggleRecipeSelection}
                   />
@@ -965,6 +968,7 @@ export const App: React.FC = () => {
             onStartTimer={handleStartTimer}
             onAddToShoppingList={handleAddToShoppingList}
             onToggleMealPlan={handleToggleMealPlan}
+            onToggleFavorite={handleToggleFavorite}
             isPlanned={mealPlanIds.has(selectedRecipeId)}
           />
         )}

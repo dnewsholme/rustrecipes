@@ -14,8 +14,9 @@ test.describe('Logout', () => {
     await expect(page.locator('#profile-dropdown')).toBeVisible();
     await page.click('button[type="submit"]:has-text("Logout")');
 
-    // Should redirect to home page
+    // Should redirect to home page and show Login button once logout completes
     await page.waitForURL('/', { timeout: 5000 });
+    await expect(page.locator('#modern-login-btn')).toBeVisible();
 
     // Verify the session cookie is gone
     const cookies = await page.context().cookies();

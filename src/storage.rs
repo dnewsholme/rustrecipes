@@ -45,10 +45,15 @@ pub fn db_init(
             id TEXT PRIMARY KEY,
             email TEXT UNIQUE NOT NULL,
             password_hash TEXT NOT NULL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            is_admin INTEGER DEFAULT 0
         )",
         [],
     )?;
+    let _ = conn.execute(
+        "ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0",
+        [],
+    );
 
     // Create user_passkeys table
     conn.execute(
@@ -57,6 +62,20 @@ pub fn db_init(
             user_id TEXT NOT NULL,
             name TEXT NOT NULL,
             passkey_json TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        )",
+        [],
+    )?;
+
+    // Create oidc_sessions table for OIDC Back-Channel Logout tracking
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS oidc_sessions (
+            session_id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            sub TEXT,
+            sid TEXT,
+            revoked INTEGER DEFAULT 0,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
         )",
@@ -142,20 +161,37 @@ pub fn db_init(
         [],
     )?;
 
-    // Seed default admin user if no users exist
+    // Seed default admin user if no users exist and admin_email is provided
     let mut stmt = conn.prepare("SELECT COUNT(*) FROM users")?;
     let count: i64 = stmt.query_row([], |row| row.get(0))?;
 
     let admin_id = if count == 0 {
-        let id = uuid::Uuid::new_v4().to_string();
-        conn.execute(
-            "INSERT INTO users (id, email, password_hash) VALUES (?1, ?2, ?3)",
-            (&id, &admin_email, &admin_password_hash),
-        )?;
-        tracing::info!("Seeded default administrator: {} (ID: {})", admin_email, id);
-        id
+        if !admin_email.trim().is_empty() {
+            let id = uuid::Uuid::new_v4().to_string();
+            conn.execute(
+                "INSERT INTO users (id, email, password_hash, is_admin) VALUES (?1, ?2, ?3, 1)",
+                (&id, admin_email.trim(), &admin_password_hash),
+            )?;
+            tracing::info!(
+                "Seeded default administrator: {} (ID: {})",
+                admin_email.trim(),
+                id
+            );
+            id
+        } else {
+            tracing::info!(
+                "No users in database and ADMIN_EMAIL not set; skipping default admin seed (waiting for OIDC login)."
+            );
+            String::new()
+        }
     } else {
-        let mut stmt = conn.prepare("SELECT id FROM users LIMIT 1")?;
+        if !admin_email.trim().is_empty() {
+            let _ = conn.execute(
+                "UPDATE users SET is_admin = 1 WHERE LOWER(email) = LOWER(?1)",
+                [admin_email.trim()],
+            );
+        }
+        let mut stmt = conn.prepare("SELECT id FROM users ORDER BY is_admin DESC LIMIT 1")?;
         stmt.query_row([], |row| row.get::<_, String>(0))?
     };
 
@@ -225,6 +261,7 @@ pub fn db_init(
                     user_id TEXT NOT NULL,
                     recipe_id TEXT NOT NULL,
                     checked INTEGER DEFAULT 0,
+                    day_of_week TEXT,
                     PRIMARY KEY (user_id, recipe_id),
                     FOREIGN KEY(user_id) REFERENCES users(id)
                 )",
@@ -232,6 +269,7 @@ pub fn db_init(
             )?;
         }
     }
+    let _ = conn.execute("ALTER TABLE meal_plans ADD COLUMN day_of_week TEXT", []);
 
     // Create user_favorites table
     conn.execute(
@@ -348,7 +386,9 @@ pub fn db_init(
     let _ = conn.execute("DELETE FROM recipes WHERE id = ''", []);
 
     let dir = get_recipes_dir();
-    if let Ok(entries) = std::fs::read_dir(&dir) {
+    if !admin_id.is_empty()
+        && let Ok(entries) = std::fs::read_dir(&dir)
+    {
         let mut migrated_count = 0;
         for entry in entries.flatten() {
             let path = entry.path();
@@ -945,16 +985,19 @@ pub fn read_meal_plan(user_id: &str) -> Vec<crate::models::PlannedMeal> {
         Ok(c) => c,
         Err(_) => return Vec::new(),
     };
-    let mut stmt =
-        match conn.prepare("SELECT recipe_id, checked FROM meal_plans WHERE user_id = ?1") {
-            Ok(s) => s,
-            Err(_) => return Vec::new(),
-        };
+    let mut stmt = match conn
+        .prepare("SELECT recipe_id, checked, day_of_week FROM meal_plans WHERE user_id = ?1")
+    {
+        Ok(s) => s,
+        Err(_) => return Vec::new(),
+    };
     let meal_iter = stmt.query_map([user_id], |row| {
         let checked_int: i32 = row.get(1)?;
+        let day_of_week: Option<String> = row.get(2)?;
         Ok(crate::models::PlannedMeal {
             recipe_id: row.get(0)?,
             checked: checked_int != 0,
+            day_of_week,
         })
     });
     match meal_iter {
@@ -979,14 +1022,71 @@ pub fn save_meal_plan(
     for meal in meals {
         let checked_int = if meal.checked { 1 } else { 0 };
         tx.execute(
-            "INSERT INTO meal_plans (user_id, recipe_id, checked) VALUES (?1, ?2, ?3)",
-            (user_id, &meal.recipe_id, checked_int),
+            "INSERT INTO meal_plans (user_id, recipe_id, checked, day_of_week) VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params![user_id, &meal.recipe_id, checked_int, &meal.day_of_week],
         )
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
     }
 
     tx.commit()
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+}
+
+pub fn add_meal_plan_items(user_id: &str, recipe_ids: &[String]) -> Result<(), std::io::Error> {
+    let mut conn = rusqlite::Connection::open(get_db_path())
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    let _ = conn.busy_timeout(std::time::Duration::from_secs(5));
+    let tx = conn
+        .transaction()
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+    for id in recipe_ids {
+        tx.execute(
+            "INSERT OR IGNORE INTO meal_plans (user_id, recipe_id, checked, day_of_week) VALUES (?1, ?2, 0, NULL)",
+            rusqlite::params![user_id, id],
+        )
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    }
+
+    tx.commit()
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+}
+
+pub fn assign_meal_plan_day(
+    user_id: &str,
+    recipe_id: &str,
+    day_of_week: Option<&str>,
+) -> Result<usize, std::io::Error> {
+    let conn = rusqlite::Connection::open(get_db_path())
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    let _ = conn.busy_timeout(std::time::Duration::from_secs(5));
+    conn.execute(
+        "UPDATE meal_plans SET day_of_week = ?1 WHERE user_id = ?2 AND recipe_id = ?3",
+        rusqlite::params![day_of_week, user_id, recipe_id],
+    )
+    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+}
+
+pub fn toggle_meal_plan_item(user_id: &str, recipe_id: &str) -> Result<usize, std::io::Error> {
+    let conn = rusqlite::Connection::open(get_db_path())
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    let _ = conn.busy_timeout(std::time::Duration::from_secs(5));
+    conn.execute(
+        "UPDATE meal_plans SET checked = CASE WHEN checked = 0 THEN 1 ELSE 0 END WHERE user_id = ?1 AND recipe_id = ?2",
+        rusqlite::params![user_id, recipe_id],
+    )
+    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+}
+
+pub fn delete_meal_plan_item(user_id: &str, recipe_id: &str) -> Result<usize, std::io::Error> {
+    let conn = rusqlite::Connection::open(get_db_path())
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    let _ = conn.busy_timeout(std::time::Duration::from_secs(5));
+    conn.execute(
+        "DELETE FROM meal_plans WHERE user_id = ?1 AND recipe_id = ?2",
+        rusqlite::params![user_id, recipe_id],
+    )
+    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
 }
 
 pub fn save_shopping_list(
@@ -1043,17 +1143,28 @@ pub fn list_spices() -> Vec<String> {
     spices
 }
 
+fn env_matches_admin_email(email: &str) -> bool {
+    std::env::var("ADMIN_EMAIL")
+        .ok()
+        .map(|e| e.trim().to_string())
+        .filter(|e| !e.is_empty())
+        .is_some_and(|admin_email| email.eq_ignore_ascii_case(&admin_email))
+}
+
 pub fn find_user_by_email(email: &str) -> Option<crate::models::User> {
     let conn = rusqlite::Connection::open(get_db_path()).ok()?;
     let mut stmt = conn
         .prepare(
-            "SELECT id, email, password_hash, created_at FROM users WHERE LOWER(email) = LOWER(?1)",
+            "SELECT id, email, password_hash, created_at, COALESCE(is_admin, 0) FROM users WHERE LOWER(email) = LOWER(?1)",
         )
         .ok()?;
     stmt.query_row([email], |row| {
+        let email_val: String = row.get(1)?;
+        let db_admin: i32 = row.get(4)?;
         Ok(crate::models::User {
             id: row.get(0)?,
-            email: row.get(1)?,
+            is_admin: db_admin != 0 || env_matches_admin_email(&email_val),
+            email: email_val,
             password_hash: row.get(2)?,
             created_at: row.get(3)?,
         })
@@ -1065,12 +1176,15 @@ pub fn find_user_by_email(email: &str) -> Option<crate::models::User> {
 pub fn find_user_by_id(id: &str) -> Option<crate::models::User> {
     let conn = rusqlite::Connection::open(get_db_path()).ok()?;
     let mut stmt = conn
-        .prepare("SELECT id, email, password_hash, created_at FROM users WHERE id = ?1")
+        .prepare("SELECT id, email, password_hash, created_at, COALESCE(is_admin, 0) FROM users WHERE id = ?1")
         .ok()?;
     stmt.query_row([id], |row| {
+        let email_val: String = row.get(1)?;
+        let db_admin: i32 = row.get(4)?;
         Ok(crate::models::User {
             id: row.get(0)?,
-            email: row.get(1)?,
+            is_admin: db_admin != 0 || env_matches_admin_email(&email_val),
+            email: email_val,
             password_hash: row.get(2)?,
             created_at: row.get(3)?,
         })
@@ -1078,12 +1192,116 @@ pub fn find_user_by_id(id: &str) -> Option<crate::models::User> {
     .ok()
 }
 
+pub fn is_user_admin(user_id: &str) -> bool {
+    find_user_by_id(user_id).is_some_and(|u| u.is_admin)
+}
+
+pub fn create_oidc_session(user_id: &str, sub: Option<&str>, sid: Option<&str>) -> String {
+    let session_id = format!("oidc_sess_{}", uuid::Uuid::new_v4());
+    let conn = match rusqlite::Connection::open(get_db_path()) {
+        Ok(c) => c,
+        Err(_) => return user_id.to_string(),
+    };
+    let sub_clean = sub.map(str::trim).filter(|s| !s.is_empty());
+    let sid_clean = sid.map(str::trim).filter(|s| !s.is_empty());
+    if conn
+        .execute(
+            "INSERT INTO oidc_sessions (session_id, user_id, sub, sid, revoked) VALUES (?1, ?2, ?3, ?4, 0)",
+            rusqlite::params![&session_id, user_id, sub_clean, sid_clean],
+        )
+        .is_ok()
+    {
+        session_id
+    } else {
+        user_id.to_string()
+    }
+}
+
+pub fn resolve_session_user_id(session_token: &str) -> Option<String> {
+    let trimmed = session_token.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if trimmed.starts_with("oidc_sess_") {
+        let conn = rusqlite::Connection::open(get_db_path()).ok()?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT user_id, COALESCE(revoked, 0) FROM oidc_sessions WHERE session_id = ?1",
+            )
+            .ok()?;
+        let (user_id, revoked): (String, i32) = stmt
+            .query_row([trimmed], |row| Ok((row.get(0)?, row.get(1)?)))
+            .ok()?;
+        if revoked == 0 { Some(user_id) } else { None }
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+pub fn revoke_oidc_session_by_token(session_token: &str) {
+    if !session_token.starts_with("oidc_sess_") {
+        return;
+    }
+    if let Ok(conn) = rusqlite::Connection::open(get_db_path()) {
+        let _ = conn.execute(
+            "UPDATE oidc_sessions SET revoked = 1 WHERE session_id = ?1",
+            [session_token],
+        );
+    }
+}
+
+pub fn revoke_oidc_sessions(sub: Option<&str>, sid: Option<&str>) -> usize {
+    let sub_clean = sub.map(str::trim).filter(|s| !s.is_empty());
+    let sid_clean = sid.map(str::trim).filter(|s| !s.is_empty());
+    let conn = match rusqlite::Connection::open(get_db_path()) {
+        Ok(c) => c,
+        Err(_) => return 0,
+    };
+    match (sub_clean, sid_clean) {
+        (Some(sub_val), Some(sid_val)) => conn
+            .execute(
+                "UPDATE oidc_sessions SET revoked = 1 WHERE sid = ?1 OR (sub = ?2 AND (sid IS NULL OR sid = ''))",
+                rusqlite::params![sid_val, sub_val],
+            )
+            .unwrap_or(0),
+        (None, Some(sid_val)) => conn
+            .execute(
+                "UPDATE oidc_sessions SET revoked = 1 WHERE sid = ?1",
+                rusqlite::params![sid_val],
+            )
+            .unwrap_or(0),
+        (Some(sub_val), None) => conn
+            .execute(
+                "UPDATE oidc_sessions SET revoked = 1 WHERE sub = ?1 OR user_id = ?1",
+                rusqlite::params![sub_val],
+            )
+            .unwrap_or(0),
+        (None, None) => 0,
+    }
+}
+
 pub fn save_user(user: &crate::models::User) -> Result<(), std::io::Error> {
     let conn = rusqlite::Connection::open(get_db_path())
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    let is_admin_int = if user.is_admin || env_matches_admin_email(&user.email) {
+        1
+    } else {
+        0
+    };
     conn.execute(
-        "INSERT OR REPLACE INTO users (id, email, password_hash, created_at) VALUES (?1, ?2, ?3, COALESCE(NULLIF(?4, ''), datetime('now', 'localtime')))",
-        (&user.id, &user.email, &user.password_hash, &user.created_at),
+        "INSERT INTO users (id, email, password_hash, created_at, is_admin) \
+         VALUES (?1, ?2, ?3, COALESCE(NULLIF(?4, ''), datetime('now', 'localtime')), ?5) \
+         ON CONFLICT(id) DO UPDATE SET \
+             email = excluded.email, \
+             password_hash = excluded.password_hash, \
+             is_admin = excluded.is_admin",
+        (
+            &user.id,
+            &user.email,
+            &user.password_hash,
+            &user.created_at,
+            is_admin_int,
+        ),
     )
     .map(|_| ())
     .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
@@ -1095,15 +1313,18 @@ pub fn list_users() -> Vec<crate::models::User> {
         Err(_) => return Vec::new(),
     };
     let mut stmt = match conn
-        .prepare("SELECT id, email, password_hash, created_at FROM users ORDER BY email ASC")
+        .prepare("SELECT id, email, password_hash, created_at, COALESCE(is_admin, 0) FROM users ORDER BY email ASC")
     {
         Ok(s) => s,
         Err(_) => return Vec::new(),
     };
     let user_iter = stmt.query_map([], |row| {
+        let email_val: String = row.get(1)?;
+        let db_admin: i32 = row.get(4)?;
         Ok(crate::models::User {
             id: row.get(0)?,
-            email: row.get(1)?,
+            is_admin: db_admin != 0 || env_matches_admin_email(&email_val),
+            email: email_val,
             password_hash: row.get(2)?,
             created_at: row.get(3)?,
         })
@@ -1136,6 +1357,9 @@ pub fn delete_user(id: &str) -> Result<(), std::io::Error> {
     // Delete user's passkeys
     tx.execute("DELETE FROM user_passkeys WHERE user_id = ?1", [id])
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+    // Delete user's OIDC sessions
+    let _ = tx.execute("DELETE FROM oidc_sessions WHERE user_id = ?1", [id]);
 
     // Delete the user
     tx.execute("DELETE FROM users WHERE id = ?1", [id])

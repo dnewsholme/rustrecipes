@@ -43,10 +43,20 @@ struct OidcConfig {
     client_secret: String,
     redirect_uri: String,
     scopes: String,
+    admin_group: String,
     issuer_url: Option<String>,
     auth_url: Option<String>,
     token_url: Option<String>,
     userinfo_url: Option<String>,
+}
+
+fn resolve_oidc_admin_group() -> String {
+    std::env::var("OIDC_ADMIN_GROUP")
+        .or_else(|_| std::env::var("OIDC_ADMINS_GROUP"))
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "admins".to_string())
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -177,11 +187,8 @@ fn is_admin_session(jar: &PrivateCookieJar) -> bool {
         if val == "true" {
             return true;
         }
-        if !val.is_empty() {
-            let admin_email = std::env::var("ADMIN_EMAIL").expect("ADMIN_EMAIL must be set");
-            if let Some(user) = storage::find_user_by_email(&admin_email) {
-                return val == user.id;
-            }
+        if let Some(uid) = storage::resolve_session_user_id(val) {
+            return storage::is_user_admin(&uid);
         }
         false
     } else {
@@ -197,13 +204,19 @@ async fn get_session_user_id(jar: &PrivateCookieJar) -> Option<String> {
     if let Some(c) = jar.get("admin_session") {
         let val = c.value();
         if val == "true" {
-            let admin_email = std::env::var("ADMIN_EMAIL").expect("ADMIN_EMAIL must be set");
-            if let Some(user) = storage::find_user_by_email(&admin_email) {
-                return Some(user.id);
+            if let Ok(admin_email) = std::env::var("ADMIN_EMAIL") {
+                if !admin_email.trim().is_empty()
+                    && let Some(user) = storage::find_user_by_email(admin_email.trim())
+                {
+                    return Some(user.id);
+                }
+            }
+            if let Some(admin_user) = storage::list_users().into_iter().find(|u| u.is_admin) {
+                return Some(admin_user.id);
             }
         }
         if !val.is_empty() {
-            return Some(val.to_string());
+            return storage::resolve_session_user_id(val);
         }
     }
     None
@@ -493,10 +506,10 @@ async fn login_submit(
     jar: PrivateCookieJar,
     Form(form): Form<LoginFormData>,
 ) -> impl IntoResponse {
-    let admin_email = std::env::var("ADMIN_EMAIL").expect("ADMIN_EMAIL must be set");
+    let admin_email = std::env::var("ADMIN_EMAIL").unwrap_or_default();
     let email_lookup = match &form.email {
         Some(e) if !e.trim().is_empty() => {
-            if e.trim().to_lowercase() == "admin" {
+            if e.trim().to_lowercase() == "admin" && !admin_email.is_empty() {
                 admin_email
             } else {
                 e.trim().to_string()
@@ -534,7 +547,10 @@ async fn login_submit(
         .into_response()
 }
 
-async fn logout(State(state): State<AppState>) -> Response {
+async fn logout(State(state): State<AppState>, jar: PrivateCookieJar) -> Response {
+    if let Some(c) = jar.get("admin_session") {
+        storage::revoke_oidc_session_by_token(c.value());
+    }
     let cookie_path = if state.app_base.is_empty() {
         "/"
     } else {
@@ -625,6 +641,7 @@ async fn register_submit(
         email: form.email.trim().to_string(),
         password_hash,
         created_at: "".to_string(),
+        is_admin: false,
     };
 
     if let Err(e) = storage::save_user(&new_user) {
@@ -902,6 +919,7 @@ async fn login_google_callback(
                 email: user_info.email.trim().to_string(),
                 password_hash: "".to_string(),
                 created_at: "".to_string(),
+                is_admin: false,
             };
             let _ = storage::save_user(&new_user);
             new_user
@@ -1024,15 +1042,91 @@ struct OidcTokenResponse {
     id_token: Option<String>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Default, Clone)]
 struct OidcUserInfo {
-    #[allow(dead_code)]
     sub: Option<String>,
+    sid: Option<String>,
     email: Option<String>,
     email_verified: Option<bool>,
     preferred_username: Option<String>,
     #[allow(dead_code)]
     name: Option<String>,
+    #[serde(default)]
+    groups: Option<serde_json::Value>,
+    #[serde(default)]
+    roles: Option<serde_json::Value>,
+}
+
+impl OidcUserInfo {
+    fn extract_groups(&self) -> Vec<String> {
+        let mut out = Vec::new();
+        for claim in [&self.groups, &self.roles].into_iter().flatten() {
+            match claim {
+                serde_json::Value::Array(arr) => {
+                    for item in arr {
+                        if let Some(s) = item.as_str() {
+                            let trimmed = s.trim();
+                            if !trimmed.is_empty() {
+                                out.push(trimmed.to_string());
+                            }
+                        } else if let Some(obj) = item.as_object() {
+                            if let Some(name) = obj.get("name").and_then(|v| v.as_str()) {
+                                let trimmed = name.trim();
+                                if !trimmed.is_empty() {
+                                    out.push(trimmed.to_string());
+                                }
+                            } else if let Some(val) = obj.get("value").and_then(|v| v.as_str()) {
+                                let trimmed = val.trim();
+                                if !trimmed.is_empty() {
+                                    out.push(trimmed.to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+                serde_json::Value::String(s) => {
+                    for part in s.split([',', ' ']) {
+                        let trimmed = part.trim();
+                        if !trimmed.is_empty() {
+                            out.push(trimmed.to_string());
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        out
+    }
+}
+
+fn resolve_startup_admin_credentials(
+    admin_email_env: Option<String>,
+    admin_password_hash_env: Option<String>,
+    oidc_configured: bool,
+) -> Result<(String, String), String> {
+    if let Some(email) = admin_email_env
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+    {
+        let password_hash = match admin_password_hash_env.filter(|s| !s.trim().is_empty()) {
+            Some(hash) => hash,
+            None => {
+                warn!(
+                    "ADMIN_PASSWORD_HASH is not set. Creating a default temporary password 'admin'. Please set this in production!"
+                );
+                bcrypt::hash("admin", bcrypt::DEFAULT_COST).unwrap()
+            }
+        };
+        Ok((email, password_hash))
+    } else if oidc_configured {
+        info!(
+            "Starting without ADMIN_EMAIL/ADMIN_PASSWORD_HASH because OIDC is configured. Users in the configured OIDC admin group will be granted admin privileges."
+        );
+        Ok((String::new(), String::new()))
+    } else {
+        error!("ADMIN_EMAIL environment variable is not set and OIDC is not configured!");
+        Err("Missing required environment variable: ADMIN_EMAIL".to_string())
+    }
 }
 
 async fn login_oidc_callback(
@@ -1207,7 +1301,7 @@ async fn login_oidc_callback(
     };
 
     // Attempt to fetch userinfo from userinfo endpoint
-    let mut resolved_user_info: Option<OidcUserInfo> = None;
+    let mut endpoint_user_info: Option<OidcUserInfo> = None;
     if let Some(ref u_endpoint) = userinfo_endpoint {
         if let Ok(res) = client
             .get(u_endpoint)
@@ -1217,28 +1311,71 @@ async fn login_oidc_callback(
         {
             if res.status().is_success() {
                 if let Ok(info) = res.json::<OidcUserInfo>().await {
-                    resolved_user_info = Some(info);
+                    endpoint_user_info = Some(info);
                 }
             }
         }
     }
 
-    // Fallback: decode claims from id_token payload if userinfo didn't resolve
-    if resolved_user_info.is_none() {
-        if let Some(ref id_tok) = token_json.id_token {
-            let parts: Vec<&str> = id_tok.split('.').collect();
-            if parts.len() >= 2 {
-                if let Ok(decoded) = base64::Engine::decode(
-                    &base64::engine::general_purpose::URL_SAFE_NO_PAD,
-                    parts[1],
-                ) {
-                    if let Ok(info) = serde_json::from_slice::<OidcUserInfo>(&decoded) {
-                        resolved_user_info = Some(info);
-                    }
+    // Also decode claims from id_token payload (for fallback identity or group claims)
+    let mut id_token_user_info: Option<OidcUserInfo> = None;
+    if let Some(ref id_tok) = token_json.id_token {
+        let parts: Vec<&str> = id_tok.split('.').collect();
+        if parts.len() >= 2 {
+            if let Ok(decoded) =
+                base64::Engine::decode(&base64::engine::general_purpose::URL_SAFE_NO_PAD, parts[1])
+            {
+                if let Ok(info) = serde_json::from_slice::<OidcUserInfo>(&decoded) {
+                    id_token_user_info = Some(info);
                 }
             }
         }
     }
+
+    let mut all_groups = Vec::new();
+    if let Some(ref info) = endpoint_user_info {
+        all_groups.extend(info.extract_groups());
+    }
+    if let Some(ref info) = id_token_user_info {
+        for g in info.extract_groups() {
+            if !all_groups
+                .iter()
+                .any(|existing| existing.eq_ignore_ascii_case(&g))
+            {
+                all_groups.push(g);
+            }
+        }
+    }
+
+    let resolved_user_info = match (endpoint_user_info, id_token_user_info) {
+        (Some(mut ep), Some(idt)) => {
+            if ep.email.as_deref().unwrap_or("").trim().is_empty() {
+                ep.email = idt.email;
+            }
+            if ep.email_verified.is_none() {
+                ep.email_verified = idt.email_verified;
+            }
+            if ep
+                .preferred_username
+                .as_deref()
+                .unwrap_or("")
+                .trim()
+                .is_empty()
+            {
+                ep.preferred_username = idt.preferred_username;
+            }
+            if ep.sub.as_deref().unwrap_or("").trim().is_empty() {
+                ep.sub = idt.sub;
+            }
+            if ep.sid.as_deref().unwrap_or("").trim().is_empty() {
+                ep.sid = idt.sid;
+            }
+            Some(ep)
+        }
+        (Some(ep), None) => Some(ep),
+        (None, Some(idt)) => Some(idt),
+        (None, None) => None,
+    };
 
     let user_info = match resolved_user_info {
         Some(u) => u,
@@ -1297,8 +1434,26 @@ async fn login_oidc_callback(
             .into_response();
     }
 
+    let target_admin_group = config.admin_group.trim();
+    let is_oidc_group_admin = !target_admin_group.is_empty()
+        && all_groups
+            .iter()
+            .any(|g| g.eq_ignore_ascii_case(target_admin_group));
+    let is_env_email_admin = std::env::var("ADMIN_EMAIL")
+        .ok()
+        .map(|e| e.trim().to_string())
+        .filter(|e| !e.is_empty())
+        .is_some_and(|admin_email| email.eq_ignore_ascii_case(&admin_email));
+    let should_be_admin = is_oidc_group_admin || is_env_email_admin;
+
     let user = match storage::find_user_by_email(&email) {
-        Some(u) => u,
+        Some(mut u) => {
+            if u.is_admin != should_be_admin {
+                u.is_admin = should_be_admin;
+                let _ = storage::save_user(&u);
+            }
+            u
+        }
         None => {
             let user_id = uuid::Uuid::new_v4().to_string();
             let new_user = models::User {
@@ -1306,14 +1461,23 @@ async fn login_oidc_callback(
                 email: email.clone(),
                 password_hash: "".to_string(),
                 created_at: "".to_string(),
+                is_admin: should_be_admin,
             };
             let _ = storage::save_user(&new_user);
             new_user
         }
     };
 
-    info!("OIDC login successful for user: {}", user.email);
-    let cookie = Cookie::build(("admin_session", user.id))
+    info!(
+        "OIDC login successful for user: {} (is_admin: {}, groups: {:?})",
+        user.email, user.is_admin, all_groups
+    );
+    let session_token = storage::create_oidc_session(
+        &user.id,
+        user_info.sub.as_deref().or(Some(email.as_str())),
+        user_info.sid.as_deref(),
+    );
+    let cookie = Cookie::build(("admin_session", session_token))
         .path(cookie_path)
         .http_only(true)
         .secure(is_cookie_secure())
@@ -1322,6 +1486,196 @@ async fn login_oidc_callback(
         .build();
     let updated_jar = jar.add(cookie);
     (updated_jar, Redirect::to(&format!("{}/", state.app_base))).into_response()
+}
+
+#[derive(Deserialize, Debug)]
+struct OidcLogoutTokenClaims {
+    iss: Option<String>,
+    sub: Option<String>,
+    aud: Option<serde_json::Value>,
+    #[allow(dead_code)]
+    iat: Option<i64>,
+    exp: Option<i64>,
+    #[allow(dead_code)]
+    jti: Option<String>,
+    events: Option<serde_json::Value>,
+    sid: Option<String>,
+    nonce: Option<serde_json::Value>,
+}
+
+#[derive(Deserialize)]
+struct BackchannelLogoutForm {
+    logout_token: Option<String>,
+}
+
+fn backchannel_error_response(desc: &str) -> Response {
+    (
+        StatusCode::BAD_REQUEST,
+        [(axum::http::header::CACHE_CONTROL, "no-store")],
+        Json(serde_json::json!({
+            "error": "invalid_request",
+            "error_description": desc,
+        })),
+    )
+        .into_response()
+}
+
+pub(crate) async fn logout_oidc_backchannel(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    body: axum::body::Bytes,
+) -> Response {
+    let config = match &state.oidc {
+        Some(c) => c,
+        None => {
+            warn!("OIDC back-channel logout received but OIDC is not configured");
+            return backchannel_error_response("OIDC is not configured");
+        }
+    };
+
+    let content_type = headers
+        .get(axum::http::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_lowercase();
+
+    let logout_token = if content_type.contains("application/json") {
+        serde_json::from_slice::<BackchannelLogoutForm>(&body)
+            .ok()
+            .and_then(|f| f.logout_token)
+    } else {
+        url::form_urlencoded::parse(&body)
+            .find(|(k, _)| k == "logout_token")
+            .map(|(_, v)| v.to_string())
+            .or_else(|| {
+                serde_json::from_slice::<BackchannelLogoutForm>(&body)
+                    .ok()
+                    .and_then(|f| f.logout_token)
+            })
+    };
+
+    let Some(token) = logout_token
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty())
+    else {
+        warn!("OIDC back-channel logout missing logout_token parameter");
+        return backchannel_error_response("Missing logout_token parameter");
+    };
+
+    let parts: Vec<&str> = token.split('.').collect();
+    if parts.len() != 3 {
+        warn!("OIDC back-channel logout_token is not a valid JWT");
+        return backchannel_error_response("Malformed logout_token JWT");
+    }
+
+    let payload_bytes =
+        match base64::Engine::decode(&base64::engine::general_purpose::URL_SAFE_NO_PAD, parts[1])
+            .or_else(|_| {
+                base64::Engine::decode(&base64::engine::general_purpose::URL_SAFE, parts[1])
+            }) {
+            Ok(b) => b,
+            Err(_) => {
+                warn!("Failed to base64url-decode OIDC logout_token payload");
+                return backchannel_error_response("Invalid logout_token payload encoding");
+            }
+        };
+
+    let claims: OidcLogoutTokenClaims = match serde_json::from_slice(&payload_bytes) {
+        Ok(c) => c,
+        Err(e) => {
+            warn!("Failed to parse OIDC logout_token JSON claims: {:?}", e);
+            return backchannel_error_response("Invalid logout_token claims JSON");
+        }
+    };
+
+    // OIDC Back-Channel Logout 1.0 Section 2.6 validations:
+    // 1. Verify that the Logout Token doesn't contain a nonce Claim.
+    if claims.nonce.is_some() {
+        warn!("OIDC logout_token rejected: contains prohibited nonce claim");
+        return backchannel_error_response("logout_token must not contain a nonce claim");
+    }
+
+    // 2. Verify that the Logout Token contains an events Claim with member
+    //    "http://schemas.openid.net/event/backchannel-logout" whose value is a JSON object.
+    let valid_event = claims
+        .events
+        .as_ref()
+        .and_then(|ev| ev.as_object())
+        .and_then(|obj| obj.get("http://schemas.openid.net/event/backchannel-logout"))
+        .is_some_and(|val| val.is_object());
+    if !valid_event {
+        warn!("OIDC logout_token rejected: missing or invalid backchannel-logout event claim");
+        return backchannel_error_response(
+            "Missing or invalid http://schemas.openid.net/event/backchannel-logout event claim",
+        );
+    }
+
+    // 3. Verify that the Logout Token contains a sub Claim, a sid Claim, or both.
+    let has_sub = claims.sub.as_deref().is_some_and(|s| !s.trim().is_empty());
+    let has_sid = claims.sid.as_deref().is_some_and(|s| !s.trim().is_empty());
+    if !has_sub && !has_sid {
+        warn!("OIDC logout_token rejected: neither sub nor sid claim present");
+        return backchannel_error_response("logout_token must contain sub, sid, or both");
+    }
+
+    // 4. Verify aud matches client_id if aud is present.
+    if let Some(ref aud) = claims.aud {
+        let aud_matches = match aud {
+            serde_json::Value::String(s) => s == &config.client_id,
+            serde_json::Value::Array(arr) => arr
+                .iter()
+                .any(|v| v.as_str() == Some(config.client_id.as_str())),
+            _ => false,
+        };
+        if !aud_matches {
+            warn!(
+                "OIDC logout_token rejected: aud {:?} does not match client_id '{}'",
+                aud, config.client_id
+            );
+            return backchannel_error_response("logout_token audience mismatch");
+        }
+    }
+
+    // 5. Verify iss matches configured issuer_url if both are present.
+    if let (Some(expected_iss), Some(token_iss)) = (&config.issuer_url, &claims.iss) {
+        if !expected_iss.trim().is_empty()
+            && token_iss.trim_end_matches('/') != expected_iss.trim_end_matches('/')
+        {
+            warn!(
+                "OIDC logout_token rejected: iss '{}' does not match configured issuer '{}'",
+                token_iss, expected_iss
+            );
+            return backchannel_error_response("logout_token issuer mismatch");
+        }
+    }
+
+    // 6. Verify exp if present.
+    if let Some(exp) = claims.exp {
+        let now = time::OffsetDateTime::now_utc().unix_timestamp();
+        if exp <= now {
+            warn!(
+                "OIDC logout_token rejected: token expired (exp={}, now={})",
+                exp, now
+            );
+            return backchannel_error_response("logout_token has expired");
+        }
+    }
+
+    let revoked = storage::revoke_oidc_sessions(claims.sub.as_deref(), claims.sid.as_deref());
+    info!(
+        "OIDC back-channel logout processed for provider '{}' (sub: {:?}, sid: {:?}, revoked_sessions: {})",
+        config.provider_name, claims.sub, claims.sid, revoked
+    );
+
+    (
+        StatusCode::OK,
+        [(axum::http::header::CACHE_CONTROL, "no-store")],
+        Json(serde_json::json!({
+            "status": "ok",
+            "revoked_sessions": revoked,
+        })),
+    )
+        .into_response()
 }
 
 #[tokio::main]
@@ -1333,22 +1687,10 @@ async fn main() {
         )
         .init();
 
-    let admin_email = match std::env::var("ADMIN_EMAIL") {
-        Ok(email) => email,
-        Err(_) => {
-            error!("ADMIN_EMAIL environment variable is not set!");
-            panic!("Missing required environment variable: ADMIN_EMAIL");
-        }
-    };
     // Ensure data directories exist (important for volume mounts)
     let _ = std::fs::create_dir_all("data/recipes");
     let _ = std::fs::create_dir_all("data/uploads");
     let _ = std::fs::create_dir_all("frontend/dist");
-
-    let password_hash = std::env::var("ADMIN_PASSWORD_HASH").unwrap_or_else(|_| {
-        warn!("ADMIN_PASSWORD_HASH is not set. Creating a default temporary password 'admin'. Please set this in production!");
-        bcrypt::hash("admin", bcrypt::DEFAULT_COST).unwrap()
-    });
 
     // Generate a random key for signed cookies if not provided
     // In production, SESSION_SECRET should be set so sessions persist across restarts
@@ -1374,40 +1716,15 @@ async fn main() {
     let app_base: &'static str =
         Box::leak(app_base.trim_end_matches('/').to_string().into_boxed_str());
 
-    let google_oauth = if let (Ok(client_id), Ok(client_secret), Ok(admin_email)) = (
-        std::env::var("GOOGLE_CLIENT_ID"),
-        std::env::var("GOOGLE_CLIENT_SECRET"),
-        std::env::var("ADMIN_EMAIL"),
-    ) {
-        let redirect_uri = match std::env::var("GOOGLE_REDIRECT_URI") {
-            Ok(uri) => uri,
-            Err(_) => {
-                let base = if app_base.is_empty() {
-                    "http://localhost:3000"
-                } else {
-                    app_base
-                };
-                format!("{}/login/google/callback", base)
-            }
-        };
-
-        info!("Google OAuth enabled for admin email: {}", admin_email);
-        Some(GoogleOauthConfig {
-            client_id,
-            client_secret,
-            redirect_uri,
-            admin_email,
-        })
-    } else {
-        info!("Google OAuth is not configured. Falling back to standard password login.");
-        None
-    };
-
     let oidc = {
-        let client_id = std::env::var("OIDC_CLIENT_ID");
-        let client_secret = std::env::var("OIDC_CLIENT_SECRET");
+        let client_id = std::env::var("OIDC_CLIENT_ID")
+            .ok()
+            .filter(|s| !s.trim().is_empty());
+        let client_secret = std::env::var("OIDC_CLIENT_SECRET")
+            .ok()
+            .filter(|s| !s.trim().is_empty());
 
-        if let (Ok(client_id), Ok(client_secret)) = (client_id, client_secret) {
+        if let (Some(client_id), Some(client_secret)) = (client_id, client_secret) {
             let provider_name =
                 std::env::var("OIDC_PROVIDER_NAME").unwrap_or_else(|_| "OIDC".to_string());
 
@@ -1420,8 +1737,10 @@ async fn main() {
                 format!("{}/login/oidc/callback", base)
             });
 
-            let scopes =
-                std::env::var("OIDC_SCOPES").unwrap_or_else(|_| "openid email profile".to_string());
+            let scopes = std::env::var("OIDC_SCOPES")
+                .unwrap_or_else(|_| "openid email profile groups".to_string());
+
+            let admin_group = resolve_oidc_admin_group();
 
             let issuer_url = std::env::var("OIDC_ISSUER_URL").ok();
 
@@ -1435,6 +1754,7 @@ async fn main() {
                 client_secret,
                 redirect_uri,
                 scopes,
+                admin_group,
                 issuer_url,
                 auth_url,
                 token_url,
@@ -1444,8 +1764,8 @@ async fn main() {
             match config.resolve_endpoints().await {
                 Ok((a, t, u)) => {
                     info!(
-                        "OIDC provider '{}' configured with endpoints (auth: {}, token: {})",
-                        config.provider_name, a, t
+                        "OIDC provider '{}' configured with endpoints (auth: {}, token: {}, admin_group: '{}')",
+                        config.provider_name, a, t, config.admin_group
                     );
                     config.auth_url = Some(a);
                     config.token_url = Some(t);
@@ -1465,6 +1785,43 @@ async fn main() {
         } else {
             None
         }
+    };
+
+    let (admin_email, password_hash) = match resolve_startup_admin_credentials(
+        std::env::var("ADMIN_EMAIL").ok(),
+        std::env::var("ADMIN_PASSWORD_HASH").ok(),
+        oidc.is_some(),
+    ) {
+        Ok(creds) => creds,
+        Err(msg) => panic!("{}", msg),
+    };
+
+    let google_oauth = if let (Ok(client_id), Ok(client_secret)) = (
+        std::env::var("GOOGLE_CLIENT_ID"),
+        std::env::var("GOOGLE_CLIENT_SECRET"),
+    ) {
+        let redirect_uri = match std::env::var("GOOGLE_REDIRECT_URI") {
+            Ok(uri) => uri,
+            Err(_) => {
+                let base = if app_base.is_empty() {
+                    "http://localhost:3000"
+                } else {
+                    app_base
+                };
+                format!("{}/login/google/callback", base)
+            }
+        };
+
+        info!("Google OAuth enabled");
+        Some(GoogleOauthConfig {
+            client_id,
+            client_secret,
+            redirect_uri,
+            admin_email: admin_email.clone(),
+        })
+    } else {
+        info!("Google OAuth is not configured. Falling back to standard password login.");
+        None
     };
 
     let rp_id = std::env::var("WEBAUTHN_RP_ID").unwrap_or_else(|_| "localhost".to_string());
@@ -1554,6 +1911,12 @@ async fn main() {
         .route("/login/google/callback", get(login_google_callback))
         .route("/login/oidc", get(login_oidc))
         .route("/login/oidc/callback", get(login_oidc_callback))
+        .route("/logout/oidc/backchannel", post(logout_oidc_backchannel))
+        .route("/oidc/backchannel-logout", post(logout_oidc_backchannel))
+        .route(
+            "/login/oidc/backchannel-logout",
+            post(logout_oidc_backchannel),
+        )
         .route("/register", get(register_form).post(register_submit))
         .route("/logout", get(logout).post(logout))
         .route("/export", get(export_data_page))
@@ -1691,6 +2054,15 @@ async fn add_security_headers(req: Request, next: Next) -> Response {
 }
 
 async fn csrf_header_check(req: Request, next: Next) -> Result<Response, StatusCode> {
+    let path = req.uri().path();
+    if path.ends_with("/logout/oidc/backchannel")
+        || path.ends_with("/oidc/backchannel-logout")
+        || path.ends_with("/login/oidc/backchannel-logout")
+        || path.ends_with("/auth/oidc/backchannel-logout")
+    {
+        return Ok(next.run(req).await);
+    }
+
     if req.method() == axum::http::Method::POST
         || req.method() == axum::http::Method::PUT
         || req.method() == axum::http::Method::DELETE
@@ -1819,6 +2191,12 @@ mod oauth_tests {
             .route("/login/google/callback", get(login_google_callback))
             .route("/login/oidc", get(login_oidc))
             .route("/login/oidc/callback", get(login_oidc_callback))
+            .route("/logout/oidc/backchannel", post(logout_oidc_backchannel))
+            .route("/oidc/backchannel-logout", post(logout_oidc_backchannel))
+            .route(
+                "/login/oidc/backchannel-logout",
+                post(logout_oidc_backchannel),
+            )
             .route("/register", get(register_form).post(register_submit))
             .route("/logout", get(logout).post(logout))
             .route("/export", get(export_data_page))
@@ -1964,6 +2342,7 @@ mod oauth_tests {
             client_secret: "oidc-secret".to_string(),
             redirect_uri: "http://localhost:3000/login/oidc/callback".to_string(),
             scopes: "openid email profile".to_string(),
+            admin_group: "admins".to_string(),
             issuer_url: None,
             auth_url: Some("https://id.example.com/authorize".to_string()),
             token_url: Some("https://id.example.com/api/oidc/token".to_string()),
@@ -2001,6 +2380,7 @@ mod oauth_tests {
             client_secret: "oidc-secret".to_string(),
             redirect_uri: "http://localhost:3000/login/oidc/callback".to_string(),
             scopes: "openid email profile".to_string(),
+            admin_group: "admins".to_string(),
             issuer_url: None,
             auth_url: Some("https://id.example.com/authorize".to_string()),
             token_url: Some("https://id.example.com/api/oidc/token".to_string()),
@@ -2031,6 +2411,7 @@ mod oauth_tests {
             client_secret: "secret-abc".to_string(),
             redirect_uri: "http://localhost:3000/login/oidc/callback".to_string(),
             scopes: "openid email profile".to_string(),
+            admin_group: "admins".to_string(),
             issuer_url: None,
             auth_url: Some("https://id.example.com/authorize".to_string()),
             token_url: Some("https://id.example.com/api/oidc/token".to_string()),
@@ -2083,6 +2464,7 @@ mod oauth_tests {
             client_secret: "test-secret".to_string(),
             redirect_uri: "http://localhost:3000/login/oidc/callback".to_string(),
             scopes: "openid email profile".to_string(),
+            admin_group: "admins".to_string(),
             issuer_url: None,
             auth_url: Some("https://id.example.com/authorize".to_string()),
             token_url: Some("https://id.example.com/api/oidc/token".to_string()),
@@ -2115,6 +2497,7 @@ mod oauth_tests {
             client_secret: "sec".to_string(),
             redirect_uri: "uri".to_string(),
             scopes: "openid".to_string(),
+            admin_group: "admins".to_string(),
             issuer_url: None,
             auth_url: Some("https://id.example.com/auth".to_string()),
             token_url: Some("https://id.example.com/token".to_string()),
@@ -2128,6 +2511,141 @@ mod oauth_tests {
             userinfo,
             Some("https://id.example.com/userinfo".to_string())
         );
+    }
+
+    #[test]
+    fn test_startup_with_oidc_without_admin_env_vars() {
+        // When OIDC is configured, ADMIN_EMAIL and ADMIN_PASSWORD_HASH are optional
+        let res = resolve_startup_admin_credentials(None, None, true);
+        assert!(res.is_ok());
+        let (email, hash) = res.unwrap();
+        assert_eq!(email, "");
+        assert_eq!(hash, "");
+
+        // When OIDC is NOT configured and ADMIN_EMAIL is missing, startup fails
+        let err_res = resolve_startup_admin_credentials(None, None, false);
+        assert!(err_res.is_err());
+
+        // Also verify db_init succeeds with empty admin_email and password_hash
+        let _ = std::fs::create_dir_all("data");
+        assert!(storage::db_init("", "").is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_oidc_callback_grants_admin_to_custom_group_member() {
+        // Start a mock OIDC server for /token and /userinfo
+        let mock_oidc = Router::new()
+            .route(
+                "/token",
+                post(|| async {
+                    Json(serde_json::json!({
+                        "access_token": "mock-access-token",
+                        "token_type": "Bearer"
+                    }))
+                }),
+            )
+            .route(
+                "/userinfo",
+                get(|| async {
+                    Json(serde_json::json!({
+                        "sub": "oidc-user-1",
+                        "email": "chef-admin@example.com",
+                        "email_verified": true,
+                        "groups": ["recipe-masters", "users"]
+                    }))
+                }),
+            );
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(listener, mock_oidc).await.unwrap();
+        });
+
+        let oidc_config = OidcConfig {
+            provider_name: "Pocket ID".to_string(),
+            client_id: "oidc-client".to_string(),
+            client_secret: "oidc-secret".to_string(),
+            redirect_uri: "http://localhost:3000/login/oidc/callback".to_string(),
+            scopes: "openid email profile groups".to_string(),
+            admin_group: "recipe-masters".to_string(),
+            issuer_url: None,
+            auth_url: Some(format!("http://{}/authorize", addr)),
+            token_url: Some(format!("http://{}/token", addr)),
+            userinfo_url: Some(format!("http://{}/userinfo", addr)),
+        };
+
+        let app = build_test_app(None, Some(oidc_config)).await;
+
+        // 1. Initiate OIDC login to obtain signed oidc_state & oidc_verifier cookies
+        let req_init = Request::builder()
+            .method("GET")
+            .uri("/login/oidc")
+            .body(Body::empty())
+            .unwrap();
+        let res_init = app.clone().oneshot(req_init).await.unwrap();
+        assert_eq!(res_init.status(), StatusCode::SEE_OTHER);
+
+        let location = res_init
+            .headers()
+            .get("location")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
+        let parsed_url = reqwest::Url::parse(&location).unwrap();
+        let state_param = parsed_url
+            .query_pairs()
+            .find(|(k, _)| k == "state")
+            .map(|(_, v)| v.to_string())
+            .unwrap();
+
+        let cookies: Vec<String> = res_init
+            .headers()
+            .get_all("set-cookie")
+            .iter()
+            .map(|v| v.to_str().unwrap().split(';').next().unwrap().to_string())
+            .collect();
+        let cookie_header = cookies.join("; ");
+
+        // 2. Call /login/oidc/callback with the matching state and cookies
+        let req_cb = Request::builder()
+            .method("GET")
+            .uri(format!(
+                "/login/oidc/callback?code=valid-code&state={}",
+                state_param
+            ))
+            .header("cookie", &cookie_header)
+            .body(Body::empty())
+            .unwrap();
+        let res_cb = app.clone().oneshot(req_cb).await.unwrap();
+        assert_eq!(res_cb.status(), StatusCode::SEE_OTHER);
+
+        let session_cookie = res_cb
+            .headers()
+            .get_all("set-cookie")
+            .iter()
+            .filter_map(|v| v.to_str().ok())
+            .find(|s| s.starts_with("admin_session=") && !s.starts_with("admin_session=;"))
+            .unwrap()
+            .split(';')
+            .next()
+            .unwrap()
+            .to_string();
+
+        // 3. Verify /api/v1/auth/me reports is_admin = true for the OIDC group member
+        let req_me = Request::builder()
+            .method("GET")
+            .uri("/api/v1/auth/me")
+            .header("cookie", &session_cookie)
+            .body(Body::empty())
+            .unwrap();
+        let res_me = app.oneshot(req_me).await.unwrap();
+        assert_eq!(res_me.status(), StatusCode::OK);
+        let body = res_me.into_body().collect().await.unwrap().to_bytes();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["user"]["email"], "chef-admin@example.com");
+        assert_eq!(json["user"]["is_admin"], true);
     }
 
     #[tokio::test]
@@ -2218,5 +2736,236 @@ mod oauth_tests {
         let html = String::from_utf8(body.to_vec()).unwrap();
         assert!(html.contains("<base href=\"/recipes/\" />"));
         assert!(html.contains("window.__APP_BASE__ = \"/recipes\""));
+    }
+
+    fn build_mock_jwt(claims: &serde_json::Value) -> String {
+        let header = base64::Engine::encode(
+            &base64::engine::general_purpose::URL_SAFE_NO_PAD,
+            r#"{"alg":"RS256","typ":"logout+jwt"}"#.as_bytes(),
+        );
+        let payload = base64::Engine::encode(
+            &base64::engine::general_purpose::URL_SAFE_NO_PAD,
+            serde_json::to_vec(claims).unwrap(),
+        );
+        format!("{}.{}.mock-signature", header, payload)
+    }
+
+    #[tokio::test]
+    async fn test_oidc_backchannel_logout_revokes_active_session() {
+        let id_token = build_mock_jwt(&serde_json::json!({
+            "sub": "oidc-user-bc-1",
+            "sid": "oidc-session-42",
+            "email": "bc-user@example.com",
+            "email_verified": true,
+            "groups": ["users"]
+        }));
+
+        let id_token_clone = id_token.clone();
+        let mock_oidc = Router::new()
+            .route(
+                "/token",
+                post(move || {
+                    let tok = id_token_clone.clone();
+                    async move {
+                        Json(serde_json::json!({
+                            "access_token": "mock-access-token",
+                            "token_type": "Bearer",
+                            "id_token": tok
+                        }))
+                    }
+                }),
+            )
+            .route(
+                "/userinfo",
+                get(|| async {
+                    Json(serde_json::json!({
+                        "sub": "oidc-user-bc-1",
+                        "email": "bc-user@example.com",
+                        "email_verified": true
+                    }))
+                }),
+            );
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(listener, mock_oidc).await.unwrap();
+        });
+
+        let oidc_config = OidcConfig {
+            provider_name: "Pocket ID".to_string(),
+            client_id: "oidc-client".to_string(),
+            client_secret: "oidc-secret".to_string(),
+            redirect_uri: "http://localhost:3000/login/oidc/callback".to_string(),
+            scopes: "openid email profile".to_string(),
+            admin_group: "admins".to_string(),
+            issuer_url: Some("https://id.example.com".to_string()),
+            auth_url: Some(format!("http://{}/authorize", addr)),
+            token_url: Some(format!("http://{}/token", addr)),
+            userinfo_url: Some(format!("http://{}/userinfo", addr)),
+        };
+
+        let app = build_test_app(None, Some(oidc_config)).await;
+
+        // 1. Complete OIDC login
+        let res_init = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/login/oidc")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let location = res_init
+            .headers()
+            .get("location")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
+        let parsed_url = reqwest::Url::parse(&location).unwrap();
+        let state_param = parsed_url
+            .query_pairs()
+            .find(|(k, _)| k == "state")
+            .map(|(_, v)| v.to_string())
+            .unwrap();
+        let cookie_header = res_init
+            .headers()
+            .get_all("set-cookie")
+            .iter()
+            .map(|v| v.to_str().unwrap().split(';').next().unwrap().to_string())
+            .collect::<Vec<_>>()
+            .join("; ");
+
+        let res_cb = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(format!(
+                        "/login/oidc/callback?code=valid-code&state={}",
+                        state_param
+                    ))
+                    .header("cookie", &cookie_header)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res_cb.status(), StatusCode::SEE_OTHER);
+
+        let session_cookie = res_cb
+            .headers()
+            .get_all("set-cookie")
+            .iter()
+            .filter_map(|v| v.to_str().ok())
+            .find(|s| s.starts_with("admin_session=") && !s.starts_with("admin_session=;"))
+            .unwrap()
+            .split(';')
+            .next()
+            .unwrap()
+            .to_string();
+
+        // 2. Verify session is authenticated before back-channel logout
+        let res_me_before = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/v1/auth/me")
+                    .header("cookie", &session_cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let me_before_bytes = res_me_before
+            .into_body()
+            .collect()
+            .await
+            .unwrap()
+            .to_bytes();
+        let me_before_json: serde_json::Value = serde_json::from_slice(&me_before_bytes).unwrap();
+        assert_eq!(me_before_json["user"]["email"], "bc-user@example.com");
+
+        // 3. Reject a logout_token that contains a prohibited `nonce` claim
+        let bad_logout_token = build_mock_jwt(&serde_json::json!({
+            "iss": "https://id.example.com",
+            "sub": "oidc-user-bc-1",
+            "aud": "oidc-client",
+            "iat": 1700000000,
+            "jti": "logout-bad-1",
+            "nonce": "prohibited-nonce",
+            "events": {
+                "http://schemas.openid.net/event/backchannel-logout": {}
+            }
+        }));
+        let res_bad_bc = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/logout/oidc/backchannel")
+                    .header("content-type", "application/x-www-form-urlencoded")
+                    .body(Body::from(format!("logout_token={}", bad_logout_token)))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res_bad_bc.status(), StatusCode::BAD_REQUEST);
+
+        // 4. Send valid OIDC back-channel logout token
+        let valid_logout_token = build_mock_jwt(&serde_json::json!({
+            "iss": "https://id.example.com",
+            "sub": "oidc-user-bc-1",
+            "sid": "oidc-session-42",
+            "aud": "oidc-client",
+            "iat": 1700000000,
+            "jti": "logout-ok-1",
+            "events": {
+                "http://schemas.openid.net/event/backchannel-logout": {}
+            }
+        }));
+        let res_bc = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/logout/oidc/backchannel")
+                    .header("content-type", "application/x-www-form-urlencoded")
+                    .body(Body::from(format!("logout_token={}", valid_logout_token)))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res_bc.status(), StatusCode::OK);
+        assert_eq!(
+            res_bc
+                .headers()
+                .get("cache-control")
+                .unwrap()
+                .to_str()
+                .unwrap(),
+            "no-store"
+        );
+
+        // 5. Verify the user's browser session is now invalidated
+        let res_me_after = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/v1/auth/me")
+                    .header("cookie", &session_cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let me_after_bytes = res_me_after.into_body().collect().await.unwrap().to_bytes();
+        let me_after_json: serde_json::Value = serde_json::from_slice(&me_after_bytes).unwrap();
+        assert!(me_after_json["user"].is_null());
     }
 }

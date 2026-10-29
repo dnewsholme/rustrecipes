@@ -184,8 +184,8 @@ pub async fn passkeys_login_start(
     State(state): State<AppState>,
     Json(req): Json<LoginStartRequest>,
 ) -> impl IntoResponse {
-    let admin_email = std::env::var("ADMIN_EMAIL").expect("ADMIN_EMAIL must be set");
-    let email_lookup = if req.email.trim().to_lowercase() == "admin" {
+    let admin_email = std::env::var("ADMIN_EMAIL").unwrap_or_default();
+    let email_lookup = if req.email.trim().to_lowercase() == "admin" && !admin_email.is_empty() {
         admin_email
     } else {
         req.email.trim().to_string()
@@ -265,8 +265,8 @@ pub async fn passkeys_login_finish(
     jar: PrivateCookieJar,
     Json(req): Json<LoginFinishRequest>,
 ) -> impl IntoResponse {
-    let admin_email = std::env::var("ADMIN_EMAIL").expect("ADMIN_EMAIL must be set");
-    let email_lookup = if req.email.trim().to_lowercase() == "admin" {
+    let admin_email = std::env::var("ADMIN_EMAIL").unwrap_or_default();
+    let email_lookup = if req.email.trim().to_lowercase() == "admin" && !admin_email.is_empty() {
         admin_email
     } else {
         req.email.trim().to_string()

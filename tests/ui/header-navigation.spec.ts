@@ -44,12 +44,19 @@ test.describe('Header Navigation, Settings & Account Menus (Desktop)', () => {
     await expect(page.locator('#api-guide-link')).toBeVisible();
     await expect(page.locator('#profile-dropdown')).not.toContainText('Cooking Temperatures');
 
-    // Log in and verify Passkeys is only under Account Management
+    // Log in and verify Passkeys, Export Data, and User Management are under Account Management
     await login(page);
     await expect(page.locator('#modern-manage-passkeys-btn')).toHaveCount(0);
     await page.click('#profile-dropdown-btn');
     await expect(page.locator('#manage-passkeys-btn')).toBeVisible();
+    await expect(page.locator('#modern-export-data-btn')).toBeVisible();
+    await expect(page.locator('#manage-users-menu-btn')).toBeVisible();
     await expect(page.locator('#api-guide-link')).toBeVisible();
+
+    // Verify User Management page opens for admin
+    await page.click('#manage-users-menu-btn');
+    await expect(page).toHaveURL(/\/admin\/users/);
+    await expect(page.locator('h1:has-text("User Management")')).toBeVisible();
   });
 
   test('Cooking Temperatures opens as a separate page with protein selector and doneness temps', async ({ page }) => {

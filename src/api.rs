@@ -72,10 +72,18 @@ pub fn router(_state: AppState) -> Router<AppState> {
         )
         .route("/meal-plan/{id}", delete(delete_meal_plan_item))
         .route("/meal-plan/toggle", post(toggle_meal_plan))
+        .route(
+            "/meal-plan/assign",
+            post(assign_meal_plan_day).put(assign_meal_plan_day),
+        )
         .route("/openapi.json", get(crate::openapi::openapi_json))
         .route("/auth/me", get(get_current_user_api))
         .route("/auth/login", post(api_login))
         .route("/auth/logout", post(api_logout))
+        .route(
+            "/auth/oidc/backchannel-logout",
+            post(crate::logout_oidc_backchannel),
+        )
         .route("/user/export", get(export_user_data_api))
         .route("/admin/users", get(admin_list_users))
         .route("/admin/users/{id}", delete(admin_delete_user))
@@ -190,8 +198,18 @@ fn can_view(user: Option<&CurrentUser>, recipe: &Recipe) -> bool {
 }
 
 fn admin_user_id() -> Option<String> {
-    let email = std::env::var("ADMIN_EMAIL").ok()?;
-    storage::find_user_by_email(&email).map(|u| u.id)
+    if let Ok(email) = std::env::var("ADMIN_EMAIL") {
+        let trimmed = email.trim();
+        if !trimmed.is_empty()
+            && let Some(u) = storage::find_user_by_email(trimmed)
+        {
+            return Some(u.id);
+        }
+    }
+    storage::list_users()
+        .into_iter()
+        .find(|u| u.is_admin)
+        .map(|u| u.id)
 }
 
 /// Constant-time token comparison. Both values are hashed first so neither
@@ -256,9 +274,22 @@ impl FromRequestParts<AppState> for MaybeUser {
                 None => return Ok(MaybeUser(None)),
             }
         } else {
-            raw
+            let resolved = blocking({
+                let tok = raw.clone();
+                move || storage::resolve_session_user_id(&tok)
+            })
+            .await?;
+            match resolved {
+                Some(uid) => uid,
+                None => return Ok(MaybeUser(None)),
+            }
         };
-        let is_admin = admin_id.as_deref() == Some(id.as_str());
+        let is_admin = admin_id.as_deref() == Some(id.as_str())
+            || blocking({
+                let uid = id.clone();
+                move || storage::is_user_admin(&uid)
+            })
+            .await?;
         Ok(MaybeUser(Some(CurrentUser { id, is_admin })))
     }
 }
@@ -348,6 +379,8 @@ struct ListRecipesQuery {
     q: Option<String>,
     /// Case-insensitive exact tag match.
     tag: Option<String>,
+    /// Filter by favorite status.
+    favorite: Option<bool>,
     limit: Option<usize>,
     offset: Option<usize>,
 }
@@ -388,6 +421,7 @@ async fn list_recipes(
             tag.as_ref()
                 .is_none_or(|t| r.tags.iter().any(|rt| rt.trim().to_lowercase() == *t))
         })
+        .filter(|r| query.favorite.is_none_or(|fav| r.favorite == fav))
         .collect();
     let total = filtered.len();
 
@@ -1187,6 +1221,8 @@ struct PlannedMealItem {
     #[serde(skip_serializing_if = "Option::is_none")]
     image: Option<String>,
     has_recipe: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    day_of_week: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -1197,6 +1233,40 @@ struct AddMealPlanRequest {
 #[derive(Deserialize)]
 struct ToggleMealRequest {
     recipe_id: String,
+}
+
+#[derive(Deserialize)]
+struct AssignMealDayRequest {
+    recipe_id: String,
+    day_of_week: Option<String>,
+}
+
+const VALID_DAYS_OF_WEEK: [&str; 7] = [
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+];
+
+fn normalize_day_of_week(day: Option<&str>) -> ApiResult<Option<String>> {
+    let Some(raw) = day else {
+        return Ok(None);
+    };
+    let trimmed = raw.trim();
+    if trimmed.is_empty() || trimmed.eq_ignore_ascii_case("unassigned") {
+        return Ok(None);
+    }
+    for valid in VALID_DAYS_OF_WEEK {
+        if trimmed.eq_ignore_ascii_case(valid) {
+            return Ok(Some(valid.to_string()));
+        }
+    }
+    Err(bad_request(format!(
+        "Invalid day_of_week '{trimmed}'. Expected Monday-Sunday or Unassigned."
+    )))
 }
 
 async fn get_meal_plan(user: CurrentUser) -> ApiResult<impl IntoResponse> {
@@ -1228,6 +1298,7 @@ async fn get_meal_plan(user: CurrentUser) -> ApiResult<impl IntoResponse> {
                     checked: meal.checked,
                     image,
                     has_recipe,
+                    day_of_week: meal.day_of_week,
                 }
             })
             .collect::<Vec<_>>()
@@ -1267,18 +1338,32 @@ async fn add_to_meal_plan(
         user.id, payload.recipe_ids
     );
 
-    let uid = user.id.clone();
-    let mut meals = blocking(move || storage::read_meal_plan(&uid)).await?;
-    for id in payload.recipe_ids {
-        if !meals.iter().any(|m| m.recipe_id == id) {
-            meals.push(crate::models::PlannedMeal {
-                recipe_id: id,
-                checked: false,
-            });
-        }
-    }
+    let uid = user.id;
+    let ids = payload.recipe_ids;
+    blocking(move || storage::add_meal_plan_items(&uid, &ids))
+        .await?
+        .map_err(|e| ApiError::Internal(format!("failed to add to meal plan: {e:?}")))?;
+    Ok(StatusCode::NO_CONTENT)
+}
 
-    save_meals(user.id, meals).await?;
+async fn assign_meal_plan_day(
+    user: CurrentUser,
+    Json(payload): Json<AssignMealDayRequest>,
+) -> ApiResult<StatusCode> {
+    let normalized_day = normalize_day_of_week(payload.day_of_week.as_deref())?;
+    info!(
+        "API assign_meal_plan_day: user='{}', recipe_id='{}', day={:?}",
+        user.id, payload.recipe_id, normalized_day
+    );
+    let uid = user.id;
+    let rid = payload.recipe_id;
+    let updated =
+        blocking(move || storage::assign_meal_plan_day(&uid, &rid, normalized_day.as_deref()))
+            .await?
+            .map_err(|e| ApiError::Internal(format!("failed to assign meal plan day: {e:?}")))?;
+    if updated == 0 {
+        return Err(ApiError::NotFound);
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -1290,15 +1375,14 @@ async fn toggle_meal_plan(
         "API toggle_meal_plan: user='{}', recipe_id='{}'",
         user.id, payload.recipe_id
     );
-    let uid = user.id.clone();
-    let mut meals = blocking(move || storage::read_meal_plan(&uid)).await?;
-    let meal = meals
-        .iter_mut()
-        .find(|m| m.recipe_id == payload.recipe_id)
-        .ok_or(ApiError::NotFound)?;
-    meal.checked = !meal.checked;
-
-    save_meals(user.id, meals).await?;
+    let uid = user.id;
+    let rid = payload.recipe_id;
+    let updated = blocking(move || storage::toggle_meal_plan_item(&uid, &rid))
+        .await?
+        .map_err(|e| ApiError::Internal(format!("failed to toggle meal plan: {e:?}")))?;
+    if updated == 0 {
+        return Err(ApiError::NotFound);
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -1315,16 +1399,13 @@ async fn delete_meal_plan_item(
         "API delete_meal_plan_item: user='{}', recipe_id='{}'",
         user.id, recipe_id
     );
-    let uid = user.id.clone();
-    let mut meals = blocking(move || storage::read_meal_plan(&uid)).await?;
-    let original_len = meals.len();
-    meals.retain(|m| m.recipe_id != recipe_id);
-
-    if meals.len() == original_len {
+    let uid = user.id;
+    let deleted = blocking(move || storage::delete_meal_plan_item(&uid, &recipe_id))
+        .await?
+        .map_err(|e| ApiError::Internal(format!("failed to delete meal plan item: {e:?}")))?;
+    if deleted == 0 {
         return Err(ApiError::NotFound);
     }
-
-    save_meals(user.id, meals).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -1340,7 +1421,8 @@ pub async fn api_login(
     Json(payload): Json<LoginPayload>,
 ) -> ApiResult<(PrivateCookieJar, Json<serde_json::Value>)> {
     let admin_email = std::env::var("ADMIN_EMAIL").unwrap_or_default();
-    let email_lookup = if payload.email.trim().to_lowercase() == "admin" {
+    let email_lookup = if payload.email.trim().to_lowercase() == "admin" && !admin_email.is_empty()
+    {
         admin_email
     } else {
         payload.email.trim().to_string()
@@ -1367,7 +1449,7 @@ pub async fn api_login(
         .build();
     let updated_jar = jar.add(cookie);
 
-    let is_admin = admin_user_id().as_deref() == Some(&user.id);
+    let is_admin = user.is_admin || admin_user_id().as_deref() == Some(&user.id);
 
     Ok((
         updated_jar,
@@ -1387,6 +1469,9 @@ pub async fn api_logout(
     jar: PrivateCookieJar,
 ) -> (PrivateCookieJar, Json<serde_json::Value>) {
     info!("API logout called");
+    if let Some(c) = jar.get("admin_session") {
+        storage::revoke_oidc_session_by_token(c.value());
+    }
     let cookie_path = if state.app_base.is_empty() {
         "/"
     } else {
@@ -1470,7 +1555,7 @@ pub async fn admin_list_users(user: CurrentUser) -> ApiResult<Json<Vec<AdminUser
     for u in users {
         let uid = u.id.clone();
         let passkey_count = blocking(move || storage::find_passkeys_by_user_id(&uid).len()).await?;
-        let is_admin = admin_id.as_deref() == Some(&u.id);
+        let is_admin = u.is_admin || admin_id.as_deref() == Some(&u.id);
         dtos.push(AdminUserDto {
             id: u.id,
             email: u.email,
@@ -1590,6 +1675,7 @@ mod tests {
             email: email.to_string(),
             password_hash: "hash".to_string(),
             created_at: "".to_string(),
+            is_admin: false,
         })
         .unwrap();
     }
@@ -2217,6 +2303,7 @@ mod tests {
             email: "authtest@example.com".to_string(),
             password_hash: hash,
             created_at: "".to_string(),
+            is_admin: false,
         })
         .unwrap();
 
@@ -2366,6 +2453,7 @@ mod tests {
             email: "testuser@example.com".to_string(),
             password_hash: "hashedpass".to_string(),
             created_at: String::new(),
+            is_admin: false,
         })
         .unwrap();
 

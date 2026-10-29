@@ -100,4 +100,38 @@ test.describe('Advanced Filtering', () => {
     const hiddenTags = page.locator('.tag-filter-btn[style*="display: none"]');
     expect(await hiddenTags.count()).toBeGreaterThan(0);
   });
+
+  test('Favorites filter only shows favorited recipes', async ({ page }) => {
+    await expect(page.locator('.recipe-card:visible').first()).toBeVisible();
+    const allCount = await page.locator('.recipe-card:visible').count();
+    expect(allCount).toBeGreaterThanOrEqual(2);
+
+    // Ensure the first recipe card is favorited
+    const firstCard = page.locator('.recipe-card:visible').first();
+    const firstCardTitle = await firstCard.locator('h3').innerText();
+    const favBtn = firstCard.locator('button[title*="favorites"]');
+    const favBtnTitle = await favBtn.getAttribute('title');
+    if (favBtnTitle === 'Add to favorites') {
+      await favBtn.click();
+      await expect(firstCard).toHaveAttribute('data-tags', /is-favorite/);
+    }
+
+    // Click Favorites tab filter
+    await page.click('#filter-tab-favorites');
+    await expect(page.locator('.recipe-card:visible')).not.toHaveCount(allCount);
+    const favCards = page.locator('.recipe-card:visible');
+    const favCount = await favCards.count();
+    expect(favCount).toBeGreaterThanOrEqual(1);
+    expect(favCount).toBeLessThan(allCount);
+
+    for (let i = 0; i < favCount; i++) {
+      const tags = (await favCards.nth(i).getAttribute('data-tags')) || '';
+      expect(tags).toContain('is-favorite');
+    }
+    await expect(page.locator('.recipe-card:visible h3', { hasText: firstCardTitle })).toBeVisible();
+
+    // Switch back to All Recipes
+    await page.click('#filter-tab-all');
+    await expect(page.locator('.recipe-card:visible')).toHaveCount(allCount);
+  });
 });

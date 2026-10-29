@@ -63,7 +63,7 @@ test.describe('Cook Mode', () => {
     await page.fill('#ingredients', '## Marinade\n2 tbsp soy sauce\n## Dough\n500g flour\n350g water');
     await page.fill(
       '#markdown',
-      '## Marinade\n1. Whisk soy sauce and spices.\n2. Coat protein for 30 minutes.\n## Dough\n1. Mix flour and water.\n2. Knead for 10 minutes.'
+      '## Marinade\n1. Whisk **soy sauce** and spices.\n2. Coat protein for 30 minutes.\n## Dough\n1. Mix flour and water.\n2. Knead for 10 minutes.'
     );
     await page.click('#save-recipe-btn');
     await page.waitForURL(/\/recipe\//, { timeout: 10000 });
@@ -72,6 +72,8 @@ test.describe('Cook Mode', () => {
     await expect(sectionHeaders).toHaveCount(2);
     await expect(sectionHeaders.nth(0)).toHaveText('Marinade');
     await expect(sectionHeaders.nth(1)).toHaveText('Dough');
+
+    await expect(page.locator('#recipe-instructions strong', { hasText: 'soy sauce' })).toBeVisible();
 
     const stepNumbers = page.locator('#recipe-instructions .direction-step-number');
     await expect(stepNumbers).toHaveCount(4);

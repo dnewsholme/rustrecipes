@@ -103,6 +103,7 @@ export interface MealPlanItem {
   checked: boolean;
   image?: string | null;
   has_recipe?: boolean;
+  day_of_week?: string | null;
 }
 
 export interface CookingTemp {

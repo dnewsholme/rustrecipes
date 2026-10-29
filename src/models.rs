@@ -74,6 +74,8 @@ pub struct User {
     pub email: String,
     pub password_hash: String,
     pub created_at: String,
+    #[serde(default)]
+    pub is_admin: bool,
 }
 
 #[allow(dead_code)]
@@ -206,6 +208,8 @@ pub struct PaprikaRecipe {
 pub struct PlannedMeal {
     pub recipe_id: String,
     pub checked: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub day_of_week: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]

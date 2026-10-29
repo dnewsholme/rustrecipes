@@ -302,6 +302,13 @@ export const api = {
     });
   },
 
+  async assignMealPlanDay(recipeId: string, dayOfWeek: string | null): Promise<void> {
+    await request('/meal-plan/assign', {
+      method: 'POST',
+      body: JSON.stringify({ recipe_id: recipeId, day_of_week: dayOfWeek }),
+    });
+  },
+
   async removeFromMealPlan(recipeId: string): Promise<void> {
     await request(`/meal-plan/${encodeURIComponent(recipeId)}`, {
       method: 'DELETE',

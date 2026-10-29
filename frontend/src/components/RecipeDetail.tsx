@@ -28,6 +28,7 @@ interface RecipeDetailProps {
   onStartTimer: (label: string, minutes: number) => void;
   onAddToShoppingList: (recipe: Recipe) => void;
   onToggleMealPlan: (id: string) => void;
+  onToggleFavorite?: (id: string) => void;
   isPlanned?: boolean;
 }
 
@@ -40,6 +41,7 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({
   onStartTimer,
   onAddToShoppingList,
   onToggleMealPlan,
+  onToggleFavorite,
   isPlanned = false,
 }) => {
   const [recipe, setRecipe] = useState<Recipe | null>(null);
@@ -166,7 +168,11 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({
   const handleToggleFavorite = async () => {
     if (!recipe) return;
     try {
-      await api.toggleFavorite(recipe.id);
+      if (onToggleFavorite) {
+        onToggleFavorite(recipe.id);
+      } else {
+        await api.toggleFavorite(recipe.id);
+      }
       setRecipe({ ...recipe, favorite: !recipe.favorite });
     } catch (err) {
       console.error('Failed to toggle favorite', err);
@@ -420,7 +426,7 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({
           </button>
 
           {/* Favorite */}
-          {auth.user?.is_admin && (
+          {auth.user && (
             <button
               onClick={handleToggleFavorite}
               className="btn btn-secondary btn-sm"

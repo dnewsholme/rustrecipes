@@ -7,6 +7,9 @@ test.describe('Meal Planner', () => {
     page.on('pageerror', err => console.error('PAGE ERROR:', err.message));
 
     await login(page);
+    await page.request.delete('/api/v1/meal-plan', {
+      headers: { Origin: 'http://localhost:3000' },
+    });
     await createRecipeFromFixture(page, 'tests/fixtures/test-recipe.md');
     await page.goto('/');
     
@@ -219,7 +222,7 @@ test.describe('Meal Planner', () => {
     const suggestionsDiv = page.locator('#manual-meal-suggestions');
     await expect(suggestionsDiv).toBeVisible();
     
-    const suggestionItem = suggestionsDiv.locator('div', { hasText: recipeTitle });
+    const suggestionItem = suggestionsDiv.locator('div', { hasText: recipeTitle }).first();
     await expect(suggestionItem).toBeVisible();
 
     // 5. Click the suggestion item
@@ -286,7 +289,7 @@ test.describe('Meal Planner', () => {
 
     const suggestionsDiv = page.locator('#manual-meal-suggestions');
     await expect(suggestionsDiv).toBeVisible();
-    const suggestionItem = suggestionsDiv.locator('div', { hasText: recipeTitle });
+    const suggestionItem = suggestionsDiv.locator('div', { hasText: recipeTitle }).first();
     await expect(suggestionItem).toBeVisible();
     await suggestionItem.click();
     await expect(suggestionsDiv).not.toBeVisible();
@@ -304,5 +307,48 @@ test.describe('Meal Planner', () => {
     const manualCard = mealPlanCards.filter({ hasText: 'Taco Tuesday' });
     await expect(linkedCard.locator('button:has-text("View Recipe")')).toBeVisible();
     await expect(manualCard.locator('button:has-text("View Recipe")')).toHaveCount(0);
+  });
+
+  test('should place added meals in Unassigned and allow drag-and-drop onto days of the week', async ({ page }) => {
+    await page.goto('/meal-plan');
+
+    const manualInput = page.locator('#manual-meal-input');
+    await manualInput.fill('Pizza Night');
+    await manualInput.press('Enter');
+    await manualInput.fill('Roast Chicken');
+    await manualInput.press('Enter');
+
+    const unassignedZone = page.locator('#meal-day-unassigned');
+    const mondayZone = page.locator('#meal-day-monday');
+    const fridayZone = page.locator('#meal-day-friday');
+
+    // Both added meals should start in Unassigned
+    await expect(unassignedZone.locator('.meal-plan-card')).toHaveCount(2);
+    await expect(mondayZone.locator('.meal-plan-card')).toHaveCount(0);
+    await expect(fridayZone.locator('.meal-plan-card')).toHaveCount(0);
+
+    // Drag "Pizza Night" onto Friday and "Roast Chicken" onto Monday
+    const pizzaCard = unassignedZone.locator('.meal-plan-card', { hasText: 'Pizza Night' });
+    await pizzaCard.dragTo(fridayZone);
+
+    await expect(fridayZone.locator('.meal-plan-card', { hasText: 'Pizza Night' })).toBeVisible();
+    await expect(unassignedZone.locator('.meal-plan-card')).toHaveCount(1);
+
+    const chickenCard = unassignedZone.locator('.meal-plan-card', { hasText: 'Roast Chicken' });
+    await chickenCard.dragTo(mondayZone);
+
+    await expect(mondayZone.locator('.meal-plan-card', { hasText: 'Roast Chicken' })).toBeVisible();
+    await expect(unassignedZone.locator('.meal-plan-card')).toHaveCount(0);
+
+    // Reload to verify server-side persistence of day assignments
+    await page.reload();
+    await expect(fridayZone.locator('.meal-plan-card', { hasText: 'Pizza Night' })).toBeVisible();
+    await expect(mondayZone.locator('.meal-plan-card', { hasText: 'Roast Chicken' })).toBeVisible();
+    await expect(unassignedZone.locator('.meal-plan-card')).toHaveCount(0);
+
+    // Drag "Pizza Night" back to Unassigned
+    await fridayZone.locator('.meal-plan-card', { hasText: 'Pizza Night' }).dragTo(unassignedZone);
+    await expect(unassignedZone.locator('.meal-plan-card', { hasText: 'Pizza Night' })).toBeVisible();
+    await expect(fridayZone.locator('.meal-plan-card')).toHaveCount(0);
   });
 });
