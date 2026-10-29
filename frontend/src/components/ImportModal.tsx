@@ -21,7 +21,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({ onClose, onImportSucce
     setError(null);
     try {
       const recipe = await api.importRecipeUrl(url.trim());
-      onImportSuccess(recipe);
+      onImportSuccess({ ...recipe, id: '' });
       onClose();
     } catch (err: any) {
       setError(err.message || 'Recipe scraping failed');

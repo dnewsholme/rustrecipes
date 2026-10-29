@@ -639,7 +639,7 @@ export const App: React.FC = () => {
                       </li>
                     ) : (
                       plannedMeals.map((item) => {
-                        const isManual = item.recipe_id.startsWith('manual:');
+                        const isManual = item.has_recipe === false || item.recipe_id.startsWith('manual:');
                         return (
                           <li
                             key={item.recipe_id}
@@ -965,7 +965,10 @@ export const App: React.FC = () => {
         {activeView === 'recipe-edit' && (
           <RecipeEditor
             initialRecipe={editingRecipe}
-            onSave={(saved) => navigateTo('recipe-detail', saved.id)}
+            onSave={(saved) => {
+              loadRecipes();
+              navigateTo('recipe-detail', saved.id);
+            }}
             onCancel={() => {
               if (window.history.length > 1) {
                 window.history.back();
@@ -1123,7 +1126,8 @@ export const App: React.FC = () => {
           onClose={() => setImportModalOpen(false)}
           onImportSuccess={(recipe) => {
             setEditingRecipe(recipe);
-            navigateTo('recipe-edit', recipe.id);
+            loadRecipes();
+            navigateTo('recipe-edit', recipe.id || undefined);
           }}
         />
       )}

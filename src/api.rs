@@ -738,9 +738,10 @@ async fn import_recipe(
     check_len("url", &req.url, MAX_URL_LEN)?;
 
     match crate::importer::import_recipe_from_url(&req.url).await {
-        Ok(recipe) => {
+        Ok(mut recipe) => {
             // Don't save it automatically, just return the parsed recipe
             // so the client can edit and then POST it.
+            recipe.id.clear();
             Ok(Json(recipe))
         }
         Err(e) => Err(bad_request(format!("Failed to import: {}", e))),
@@ -1081,6 +1082,9 @@ struct PlannedMealItem {
     recipe_id: String,
     title: String,
     checked: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    image: Option<String>,
+    has_recipe: bool,
 }
 
 #[derive(Deserialize)]
@@ -1100,20 +1104,28 @@ async fn get_meal_plan(user: CurrentUser) -> ApiResult<impl IntoResponse> {
         storage::read_meal_plan(&viewer.id)
             .into_iter()
             .map(|meal| {
-                let title = if meal.recipe_id.starts_with("manual:") {
-                    meal.recipe_id.trim_start_matches("manual:").to_string()
+                let (title, image, has_recipe) = if meal.recipe_id.starts_with("manual:") {
+                    (
+                        meal.recipe_id.trim_start_matches("manual:").to_string(),
+                        None,
+                        false,
+                    )
                 } else {
                     match storage::read_recipe(&meal.recipe_id) {
                         // Only reveal titles of recipes the user is allowed to see.
-                        Some(recipe) if can_view(Some(&viewer), &recipe) => recipe.title,
-                        Some(_) => "Unavailable recipe".to_string(),
-                        None => meal.recipe_id.clone(),
+                        Some(recipe) if can_view(Some(&viewer), &recipe) => {
+                            (recipe.title, recipe.image, true)
+                        }
+                        Some(_) => ("Unavailable recipe".to_string(), None, false),
+                        None => (meal.recipe_id.clone(), None, false),
                     }
                 };
                 PlannedMealItem {
                     recipe_id: meal.recipe_id,
                     title,
                     checked: meal.checked,
+                    image,
+                    has_recipe,
                 }
             })
             .collect::<Vec<_>>()

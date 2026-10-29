@@ -338,10 +338,11 @@ export const api = {
 
   // Import
   async importRecipeUrl(url: string): Promise<Recipe> {
-    return request<Recipe>('/import', {
+    const recipe = await request<Recipe>('/import', {
       method: 'POST',
       body: JSON.stringify({ url }),
     });
+    return { ...recipe, id: '' };
   },
 
   async uploadFile(file: File): Promise<string> {

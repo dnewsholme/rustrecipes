@@ -238,4 +238,35 @@ test.describe('Meal Planner', () => {
     const recipeLink = plannedItems.first().locator('a.meal-recipe-link');
     await expect(recipeLink).toBeVisible();
   });
+
+  test('should only show View Recipe button on /meal-plan page for items linked to a recipe', async ({ page }) => {
+    const checkboxes = page.locator('.recipe-select-checkbox');
+    await checkboxes.first().waitFor();
+    const recipeCard = page.locator('.recipe-card').first();
+    const recipeTitle = await recipeCard.locator('h3').innerText();
+    await checkboxes.first().check();
+    await page.locator('button:has-text("Add to Planned Meals")').click();
+
+    const content = page.locator('#meal-planner-content');
+    const toggleBtn = page.locator('#toggle-meal-planner-collapse');
+    if (await content.isHidden()) {
+      await toggleBtn.click();
+    }
+
+    const manualInput = page.locator('#manual-meal-input');
+    await manualInput.fill('Burger Night');
+    await manualInput.press('Enter');
+
+    const plannedItems = page.locator('#meal-planner-list li.meal-planner-item');
+    await expect(plannedItems).toHaveCount(2);
+
+    await page.goto('/meal-plan');
+    const mealPlanCards = page.locator('main .card');
+    await expect(mealPlanCards).toHaveCount(2);
+
+    const linkedCard = mealPlanCards.filter({ hasText: recipeTitle });
+    const manualCard = mealPlanCards.filter({ hasText: 'Burger Night' });
+    await expect(linkedCard.locator('button:has-text("View Recipe")')).toBeVisible();
+    await expect(manualCard.locator('button:has-text("View Recipe")')).toHaveCount(0);
+  });
 });

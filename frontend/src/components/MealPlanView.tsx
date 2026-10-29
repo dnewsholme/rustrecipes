@@ -130,75 +130,82 @@ export const MealPlanView: React.FC<MealPlanViewProps> = ({
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-          {meals.map((meal) => (
-            <div
-              key={meal.recipe_id}
-              className="card"
-              style={{
-                padding: '1rem 1.25rem',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: '1rem',
-                background: meal.checked ? 'var(--bg-input)' : 'var(--bg-card)',
-                transition: 'var(--transition)',
-              }}
-            >
+          {meals.map((meal) => {
+            const hasRecipe = meal.has_recipe !== undefined
+              ? meal.has_recipe
+              : !meal.recipe_id.startsWith('manual:');
+            return (
               <div
-                onClick={() => handleToggle(meal.recipe_id)}
-                style={{ display: 'flex', alignItems: 'center', gap: '1rem', cursor: 'pointer', flex: 1 }}
+                key={meal.recipe_id}
+                className="card"
+                style={{
+                  padding: '1rem 1.25rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '1rem',
+                  background: meal.checked ? 'var(--bg-input)' : 'var(--bg-card)',
+                  transition: 'var(--transition)',
+                }}
               >
-                {meal.checked ? (
-                  <CheckCircle2 size={22} color="var(--success)" />
-                ) : (
-                  <Circle size={22} color="var(--text-muted)" />
-                )}
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  {meal.image && !failedImages[meal.recipe_id] ? (
-                    <img
-                      src={resolveMediaUrl(meal.image)}
-                      alt=""
-                      onError={() => setFailedImages((prev) => ({ ...prev, [meal.recipe_id]: true }))}
-                      style={{ width: 44, height: 44, borderRadius: 'var(--radius-sm)', objectFit: 'cover' }}
-                    />
+                <div
+                  onClick={() => handleToggle(meal.recipe_id)}
+                  style={{ display: 'flex', alignItems: 'center', gap: '1rem', cursor: 'pointer', flex: 1 }}
+                >
+                  {meal.checked ? (
+                    <CheckCircle2 size={22} color="var(--success)" />
                   ) : (
-                    <div style={{ width: 44, height: 44, borderRadius: 'var(--radius-sm)', background: 'var(--bg-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <Utensils size={18} color="var(--text-muted)" />
-                    </div>
+                    <Circle size={22} color="var(--text-muted)" />
                   )}
 
-                  <span style={{
-                    fontSize: '1.05rem',
-                    fontWeight: 600,
-                    color: meal.checked ? 'var(--text-muted)' : 'var(--text-primary)',
-                    textDecoration: meal.checked ? 'line-through' : 'none',
-                  }}>
-                    {meal.title || meal.recipe_id}
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    {meal.image && !failedImages[meal.recipe_id] ? (
+                      <img
+                        src={resolveMediaUrl(meal.image)}
+                        alt=""
+                        onError={() => setFailedImages((prev) => ({ ...prev, [meal.recipe_id]: true }))}
+                        style={{ width: 44, height: 44, borderRadius: 'var(--radius-sm)', objectFit: 'cover' }}
+                      />
+                    ) : (
+                      <div style={{ width: 44, height: 44, borderRadius: 'var(--radius-sm)', background: 'var(--bg-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Utensils size={18} color="var(--text-muted)" />
+                      </div>
+                    )}
+
+                    <span style={{
+                      fontSize: '1.05rem',
+                      fontWeight: 600,
+                      color: meal.checked ? 'var(--text-muted)' : 'var(--text-primary)',
+                      textDecoration: meal.checked ? 'line-through' : 'none',
+                    }}>
+                      {meal.title || meal.recipe_id.replace('manual:', '')}
+                    </span>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  {hasRecipe && (
+                    <button
+                      onClick={() => onSelectRecipe(meal.recipe_id)}
+                      className="btn btn-secondary btn-sm"
+                      style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}
+                    >
+                      <span>View Recipe</span>
+                      <ArrowRight size={14} />
+                    </button>
+                  )}
+                  <button
+                    onClick={() => handleRemove(meal.recipe_id)}
+                    className="btn btn-ghost btn-sm"
+                    style={{ color: 'var(--text-muted)' }}
+                    title="Remove from meal plan"
+                  >
+                    <Trash2 size={16} />
+                  </button>
                 </div>
               </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <button
-                  onClick={() => onSelectRecipe(meal.recipe_id)}
-                  className="btn btn-secondary btn-sm"
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}
-                >
-                  <span>View Recipe</span>
-                  <ArrowRight size={14} />
-                </button>
-                <button
-                  onClick={() => handleRemove(meal.recipe_id)}
-                  className="btn btn-ghost btn-sm"
-                  style={{ color: 'var(--text-muted)' }}
-                  title="Remove from meal plan"
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

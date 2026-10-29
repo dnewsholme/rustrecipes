@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Upload, Save, ArrowLeft, Wand2, Bold, Italic, Heading, Link, ListOrdered } from 'lucide-react';
 import type { Recipe, RecipeInput } from '../types';
 import { api } from '../api';
@@ -16,6 +16,7 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
   onCancel,
   onOpenImport,
 }) => {
+  const isEditing = Boolean(initialRecipe?.id);
   const [title, setTitle] = useState(initialRecipe?.title || '');
   const [description, setDescription] = useState(initialRecipe?.description || '');
   const [servings, setServings] = useState<number | ''>(initialRecipe?.servings || '');
@@ -32,6 +33,22 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
     initialRecipe?.ingredients?.join('\n') || ''
   );
   const [markdown, setMarkdown] = useState(initialRecipe?.markdown || '');
+
+  useEffect(() => {
+    setTitle(initialRecipe?.title || '');
+    setDescription(initialRecipe?.description || '');
+    setServings(initialRecipe?.servings || '');
+    setPrepTime(initialRecipe?.prep_time || '');
+    setCookTime(initialRecipe?.cook_time || '');
+    setTags(initialRecipe?.tags?.join(', ') || '');
+    setSourceUrl(initialRecipe?.source_url || '');
+    setVideoUrl(initialRecipe?.video_url || '');
+    setImageUrl(initialRecipe?.image || '');
+    setCombustionUrl(initialRecipe?.combustion_csv || '');
+    setIsPublic(initialRecipe?.is_public ?? true);
+    setIngredientsText(initialRecipe?.ingredients?.join('\n') || '');
+    setMarkdown(initialRecipe?.markdown || '');
+  }, [initialRecipe]);
 
   const [saving, setSaving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -154,7 +171,7 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
     };
 
     try {
-      if (initialRecipe) {
+      if (isEditing && initialRecipe?.id) {
         const updated = await api.updateRecipe(initialRecipe.id, input);
         onSave(updated);
       } else {
@@ -178,7 +195,7 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
         </button>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          {!initialRecipe && (
+          {!isEditing && (
             <button
               type="button"
               onClick={onOpenImport}
@@ -205,7 +222,7 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
 
       <div className="card" style={{ padding: '2rem' }}>
         <h2 style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '1.5rem', color: 'var(--text-primary)' }}>
-          {initialRecipe ? 'Edit Recipe' : 'New Recipe'}
+          {isEditing ? 'Edit Recipe' : 'New Recipe'}
         </h2>
 
         {error && (

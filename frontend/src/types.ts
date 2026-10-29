@@ -101,6 +101,7 @@ export interface MealPlanItem {
   title?: string;
   checked: boolean;
   image?: string | null;
+  has_recipe?: boolean;
 }
 
 export interface CookingTemp {
