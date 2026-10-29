@@ -430,7 +430,12 @@ body {
   }
 
   .main-content {
-    padding: 0.75rem 0.5rem !important;
+    padding: 0.75rem 0.5rem 5.5rem 0.5rem !important;
+  }
+
+  .shopping-list-bar,
+  #shopping-list-bar {
+    bottom: 74px !important;
   }
 
   .recipe-grid {
@@ -456,4 +461,73 @@ body {
   .tab-content {
     display: block !important;
   }
+}
+
+/* Mobile App-Style Bottom Navigation Bar */
+.mobile-bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: calc(62px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.35);
+  z-index: 950;
+  align-items: center;
+  justify-content: space-around;
+  padding-left: 0.25rem;
+  padding-right: 0.25rem;
+}
+
+.mobile-nav-item {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.35rem 0.6rem;
+  border-radius: var(--radius-md);
+  transition: var(--transition);
+  min-width: 56px;
+}
+
+.mobile-nav-item.active {
+  color: var(--accent);
+}
+
+.mobile-nav-fab {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px var(--accent-glow);
+}
+
+.mobile-nav-badge {
+  position: absolute;
+  top: -5px;
+  right: -8px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }

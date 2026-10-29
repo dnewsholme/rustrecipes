@@ -5,6 +5,7 @@ import { RecipeDetail } from './components/RecipeDetail';
 import { RecipeEditor } from './components/RecipeEditor';
 import { ShoppingListView } from './components/ShoppingListView';
 import { MealPlanView } from './components/MealPlanView';
+import { CookingTempsView } from './components/CookingTempsView';
 import { LoginModal } from './components/LoginModal';
 import { PasskeysModal } from './components/PasskeysModal';
 import { ImportModal } from './components/ImportModal';
@@ -149,6 +150,9 @@ export const App: React.FC = () => {
       } else if (path === '/meal-plan' || path === '/meal-plan/') {
         setSelectedRecipeId(null);
         setActiveView('meal-plan');
+      } else if (path === '/temps' || path === '/temps/' || path === '/cooking-temps' || path === '/cooking-temps/') {
+        setSelectedRecipeId(null);
+        setActiveView('temps');
       } else if (path === '/admin/users' || path === '/admin/users/') {
         setSelectedRecipeId(null);
         setActiveView('admin_users');
@@ -194,6 +198,9 @@ export const App: React.FC = () => {
     } else if (view === 'meal-plan') {
       setSelectedRecipeId(null);
       targetPath = `${base}/meal-plan`;
+    } else if (view === 'temps') {
+      setSelectedRecipeId(null);
+      targetPath = `${base}/temps`;
     } else if (view === 'admin_users') {
       setSelectedRecipeId(null);
       targetPath = `${base}/admin/users`;
@@ -1003,6 +1010,19 @@ export const App: React.FC = () => {
             onCountChange={setMealPlanCount}
             onMealsChange={loadPlannedMeals}
             onNavigateToShopping={() => navigateTo('shopping-list')}
+          />
+        )}
+
+        {/* COOKING TEMPERATURES VIEW */}
+        {activeView === 'temps' && (
+          <CookingTempsView
+            onBack={() => {
+              if (window.history.length > 1) {
+                window.history.back();
+              } else {
+                navigateTo('recipes');
+              }
+            }}
           />
         )}
 

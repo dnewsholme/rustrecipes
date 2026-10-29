@@ -50,9 +50,10 @@ test.describe('Modern SPA UI End-to-End Suite', () => {
     await page.goto('/app');
     await page.waitForLoadState('load');
 
-    // 4. Open Passkeys Management modal
-    await expect(page.locator('#modern-manage-passkeys-btn')).toBeVisible();
-    await page.click('#modern-manage-passkeys-btn');
+    // 4. Open Passkeys Management modal via Account Management menu
+    await page.click('#profile-dropdown-btn');
+    await expect(page.locator('#manage-passkeys-btn')).toBeVisible();
+    await page.click('#manage-passkeys-btn');
     await expect(page.locator('#modern-passkeys-list')).toBeVisible();
     await expect(page.locator('#modern-passkeys-list')).not.toContainText('Loading passkeys...');
 
@@ -74,7 +75,8 @@ test.describe('Modern SPA UI End-to-End Suite', () => {
     // Title should be rustrecipes
     await expect(page).toHaveTitle('rustrecipes');
 
-    // Wakelock button should exist in header
+    // Wakelock button should exist inside Settings menu
+    await page.click('#settings-dropdown-btn');
     const wakeLockBtn = page.locator('#wakelock-btn');
     await expect(wakeLockBtn).toBeVisible();
 

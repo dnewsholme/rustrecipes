@@ -954,7 +954,7 @@ async fn get_cooking_temps() -> impl IntoResponse {
     info!("API get_cooking_temps");
     let temps = vec![
         CookingTempGroup {
-            category: "Beef, Lamb, Veal, Pork".to_string(),
+            category: "Beef".to_string(),
             items: vec![
                 CookingTemp {
                     label: "Rare".to_string(),
@@ -962,13 +962,118 @@ async fn get_cooking_temps() -> impl IntoResponse {
                     temp_c_max: None,
                 },
                 CookingTemp {
-                    label: "Med Rare".to_string(),
+                    label: "Medium Rare".to_string(),
                     temp_c: 57.0,
                     temp_c_max: None,
                 },
                 CookingTemp {
                     label: "Medium".to_string(),
                     temp_c: 63.0,
+                    temp_c_max: None,
+                },
+                CookingTemp {
+                    label: "Medium Well".to_string(),
+                    temp_c: 66.0,
+                    temp_c_max: None,
+                },
+                CookingTemp {
+                    label: "Well Done".to_string(),
+                    temp_c: 71.0,
+                    temp_c_max: None,
+                },
+                CookingTemp {
+                    label: "Ground Beef".to_string(),
+                    temp_c: 71.0,
+                    temp_c_max: None,
+                },
+                CookingTemp {
+                    label: "Brisket (BBQ)".to_string(),
+                    temp_c: 93.0,
+                    temp_c_max: Some(96.0),
+                },
+            ],
+        },
+        CookingTempGroup {
+            category: "Pork".to_string(),
+            items: vec![
+                CookingTemp {
+                    label: "Medium Rare".to_string(),
+                    temp_c: 57.0,
+                    temp_c_max: Some(60.0),
+                },
+                CookingTemp {
+                    label: "Medium".to_string(),
+                    temp_c: 63.0,
+                    temp_c_max: None,
+                },
+                CookingTemp {
+                    label: "Medium Well".to_string(),
+                    temp_c: 66.0,
+                    temp_c_max: None,
+                },
+                CookingTemp {
+                    label: "Well Done".to_string(),
+                    temp_c: 71.0,
+                    temp_c_max: None,
+                },
+                CookingTemp {
+                    label: "Ground Pork / Sausage".to_string(),
+                    temp_c: 71.0,
+                    temp_c_max: None,
+                },
+                CookingTemp {
+                    label: "Pulled Pork (Shoulder)".to_string(),
+                    temp_c: 95.0,
+                    temp_c_max: Some(98.0),
+                },
+            ],
+        },
+        CookingTempGroup {
+            category: "Poultry".to_string(),
+            items: vec![
+                CookingTemp {
+                    label: "Breast / White Meat (Sous Vide)".to_string(),
+                    temp_c: 63.0,
+                    temp_c_max: Some(66.0),
+                },
+                CookingTemp {
+                    label: "Breast / White Meat (Traditional)".to_string(),
+                    temp_c: 74.0,
+                    temp_c_max: None,
+                },
+                CookingTemp {
+                    label: "Dark Meat (Thighs / Legs)".to_string(),
+                    temp_c: 79.0,
+                    temp_c_max: Some(85.0),
+                },
+                CookingTemp {
+                    label: "Ground Poultry".to_string(),
+                    temp_c: 74.0,
+                    temp_c_max: None,
+                },
+            ],
+        },
+        CookingTempGroup {
+            category: "Lamb".to_string(),
+            items: vec![
+                CookingTemp {
+                    label: "Rare".to_string(),
+                    temp_c: 52.0,
+                    temp_c_max: None,
+                },
+                CookingTemp {
+                    label: "Medium Rare".to_string(),
+                    temp_c: 57.0,
+                    temp_c_max: None,
+                },
+                CookingTemp {
+                    label: "Medium".to_string(),
+                    temp_c: 60.0,
+                    temp_c_max: Some(63.0),
+                },
+                CookingTemp {
+                    label: "Medium Well".to_string(),
+                    temp_c: 66.0,
                     temp_c_max: None,
                 },
                 CookingTemp {
@@ -979,37 +1084,27 @@ async fn get_cooking_temps() -> impl IntoResponse {
             ],
         },
         CookingTempGroup {
-            category: "Poultry & Ground".to_string(),
+            category: "Fish & Seafood".to_string(),
             items: vec![
                 CookingTemp {
-                    label: "Chicken / Turkey".to_string(),
-                    temp_c: 74.0,
+                    label: "Rare (Tuna / Salmon)".to_string(),
+                    temp_c: 43.0,
+                    temp_c_max: Some(49.0),
+                },
+                CookingTemp {
+                    label: "Medium Rare".to_string(),
+                    temp_c: 52.0,
                     temp_c_max: None,
                 },
                 CookingTemp {
-                    label: "Ground / Sausage".to_string(),
-                    temp_c: 71.0,
+                    label: "Medium".to_string(),
+                    temp_c: 57.0,
                     temp_c_max: None,
                 },
                 CookingTemp {
-                    label: "Fish".to_string(),
+                    label: "Well Done (USDA)".to_string(),
                     temp_c: 63.0,
                     temp_c_max: None,
-                },
-            ],
-        },
-        CookingTempGroup {
-            category: "BBQ Low & Slow".to_string(),
-            items: vec![
-                CookingTemp {
-                    label: "Brisket (Sliced)".to_string(),
-                    temp_c: 93.0,
-                    temp_c_max: Some(96.0),
-                },
-                CookingTemp {
-                    label: "Pulled Pork".to_string(),
-                    temp_c: 95.0,
-                    temp_c_max: Some(98.0),
                 },
             ],
         },

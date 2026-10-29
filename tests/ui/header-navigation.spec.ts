@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
+import { login } from './helpers';
 
-test.describe('Header Navigation & User Settings Dropdown (Desktop)', () => {
+test.describe('Header Navigation, Settings & Account Menus (Desktop)', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     const isMobile = await page.evaluate(() => window.innerWidth <= 768);
@@ -9,72 +10,99 @@ test.describe('Header Navigation & User Settings Dropdown (Desktop)', () => {
     }
   });
 
-  test('should display desktop header layout correctly', async ({ page }) => {
-    // 1. Verify User Settings dropdown button is visible
+  test('should display desktop header layout and hide mobile bottom nav', async ({ page }) => {
     await expect(page.locator('#profile-dropdown-btn')).toBeVisible();
-
-    // 2. Verify desktop-only Cooking Temperatures button is visible
+    await expect(page.locator('#settings-dropdown-btn')).toBeVisible();
     await expect(page.locator('#temps-toggle-btn')).toBeVisible();
 
-    // 3. Verify hamburger menu and panel are absent
-    await expect(page.locator('#mobile-menu-btn')).not.toBeVisible();
-    await expect(page.locator('#mobile-menu-panel')).not.toBeVisible();
+    // Mobile bottom navigation is hidden on desktop
+    await expect(page.locator('#mobile-bottom-nav')).not.toBeVisible();
+
+    // Standalone passkeys button is not in the top navigation bar
+    await expect(page.locator('#modern-manage-passkeys-btn')).toHaveCount(0);
   });
 
-  test('User Settings dropdown toggles properly without Cooking Temperatures', async ({ page }) => {
-    // 1. Open User Settings dropdown
+  test('Settings menu contains Cooking Timer, WakeLock, and Dark Mode toggle', async ({ page }) => {
+    await page.click('#settings-dropdown-btn');
+    await expect(page.locator('#settings-dropdown')).toBeVisible();
+
+    await expect(page.locator('#timer-toggle-btn')).toBeVisible();
+    await expect(page.locator('#wakelock-btn')).toBeVisible();
+    await expect(page.locator('#theme-toggle-btn')).toBeVisible();
+
+    // Toggle dark/light theme from settings menu
+    const initialTheme = await page.evaluate(() => document.documentElement.getAttribute('data-theme'));
+    await page.click('#theme-toggle-btn');
+    const updatedTheme = await page.evaluate(() => document.documentElement.getAttribute('data-theme'));
+    expect(updatedTheme).not.toEqual(initialTheme);
+  });
+
+  test('Account management dropdown contains API Guide and Passkeys (when logged in)', async ({ page }) => {
+    // Logged out: API Guide is under Account Management
     await page.click('#profile-dropdown-btn');
     await expect(page.locator('#profile-dropdown')).toBeVisible();
-
-    // 2. Verify Cooking Temperatures is NOT inside the dropdown
+    await expect(page.locator('#api-guide-link')).toBeVisible();
     await expect(page.locator('#profile-dropdown')).not.toContainText('Cooking Temperatures');
 
-    // 3. Click outside (e.g. on the header logo) to close
-    await page.click('.logo');
-    await expect(page.locator('#profile-dropdown')).not.toBeVisible();
+    // Log in and verify Passkeys is only under Account Management
+    await login(page);
+    await expect(page.locator('#modern-manage-passkeys-btn')).toHaveCount(0);
+    await page.click('#profile-dropdown-btn');
+    await expect(page.locator('#manage-passkeys-btn')).toBeVisible();
+    await expect(page.locator('#api-guide-link')).toBeVisible();
   });
 
-  test('can toggle Cooking Temperatures panel using desktop header button', async ({ page }) => {
-    // 1. Click desktop header Cooking Temperatures button
+  test('Cooking Temperatures opens as a separate page with protein selector and doneness temps', async ({ page }) => {
     await page.click('#temps-toggle-btn');
-    await expect(page.locator('#temps-panel')).toBeVisible();
+    await expect(page).toHaveURL(/\/temps/);
+    await expect(page.locator('#cooking-temps-page')).toBeVisible();
+    await expect(page.locator('#selected-protein-title')).toContainText('Beef Doneness Temperatures');
+    await expect(page.locator('#doneness-levels-list')).toContainText('Medium Rare');
+    await expect(page.locator('#doneness-levels-list')).toContainText('57°C');
 
-    // 2. Click it again to close
-    await page.click('#temps-toggle-btn');
-    await expect(page.locator('#temps-panel')).not.toBeVisible();
+    // Switch protein to Poultry
+    await page.click('#protein-selector button[data-protein="poultry"]');
+    await expect(page.locator('#selected-protein-title')).toContainText('Poultry Doneness Temperatures');
+    await expect(page.locator('#doneness-levels-list')).toContainText('74°C');
+
+    // Switch protein to Lamb
+    await page.click('#protein-selector button[data-protein="lamb"]');
+    await expect(page.locator('#selected-protein-title')).toContainText('Lamb Doneness Temperatures');
+    await expect(page.locator('#doneness-levels-list')).toContainText('Rare');
   });
 });
 
-test.describe('Header Navigation & User Settings Dropdown (Mobile)', () => {
+test.describe('Bottom App-Style Navigation & Menus (Mobile)', () => {
   test.beforeEach(async ({ page }) => {
-    // Set viewport to mobile size
     await page.setViewportSize({ width: 375, height: 667 });
     await page.goto('/');
   });
 
-  test('should display mobile header layout correctly', async ({ page }) => {
-    // 1. Verify User Settings dropdown button is visible
-    await expect(page.locator('#profile-dropdown-btn')).toBeVisible();
+  test('should display bottom app-style navigation bar on mobile', async ({ page }) => {
+    const bottomNav = page.locator('#mobile-bottom-nav');
+    await expect(bottomNav).toBeVisible();
 
-    // 2. Verify desktop-only Cooking Temperatures button is hidden on mobile
-    await expect(page.locator('#temps-toggle-btn')).not.toBeVisible();
+    await expect(page.locator('#mobile-nav-recipes')).toBeVisible();
+    await expect(page.locator('#mobile-nav-meal-plan')).toBeVisible();
+    await expect(page.locator('#mobile-nav-add')).toBeVisible();
+    await expect(page.locator('#mobile-nav-shopping')).toBeVisible();
+    await expect(page.locator('#mobile-nav-temps')).toBeVisible();
 
-    // 3. Verify hamburger menu and panel are absent
-    await expect(page.locator('#mobile-menu-btn')).not.toBeVisible();
-    await expect(page.locator('#mobile-menu-panel')).not.toBeVisible();
+    // Navigate to Cooking Temperatures via bottom bar
+    await page.click('#mobile-nav-temps');
+    await expect(page).toHaveURL(/\/temps/);
+    await expect(page.locator('#cooking-temps-page')).toBeVisible();
   });
 
-  test('User Settings dropdown opens on mobile without Cooking Temperatures', async ({ page }) => {
-    // 1. Open User Settings dropdown
+  test('Account management and Settings menus work on mobile', async ({ page }) => {
+    await page.click('#settings-dropdown-btn');
+    await expect(page.locator('#settings-dropdown')).toBeVisible();
+    await expect(page.locator('#timer-toggle-btn')).toBeVisible();
+    await expect(page.locator('#wakelock-btn')).toBeVisible();
+    await expect(page.locator('#theme-toggle-btn')).toBeVisible();
+
     await page.click('#profile-dropdown-btn');
     await expect(page.locator('#profile-dropdown')).toBeVisible();
-
-    // 2. Verify Cooking Temperatures is NOT inside the dropdown
-    await expect(page.locator('#profile-dropdown')).not.toContainText('Cooking Temperatures');
-
-    // 3. Click outside to close
-    await page.click('.logo');
-    await expect(page.locator('#profile-dropdown')).not.toBeVisible();
+    await expect(page.locator('#api-guide-link')).toBeVisible();
   });
 });
-
