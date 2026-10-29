@@ -196,7 +196,7 @@ export const PasskeysModal: React.FC<PasskeysModalProps> = ({ onClose }) => {
             </h3>
 
             {loading ? (
-              <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)' }}>Loading...</div>
+              <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)' }}>Loading keys...</div>
             ) : passkeys.length === 0 ? (
               <div style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text-muted)', background: 'var(--bg-input)', borderRadius: 'var(--radius-md)' }}>
                 No registered passkeys yet. Register one above for instant, biometric passwordless sign in!

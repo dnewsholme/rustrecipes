@@ -49,7 +49,7 @@ jobs:
       run: mkdir -p data/recipes data/uploads
 
     - name: Run Playwright tests
-      run: npx playwright test --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
+      run: npx playwright test --project=chromium --workers=1 --shard=${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
       env:
         CI: true
         COOKIE_SECURE: "false"

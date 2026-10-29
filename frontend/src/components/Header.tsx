@@ -18,6 +18,7 @@ import {
   Clock,
   X,
   Wand2,
+  Lightbulb,
 } from 'lucide-react';
 import type { AuthState } from '../types';
 import { getAppBase } from '../api';
@@ -26,6 +27,7 @@ interface HeaderProps {
   auth: AuthState;
   activeView: string;
   setActiveView: (view: string) => void;
+  onNavigate?: (view: string, id?: string) => void;
   shoppingListCount: number;
   mealPlanCount: number;
   onOpenLogin: () => void;
@@ -45,6 +47,7 @@ export const Header: React.FC<HeaderProps> = ({
   auth,
   activeView,
   setActiveView,
+  onNavigate,
   shoppingListCount,
   mealPlanCount,
   onOpenLogin,
@@ -63,6 +66,20 @@ export const Header: React.FC<HeaderProps> = ({
   const [timerOpen, setTimerOpen] = useState(false);
   const [addDropdownOpen, setAddDropdownOpen] = useState(false);
 
+  // WakeLock State
+  const [wakeLockActive, setWakeLockActive] = useState<boolean>(() => {
+    return localStorage.getItem('manualWakeLock') === 'true';
+  });
+  const wakeLockRef = useRef<any>(null);
+
+  const navigate = (view: string, id?: string) => {
+    if (onNavigate) {
+      onNavigate(view, id);
+    } else {
+      setActiveView(view);
+    }
+  };
+
   // Quick timer state
   const [timerInputS, setTimerInputS] = useState('');
   const [timerRemaining, setTimerRemaining] = useState(0);
@@ -73,6 +90,64 @@ export const Header: React.FC<HeaderProps> = ({
   const addRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<HTMLDivElement>(null);
   const tempsRef = useRef<HTMLDivElement>(null);
+
+  // WakeLock Effect
+  useEffect(() => {
+    const shouldKeepAwake = wakeLockActive || timerRunning;
+
+    const requestLock = async () => {
+      if ('wakeLock' in navigator && shouldKeepAwake) {
+        try {
+          if (!wakeLockRef.current) {
+            wakeLockRef.current = await (navigator as any).wakeLock.request('screen');
+            wakeLockRef.current.addEventListener('release', () => {
+              wakeLockRef.current = null;
+            });
+          }
+        } catch (err) {
+          console.debug('WakeLock request failed:', err);
+        }
+      }
+    };
+
+    const releaseLock = async () => {
+      if (wakeLockRef.current && !shouldKeepAwake) {
+        try {
+          await wakeLockRef.current.release();
+          wakeLockRef.current = null;
+        } catch (err) {
+          console.debug('WakeLock release failed:', err);
+        }
+      }
+    };
+
+    if (shouldKeepAwake) {
+      requestLock();
+    } else {
+      releaseLock();
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && (wakeLockActive || timerRunning)) {
+        requestLock();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [wakeLockActive, timerRunning]);
+
+  const toggleWakeLock = async () => {
+    if (!('wakeLock' in navigator)) {
+      alert('Your browser does not support keeping the screen on.');
+      return;
+    }
+    const next = !wakeLockActive;
+    setWakeLockActive(next);
+    localStorage.setItem('manualWakeLock', String(next));
+  };
 
   // Timer countdown
   useEffect(() => {
@@ -151,8 +226,8 @@ export const Header: React.FC<HeaderProps> = ({
   }, []);
 
   return (
-    <header className="glass" style={{ position: 'sticky', top: 0, zIndex: 100, borderBottom: '1px solid var(--border)' }}>
-      <div style={{
+    <header className="glass app-header" style={{ position: 'sticky', top: 0, zIndex: 100, borderBottom: '1px solid var(--border)' }}>
+      <div className="app-header-container" style={{
         maxWidth: 1280,
         margin: '0 auto',
         padding: '0.75rem 1.5rem',
@@ -163,10 +238,10 @@ export const Header: React.FC<HeaderProps> = ({
       }}>
         {/* Brand / Logo */}
         <div
-          className="logo"
+          className="logo header-brand"
           onClick={() => {
             setTempsOpen(false);
-            setActiveView('recipes');
+            navigate('recipes');
           }}
           style={{
             display: 'flex',
@@ -194,7 +269,7 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* Global Search Center */}
-        <div style={{ flex: 1, maxWidth: '420px', position: 'relative' }}>
+        <div className="header-search-container" style={{ flex: 1, maxWidth: '420px', position: 'relative' }}>
           <Search size={16} style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
           <input
             type="search"
@@ -212,7 +287,7 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* Nav actions */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+        <div className="header-actions" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
           {/* Add Recipe Dropdown */}
           <div ref={addRef} style={{ position: 'relative' }}>
             <button
@@ -399,9 +474,24 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </div>
 
+          {/* Wakelock Button */}
+          <button
+            id="wakelock-btn"
+            onClick={toggleWakeLock}
+            className={`btn btn-sm ${wakeLockActive ? 'btn-primary' : 'btn-ghost'}`}
+            title={wakeLockActive ? 'Screen Awake (Active)' : 'Keep Screen On'}
+            style={{
+              padding: '0.45rem',
+              boxShadow: wakeLockActive ? '0 0 10px var(--accent)' : 'none',
+              color: wakeLockActive ? '#fff' : undefined,
+            }}
+          >
+            <Lightbulb size={18} />
+          </button>
+
           {/* Meal Plan */}
           <button
-            onClick={() => setActiveView('meal-plan')}
+            onClick={() => navigate('meal-plan')}
             className={`btn btn-sm ${activeView === 'meal-plan' ? 'btn-primary' : 'btn-ghost'}`}
             style={{ position: 'relative', padding: '0.45rem' }}
             title="Meal Plan"
@@ -432,7 +522,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Shopping List */}
           <button
-            onClick={() => setActiveView('shopping-list')}
+            onClick={() => navigate('shopping-list')}
             className={`btn btn-sm ${activeView === 'shopping-list' ? 'btn-primary' : 'btn-ghost'}`}
             style={{ position: 'relative', padding: '0.45rem' }}
             title="Shopping List"
@@ -557,7 +647,7 @@ export const Header: React.FC<HeaderProps> = ({
             {profileDropdownOpen && (
               <div
                 id="profile-dropdown"
-                className="dropdown-content glass"
+                className="dropdown-content dropdown-menu glass"
                 style={{
                   display: 'block',
                   position: 'absolute',
@@ -566,28 +656,15 @@ export const Header: React.FC<HeaderProps> = ({
                   minWidth: '220px',
                   padding: '0.5rem',
                   borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--border-color)',
-                  background: 'var(--surface-color)',
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg-secondary)',
                   boxShadow: 'var(--shadow-lg)',
                   zIndex: 1000,
                 }}
               >
-                {/* Cooking Temperatures option */}
-                <button
-                  onClick={() => {
-                    setProfileDropdownOpen(false);
-                    setTempsOpen(true);
-                  }}
-                  className="dropdown-item"
-                  style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0.75rem' }}
-                >
-                  <Thermometer size={16} />
-                  <span>Cooking Temperatures</span>
-                </button>
-
                 {auth.user ? (
                   <>
-                    <div style={{ padding: '0.4rem 0.75rem', borderTop: '1px solid var(--border-color)', marginTop: '0.25rem' }}>
+                    <div style={{ padding: '0.4rem 0.75rem', borderBottom: '1px solid var(--border)', marginBottom: '0.35rem' }}>
                       <div style={{ fontWeight: 600, fontSize: '0.8rem', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {auth.user.email}
                       </div>
@@ -628,7 +705,7 @@ export const Header: React.FC<HeaderProps> = ({
                         id="manage-users-menu-btn"
                         onClick={() => {
                           setProfileDropdownOpen(false);
-                          setActiveView('admin_users');
+                          navigate('admin_users');
                         }}
                         className="dropdown-item"
                         style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0.75rem' }}

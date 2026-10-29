@@ -317,3 +317,124 @@ body {
     display: none !important;
   }
 }
+
+/* Dropdown Menus and Items */
+.dropdown-menu {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  color: var(--text-primary);
+  overflow: hidden;
+}
+
+.dropdown-item {
+  background: transparent !important;
+  border: none !important;
+  color: var(--text-primary) !important;
+  padding: 0.6rem 0.85rem;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition);
+  width: 100%;
+  text-align: left;
+  text-decoration: none;
+  box-sizing: border-box;
+}
+
+.dropdown-item:hover {
+  background: var(--bg-card-hover) !important;
+  color: var(--accent) !important;
+}
+
+.dropdown-item svg {
+  color: var(--text-secondary);
+  transition: var(--transition);
+  flex-shrink: 0;
+}
+
+.dropdown-item:hover svg {
+  color: var(--accent);
+}
+
+/* Recipe Grid and Tab Content Layout */
+.recipe-grid {
+  display: grid;
+  grid-template-columns: minmax(300px, 380px) 1fr;
+  gap: 2rem;
+}
+
+.form-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.form-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+
+.main-content {
+  padding: 1.5rem;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+  .app-header-container {
+    flex-wrap: wrap !important;
+    padding: 0.6rem 0.75rem !important;
+    gap: 0.5rem !important;
+  }
+  .header-brand {
+    order: 1;
+  }
+  .header-actions {
+    order: 2;
+    gap: 0.35rem !important;
+  }
+  .header-search-container {
+    order: 3;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+    margin-top: 0.25rem;
+  }
+
+  .main-content {
+    padding: 0.75rem 0.5rem !important;
+  }
+
+  .recipe-grid {
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+  }
+
+  .form-grid-2,
+  .form-grid-3 {
+    grid-template-columns: 1fr;
+  }
+
+  .tab-content {
+    display: none !important;
+  }
+
+  .tab-content.active {
+    display: block !important;
+  }
+}
+
+@media (min-width: 769px) {
+  .tab-content {
+    display: block !important;
+  }
+}

@@ -589,10 +589,27 @@ pub fn parse_recipe_steps(markdown: &str) -> Vec<crate::models::RecipeStep> {
     let mut step_num = 1;
     let step_num_re = regex::Regex::new(r"^\d+\.\s*").ok();
 
-    for block in markdown.split("\n\n") {
+    // Ensure steps with numbers (e.g. "1. Mix\n2. Rest") have paragraph breaks so they parse properly
+    // even without double line breaks.
+    let re_single_break = regex::Regex::new(r"([^\n])\r?\n(\s*(?:Step\s+)?\d+[\.:\)])").unwrap();
+    let normalized = re_single_break.replace_all(markdown, "$1\n\n$2");
+
+    for block in normalized.split("\n\n") {
         let block = block.trim();
         if block.is_empty() {
             continue;
+        }
+
+        // Skip heading-only blocks like "### Instructions" or "## Directions"
+        if block.starts_with('#') {
+            let lower = block.to_lowercase();
+            if lower.contains("instruction")
+                || lower.contains("direction")
+                || lower.contains("method")
+                || lower.contains("step")
+            {
+                continue;
+            }
         }
 
         let lines: Vec<&str> = block
@@ -648,6 +665,22 @@ pub fn parse_recipe_steps(markdown: &str) -> Vec<crate::models::RecipeStep> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_parse_recipe_steps_without_blank_lines() {
+        let md = "1. Mix flour, water, and salt.\n2. Rest for 30 minutes.\n3. Bake at 450°F.";
+        let steps = parse_recipe_steps(md);
+        assert_eq!(steps.len(), 3);
+        assert_eq!(steps[0].instruction, "Mix flour, water, and salt.");
+        assert_eq!(steps[1].instruction, "Rest for 30 minutes.");
+        assert_eq!(steps[2].instruction, "Bake at 450°F.");
+
+        let md_with_heading = "### Instructions\n1. Mix flour\n2. Bake";
+        let steps2 = parse_recipe_steps(md_with_heading);
+        assert_eq!(steps2.len(), 2);
+        assert_eq!(steps2[0].instruction, "Mix flour");
+        assert_eq!(steps2[1].instruction, "Bake");
+    }
 
     #[test]
     fn test_parse_num_str() {

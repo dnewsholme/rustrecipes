@@ -202,15 +202,19 @@ export const api = {
     return request<ShoppingListItem[]>('/shopping-list');
   },
 
-  async generateShoppingList(recipeIds: string[], servings?: number, unit: string = 'metric'): Promise<ShoppingListItem[]> {
-    return request<ShoppingListItem[]>('/shopping-list', {
+  async generateShoppingList(recipeIds: string[], portions: number = 1, unitSystem: string = 'metric'): Promise<ShoppingListItem[]> {
+    const res = await request<{ ingredients: string[] }>('/shopping-list', {
       method: 'POST',
       body: JSON.stringify({
         recipe_ids: recipeIds,
-        servings: servings || null,
-        unit,
+        portions: Math.max(1, portions || 1),
+        unit_system: unitSystem === 'imperial' ? 'imperial' : 'metric',
       }),
     });
+    if (res && Array.isArray(res.ingredients)) {
+      return res.ingredients.map((name) => ({ name, checked: false }));
+    }
+    return [];
   },
 
   async updateShoppingList(items: ShoppingListItem[]): Promise<void> {
@@ -226,13 +230,15 @@ export const api = {
 
   // Meal Plan
   async getMealPlan(): Promise<MealPlanItem[]> {
-    return request<MealPlanItem[]>('/meal-plan');
+    const res = await request<any>('/meal-plan');
+    return res?.meals || (Array.isArray(res) ? res : []);
   },
 
-  async addToMealPlan(recipeId: string): Promise<void> {
+  async addToMealPlan(recipeIds: string | string[]): Promise<void> {
+    const list = Array.isArray(recipeIds) ? recipeIds : [recipeIds];
     await request('/meal-plan', {
       method: 'POST',
-      body: JSON.stringify({ recipe_id: recipeId }),
+      body: JSON.stringify({ recipe_ids: list }),
     });
   },
 

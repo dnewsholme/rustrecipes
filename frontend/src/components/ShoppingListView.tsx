@@ -1,23 +1,30 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, CheckCircle2, Circle, Sparkles } from 'lucide-react';
+import { Plus, Trash2, CheckCircle2, Circle, Sparkles, ChevronLeft } from 'lucide-react';
 import type { ShoppingListItem } from '../types';
 import { api } from '../api';
 
 interface ShoppingListViewProps {
   onItemCountChange?: (count: number) => void;
+  onBack?: () => void;
 }
 
-export const ShoppingListView: React.FC<ShoppingListViewProps> = ({ onItemCountChange }) => {
+export const ShoppingListView: React.FC<ShoppingListViewProps> = ({ onItemCountChange, onBack }) => {
   const [items, setItems] = useState<ShoppingListItem[]>([]);
   const [newItemName, setNewItemName] = useState('');
   const [spices, setSpices] = useState<Set<string>>(new Set());
+  const [excludeSpices, setExcludeSpices] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const loadList = async () => {
     try {
       const data = await api.getShoppingList();
-      setItems(data);
-      onItemCountChange?.(data.filter((i) => !i.checked).length);
+      // Keep unchecked first, checked last
+      const sorted = [
+        ...data.filter((i) => !i.checked),
+        ...data.filter((i) => i.checked),
+      ];
+      setItems(sorted);
+      onItemCountChange?.(sorted.filter((i) => !i.checked).length);
     } catch (err) {
       console.error('Failed to load shopping list', err);
     } finally {
@@ -43,21 +50,40 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({ onItemCountC
   };
 
   const handleToggle = (index: number) => {
-    const updated = [...items];
-    updated[index].checked = !updated[index].checked;
-    saveList(updated);
+    const visible = getVisibleItems();
+    const clickedItem = visible[index];
+    if (!clickedItem) return;
+
+    // Toggle checked status on original items
+    const updated = items.map((it) => {
+      if (it === clickedItem || (it.name === clickedItem.name && it.checked === clickedItem.checked)) {
+        return { ...it, checked: !it.checked };
+      }
+      return it;
+    });
+
+    // Reorder: unchecked items first, checked items moved to bottom
+    const sorted = [
+      ...updated.filter((i) => !i.checked),
+      ...updated.filter((i) => i.checked),
+    ];
+    saveList(sorted);
   };
 
   const handleAddItem = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newItemName.trim()) return;
-    const updated = [...items, { name: newItemName.trim(), checked: false }];
+    const newItem = { name: newItemName.trim(), checked: false };
+    // Insert new item before checked items
+    const unchecked = items.filter((i) => !i.checked);
+    const checked = items.filter((i) => i.checked);
+    const updated = [...unchecked, newItem, ...checked];
     setNewItemName('');
     saveList(updated);
   };
 
-  const handleDeleteItem = (index: number) => {
-    const updated = items.filter((_, i) => i !== index);
+  const handleDeleteItem = (itemToDelete: ShoppingListItem) => {
+    const updated = items.filter((it) => it !== itemToDelete);
     saveList(updated);
   };
 
@@ -67,7 +93,7 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({ onItemCountC
   };
 
   const handleClearAll = async () => {
-    if (confirm('Clear entire shopping list?')) {
+    if (confirm('Are you sure you want to clear your shopping list?')) {
       await api.clearShoppingList();
       setItems([]);
       onItemCountChange?.(0);
@@ -82,15 +108,33 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({ onItemCountC
     return false;
   };
 
+  const getVisibleItems = () => {
+    if (!excludeSpices) return items;
+    return items.filter((item) => !isSpiceInPantry(item.name));
+  };
+
   if (loading) {
     return <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-secondary)' }}>Loading shopping list...</div>;
   }
 
+  const visibleItems = getVisibleItems();
   const uncheckedItems = items.filter((i) => !i.checked);
   const checkedItems = items.filter((i) => i.checked);
 
   return (
     <div style={{ maxWidth: 750, margin: '0 auto', animation: 'fadeIn 0.2s ease-out' }}>
+      {/* Top back button */}
+      <div style={{ marginBottom: '1rem' }}>
+        <button
+          onClick={onBack}
+          className="btn btn-secondary btn-sm"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+        >
+          <ChevronLeft size={16} />
+          <span>Back to Recipes</span>
+        </button>
+      </div>
+
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <h1 style={{ fontSize: '1.75rem', fontWeight: 800 }}>Shopping List</h1>
@@ -99,7 +143,18 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({ onItemCountC
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', cursor: 'pointer', userSelect: 'none' }}>
+            <input
+              type="checkbox"
+              id="exclude-spices-checkbox"
+              checked={excludeSpices}
+              onChange={(e) => setExcludeSpices(e.target.checked)}
+              style={{ accentColor: 'var(--accent)' }}
+            />
+            <span>Exclude Spices</span>
+          </label>
+
           {checkedItems.length > 0 && (
             <button onClick={handleClearChecked} className="btn btn-secondary btn-sm">
               Clear Completed ({checkedItems.length})
@@ -107,7 +162,7 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({ onItemCountC
           )}
           {items.length > 0 && (
             <button onClick={handleClearAll} className="btn btn-danger btn-sm">
-              <Trash2 size={14} /> Clear All
+              <Trash2 size={14} /> Clear List
             </button>
           )}
         </div>
@@ -116,12 +171,13 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({ onItemCountC
       {/* Add Item Input Form */}
       <form onSubmit={handleAddItem} className="card" style={{ padding: '0.75rem 1rem', display: 'flex', gap: '0.75rem', marginBottom: '1.5rem' }}>
         <input
+          id="new-item-input"
           type="text"
           value={newItemName}
           onChange={(e) => setNewItemName(e.target.value)}
           placeholder="Add an item (e.g., 2 cups milk, sourdough flour)..."
           className="input"
-          style={{ border: 'none', background: 'transparent', padding: '0.4rem 0' }}
+          style={{ border: 'none', background: 'transparent', padding: '0.4rem 0', flex: 1 }}
         />
         <button type="submit" className="btn btn-primary btn-sm" style={{ flexShrink: 0 }}>
           <Plus size={16} />
@@ -131,17 +187,28 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({ onItemCountC
 
       {/* Shopping List Items */}
       <div className="card" style={{ padding: '1.5rem' }}>
-        {items.length === 0 ? (
-          <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-            Your shopping list is empty. Add items above or sync from recipe view and meal plan!
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            {items.map((item, idx) => {
+        <ul
+          id="shopping-list-ul"
+          style={{
+            listStyle: 'none',
+            padding: 0,
+            margin: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.5rem',
+          }}
+        >
+          {visibleItems.length === 0 ? (
+            <li style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+              No ingredients found
+            </li>
+          ) : (
+            visibleItems.map((item, idx) => {
               const spiceMatch = isSpiceInPantry(item.name);
               return (
-                <div
-                  key={idx}
+                <li
+                  key={`${item.name}-${idx}`}
+                  className={`shopping-item ${item.checked ? 'purchased' : ''}`}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -150,15 +217,15 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({ onItemCountC
                     borderRadius: 'var(--radius-md)',
                     background: item.checked ? 'transparent' : 'var(--bg-input)',
                     transition: 'var(--transition)',
+                    cursor: 'pointer',
                   }}
+                  onClick={() => handleToggle(idx)}
                 >
                   <div
-                    onClick={() => handleToggle(idx)}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
                       gap: '0.75rem',
-                      cursor: 'pointer',
                       flex: 1,
                       userSelect: 'none',
                     }}
@@ -169,6 +236,7 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({ onItemCountC
                       <Circle size={20} color="var(--text-muted)" />
                     )}
                     <span
+                      className="shopping-item-name"
                       style={{
                         fontSize: '0.95rem',
                         color: item.checked ? 'var(--text-muted)' : 'var(--text-primary)',
@@ -186,17 +254,20 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({ onItemCountC
                   </div>
 
                   <button
-                    onClick={() => handleDeleteItem(idx)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteItem(item);
+                    }}
                     className="btn btn-ghost btn-sm"
                     style={{ padding: '0.3rem', color: 'var(--text-muted)' }}
+                    title="Delete item"
                   >
                     <Trash2 size={15} />
                   </button>
-                </div>
+                </li>
               );
-            })}
-          </div>
-        )}
+            }))}
+          </ul>
       </div>
     </div>
   );

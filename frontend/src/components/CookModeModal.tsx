@@ -52,6 +52,48 @@ export const CookModeModal: React.FC<CookModeModalProps> = ({ recipe, onClose, o
     timerMatches.push({ label: m[0], minutes: mins });
   }
 
+  const isIngredientHeader = (line: string) => {
+    let trimmed = line.trim();
+    if (trimmed.startsWith('- ') || trimmed.startsWith('* ') || trimmed.startsWith('+ ')) {
+      trimmed = trimmed.slice(2).trim();
+    } else if (trimmed.startsWith('-') && !trimmed.startsWith('--')) {
+      trimmed = trimmed.slice(1).trim();
+    }
+    if (!trimmed) return false;
+    return (
+      trimmed.startsWith('#') ||
+      (trimmed.startsWith('--') && trimmed.endsWith('--')) ||
+      (trimmed.startsWith('[') && trimmed.endsWith(']')) ||
+      (trimmed.startsWith('--') && trimmed.length > 2) ||
+      trimmed.endsWith(':')
+    );
+  };
+
+  const formatIngredientHeader = (line: string) => {
+    let trimmed = line.trim();
+    if (trimmed.startsWith('- ') || trimmed.startsWith('* ') || trimmed.startsWith('+ ')) {
+      trimmed = trimmed.slice(2).trim();
+    } else if (trimmed.startsWith('-') && !trimmed.startsWith('--')) {
+      trimmed = trimmed.slice(1).trim();
+    }
+    while (trimmed.startsWith('#')) {
+      trimmed = trimmed.slice(1).trim();
+    }
+    if (trimmed.startsWith('--')) {
+      trimmed = trimmed.slice(2).trim();
+    }
+    if (trimmed.endsWith('--')) {
+      trimmed = trimmed.slice(0, -2).trim();
+    }
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+      trimmed = trimmed.slice(1, -1).trim();
+    }
+    if (trimmed.endsWith(':')) {
+      trimmed = trimmed.slice(0, -1).trim();
+    }
+    return trimmed;
+  };
+
   return (
     <div
       id="cook-mode-overlay"
@@ -119,6 +161,26 @@ export const CookModeModal: React.FC<CookModeModalProps> = ({ recipe, onClose, o
           </h3>
           <ul id="cook-ingredients-list" style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
             {recipe.ingredients.map((ing, i) => {
+              if (isIngredientHeader(ing)) {
+                return (
+                  <li
+                    key={i}
+                    className="cook-ingredient-section-header"
+                    style={{
+                      fontWeight: 700,
+                      color: 'var(--accent)',
+                      fontSize: '0.95rem',
+                      marginTop: i === 0 ? '0.25rem' : '0.85rem',
+                      marginBottom: '0.2rem',
+                      borderBottom: '1px solid var(--border)',
+                      paddingBottom: '0.2rem',
+                    }}
+                  >
+                    {formatIngredientHeader(ing)}
+                  </li>
+                );
+              }
+
               const isChecked = checkedIngredients.has(i);
               return (
                 <li

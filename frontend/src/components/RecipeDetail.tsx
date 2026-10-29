@@ -208,8 +208,47 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({
     return elements;
   };
 
-  const isIngredientHeader = (text: string) => text.startsWith('##') || text.startsWith('# ');
-  const formatIngredientHeader = (text: string) => text.replace(/^#+\s*/, '');
+  const isIngredientHeader = (line: string) => {
+    let trimmed = line.trim();
+    if (trimmed.startsWith('- ') || trimmed.startsWith('* ') || trimmed.startsWith('+ ')) {
+      trimmed = trimmed.slice(2).trim();
+    } else if (trimmed.startsWith('-') && !trimmed.startsWith('--')) {
+      trimmed = trimmed.slice(1).trim();
+    }
+    if (!trimmed) return false;
+    return (
+      trimmed.startsWith('#') ||
+      (trimmed.startsWith('--') && trimmed.endsWith('--')) ||
+      (trimmed.startsWith('[') && trimmed.endsWith(']')) ||
+      (trimmed.startsWith('--') && trimmed.length > 2) ||
+      trimmed.endsWith(':')
+    );
+  };
+
+  const formatIngredientHeader = (line: string) => {
+    let trimmed = line.trim();
+    if (trimmed.startsWith('- ') || trimmed.startsWith('* ') || trimmed.startsWith('+ ')) {
+      trimmed = trimmed.slice(2).trim();
+    } else if (trimmed.startsWith('-') && !trimmed.startsWith('--')) {
+      trimmed = trimmed.slice(1).trim();
+    }
+    while (trimmed.startsWith('#')) {
+      trimmed = trimmed.slice(1).trim();
+    }
+    if (trimmed.startsWith('--')) {
+      trimmed = trimmed.slice(2).trim();
+    }
+    if (trimmed.endsWith('--')) {
+      trimmed = trimmed.slice(0, -2).trim();
+    }
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+      trimmed = trimmed.slice(1, -1).trim();
+    }
+    if (trimmed.endsWith(':')) {
+      trimmed = trimmed.slice(0, -1).trim();
+    }
+    return trimmed;
+  };
 
   if (loading) {
     return <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-secondary)' }}>Loading recipe...</div>;
@@ -330,12 +369,28 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({
               <div
                 id="recipe-hero-image"
                 className={`recipe-hero-img ${showPhoto ? 'force-show' : ''}`}
-                style={{ maxHeight: 400, borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}
+                style={{
+                  maxHeight: 500,
+                  width: '100%',
+                  borderRadius: 'var(--radius-lg)',
+                  overflow: 'hidden',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: 'var(--bg-secondary)',
+                }}
               >
                 <img
                   src={resolveMediaUrl(recipe.image)}
                   alt={recipe.title}
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  style={{
+                    maxWidth: '100%',
+                    maxHeight: 500,
+                    width: 'auto',
+                    height: 'auto',
+                    objectFit: 'contain',
+                    borderRadius: 'var(--radius-lg)',
+                  }}
                 />
               </div>
             </div>
@@ -434,7 +489,7 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({
               <button
                 key={s}
                 onClick={() => handleScaleChange(s)}
-                className={`btn btn-sm ${scale === s ? 'btn-primary' : 'btn-secondary'}`}
+                className={`scale-btn btn btn-sm ${scale === s ? 'btn-primary' : 'btn-secondary'}`}
               >
                 {s}x
               </button>
@@ -550,7 +605,7 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({
       {recipe.leaven_type && (
         <div
           id="fermentation-tab"
-          className={`card ${mobileTab === 'fermentation' ? 'active' : ''}`}
+          className={`card tab-content ${mobileTab === 'fermentation' ? 'active' : ''}`}
           style={{ padding: '1.25rem', background: 'rgba(249, 115, 22, 0.05)', borderColor: 'rgba(249, 115, 22, 0.2)' }}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
@@ -611,13 +666,13 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({
 
       {/* Combustion Graph Container */}
       {recipe.combustion_csv && (
-        <div id="graph-tab" className={`card ${mobileTab === 'graph' ? 'active' : ''}`} style={{ padding: '1.5rem' }}>
+        <div id="graph-tab" className={`card tab-content ${mobileTab === 'graph' ? 'active' : ''}`} style={{ padding: '1.5rem' }}>
           <CombustionChart csvUrl={recipe.combustion_csv} tempUnit={temp === 'f' ? 'f' : 'c'} />
         </div>
       )}
 
       {/* Main Recipe Content: Ingredients & Directions Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 380px) 1fr', gap: '2rem' }}>
+      <div className="recipe-grid">
         {/* Ingredients Column */}
         <div id="ingredients-tab" className={`card tab-content ${mobileTab === 'ingredients' ? 'active' : ''}`} style={{ padding: '1.75rem', height: 'fit-content' }}>
           <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1.25rem', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem' }}>

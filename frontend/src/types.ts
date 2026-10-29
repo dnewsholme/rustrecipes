@@ -35,6 +35,8 @@ export interface Recipe {
   video_url?: string | null;
   youtube_id?: string | null;
   favorite: boolean;
+  has_video?: boolean;
+  has_combustion?: boolean;
   is_public: boolean;
   owner_id: string;
   owner_email?: string | null;

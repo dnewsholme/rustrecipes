@@ -29,12 +29,10 @@ This document defines mandatory guidelines, architecture blueprints, build/test 
 
 - **Backend Framework**: [Axum 0.8](file:///home/daryl/git/recipemanager/Cargo.toml#L9) running on [Tokio](file:///home/daryl/git/recipemanager/Cargo.toml#L23) async engine.
 - **Database Layer**: SQLite managed via `rusqlite` (bundled edition) with connection pooling, migrations, and local storage in `data/recipes.db`.
-- **HTML Server-Side Rendering**: [Askama 0.16](file:///home/daryl/git/recipemanager/Cargo.toml#L8) template engine.
-- **SPA Frontend**: Vite + React 18 TypeScript application in [frontend/](file:///home/daryl/git/recipemanager/frontend/) served at `/app/`.
+- **SPA & PWA Frontend**: Vite + React 18 TypeScript application in [frontend/](file:///home/daryl/git/recipemanager/frontend/) served as the default application UI at `/` and `/app/`, installable as a mobile/desktop PWA with offline caching via Service Worker.
 - **OpenAPI / Swagger**: OpenAPI 3.0 specification generated in [src/openapi.rs](file:///home/daryl/git/recipemanager/src/openapi.rs) served at `/api/v1/openapi.json` and interactive Swagger UI at `/api/docs`.
 - **Sanitization & Security**: [Ammonia 4.0](file:///home/daryl/git/recipemanager/Cargo.toml#L7) HTML XSS sanitizer; custom CSRF & SSRF verification middleware.
 - **Authentication**: WebAuthn / Passkeys ([webauthn-rs 0.5](file:///home/daryl/git/recipemanager/Cargo.toml#L38)) in [src/passkeys.rs](file:///home/daryl/git/recipemanager/src/passkeys.rs), OpenID Connect (OIDC / Pocket ID) and Google OAuth in [src/main.rs](file:///home/daryl/git/recipemanager/src/main.rs) + persistent session cookies (`admin_session`).
-- **Frontend**: Vanilla HTML5, CSS3 ([static/styles.css](file:///home/daryl/git/recipemanager/static/styles.css)), and progressive JS enhancement.
 - **E2E Testing**: [Playwright](https://playwright.dev/) TypeScript suite in [tests/ui/](file:///home/daryl/git/recipemanager/tests/ui/).
 
 ---

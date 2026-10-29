@@ -328,6 +328,11 @@ struct RecipeSummary {
     prep_time: Option<String>,
     cook_time: Option<String>,
     hydration: Option<f64>,
+    owner_id: String,
+    is_public: bool,
+    favorite: bool,
+    has_video: bool,
+    has_combustion: bool,
 }
 
 #[derive(Deserialize)]
@@ -390,6 +395,9 @@ async fn list_recipes(
             } else {
                 None
             };
+            let has_video = r.has_video();
+            let has_combustion = r.has_combustion();
+            let favorite = r.favorite;
 
             RecipeSummary {
                 id: r.id,
@@ -399,6 +407,11 @@ async fn list_recipes(
                 prep_time: r.prep_time,
                 cook_time: r.cook_time,
                 hydration,
+                owner_id: r.owner_id,
+                is_public: r.is_public,
+                favorite,
+                has_video,
+                has_combustion,
             }
         })
         .collect();

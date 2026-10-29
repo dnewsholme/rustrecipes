@@ -21,25 +21,17 @@ test.describe('Header Navigation & User Settings Dropdown (Desktop)', () => {
     await expect(page.locator('#mobile-menu-panel')).not.toBeVisible();
   });
 
-  test('can toggle Cooking Temperatures panel from User Settings dropdown', async ({ page }) => {
+  test('User Settings dropdown toggles properly without Cooking Temperatures', async ({ page }) => {
     // 1. Open User Settings dropdown
     await page.click('#profile-dropdown-btn');
     await expect(page.locator('#profile-dropdown')).toBeVisible();
 
-    // 2. Click "Cooking Temperatures" option inside the dropdown
-    await page.click('text=Cooking Temperatures');
+    // 2. Verify Cooking Temperatures is NOT inside the dropdown
+    await expect(page.locator('#profile-dropdown')).not.toContainText('Cooking Temperatures');
 
-    // 3. Verify Cooking Temperatures panel is visible
-    await expect(page.locator('#temps-panel')).toBeVisible();
-
-    // 4. Verify User Settings dropdown is closed
-    await expect(page.locator('#profile-dropdown')).not.toBeVisible();
-
-    // 5. Click outside (e.g. on the header logo) to close temps panel
+    // 3. Click outside (e.g. on the header logo) to close
     await page.click('.logo');
-
-    // 6. Verify Cooking Temperatures panel is closed
-    await expect(page.locator('#temps-panel')).not.toBeVisible();
+    await expect(page.locator('#profile-dropdown')).not.toBeVisible();
   });
 
   test('can toggle Cooking Temperatures panel using desktop header button', async ({ page }) => {
@@ -72,25 +64,17 @@ test.describe('Header Navigation & User Settings Dropdown (Mobile)', () => {
     await expect(page.locator('#mobile-menu-panel')).not.toBeVisible();
   });
 
-  test('can toggle Cooking Temperatures panel on mobile via User Settings dropdown', async ({ page }) => {
+  test('User Settings dropdown opens on mobile without Cooking Temperatures', async ({ page }) => {
     // 1. Open User Settings dropdown
     await page.click('#profile-dropdown-btn');
     await expect(page.locator('#profile-dropdown')).toBeVisible();
 
-    // 2. Click "Cooking Temperatures" option inside the dropdown
-    await page.click('text=Cooking Temperatures');
+    // 2. Verify Cooking Temperatures is NOT inside the dropdown
+    await expect(page.locator('#profile-dropdown')).not.toContainText('Cooking Temperatures');
 
-    // 3. Verify Cooking Temperatures panel is visible
-    await expect(page.locator('#temps-panel')).toBeVisible();
-
-    // 4. Verify User Settings dropdown is closed
-    await expect(page.locator('#profile-dropdown')).not.toBeVisible();
-
-    // 5. Click outside (e.g. on the header logo) to close temps panel
+    // 3. Click outside to close
     await page.click('.logo');
-
-    // 6. Verify Cooking Temperatures panel is closed
-    await expect(page.locator('#temps-panel')).not.toBeVisible();
+    await expect(page.locator('#profile-dropdown')).not.toBeVisible();
   });
 });
 

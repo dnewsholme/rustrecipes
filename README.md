@@ -32,21 +32,22 @@ A fast, self-hosted recipe manager built with Rust, Axum, and Askama. Designed f
 
 ## ✨ Features
 
-- **Mobile-First UI** — Tabbed recipe view, Wake Lock API for cooking, responsive hamburger menu, and card-based admin panel on small screens.
-- **Cooking Timer** — Quick-access floating timer with smart suggestions extracted from recipe text, sound/vibration alerts, and browser notifications.
+- **Default Modern React SPA & PWA** — High-performance single page application served at root `/` and `/app/`, installable as a Progressive Web App (PWA) with offline shell caching, instant search, collapsible tag filters, dark/light mode, and full browser back/forward history navigation.
+- **Mobile-Responsive Design** — Tailored mobile experience with flexible multi-row headers, touch-friendly tabbed recipe views (Ingredients, Directions, Graphs, Fermentation, Notes), responsive forms, and safe-area insets.
+- **Wake Lock Control** — Dedicated screen wake lock button (`#wakelock-btn`) powered by the Screen Wake Lock API to prevent devices from sleeping while cooking.
+- **Cooking Timer** — Quick-access floating timer with smart suggestions extracted from recipe cook times, sound/vibration alerts, and browser notifications.
 - **Cooking Temperatures & USDA Log 7** — Built-in meat temp reference and an interactive hold-time calculator for safe poultry lethality at lower temps.
-- **Multi-Tag Filtering** — Apply multiple tags with AND logic; the filter menu dynamically updates to only show relevant tags.
+- **Multi-Tag Filtering** — Apply multiple tags with AND logic; collapsible tag panel dynamically updates to show active and matching tags.
 - **Favorites** — Mark recipes as favorites from cards or detail pages; filter by favorites on the home screen.
-- **Ingredient Scaling & Unit Conversion** — Scale yields (0.5x–3x) and convert between Original, Metric, and Imperial inline.
+- **Ingredient Scaling & Unit Conversion** — Scale yields (0.5x–2x) and convert between Original, Metric, and Imperial inline with highlighted conversion text.
 - **Baker's Percentage Mode** — Auto-activates for `bread`/`dough` tagged recipes, showing hydration and ratios relative to flour weight.
-- **Combustion Inc. Integration** — Upload thermometer CSV exports to visualize core, surface, and ambient temps with Chart.js.
+- **Combustion Inc. Integration** — Upload thermometer CSV exports to visualize core, surface, and ambient temps with interactive charts.
 - **Fermentation Calculator** — Estimates proofing times based on yeast/starter amounts and kitchen temperature.
 - **Smart Import** — Scrape recipes from URLs (LD+JSON or Gemini AI fallback), import Paprika archives, or snap a photo of a cookbook page with AI Vision.
 - **YouTube Import** — Paste a YouTube URL to generate a recipe from the transcript via Gemini AI, with an embedded player for follow-along.
 - **Shopping Lists** — Select multiple recipes, scale portions, and generate a combined ingredient list. Lists are persisted server-side with check-off state and can be cleared.
-- **Multi-User & Access Control** — Self-service registration, bcrypt passwords, Google OAuth 2.0, per-user recipe ownership, and public/private visibility toggles.
-- **Admin Panel** — Manage users, reset passwords, and delete accounts from a responsive admin interface.
-- **Modern Vite + React SPA** — High-performance single page application served at `/app/`, featuring instantaneous search, tag filters, live unit scaling, and dark/light mode.
+- **Multi-User & Access Control** — Self-service registration, bcrypt passwords, WebAuthn Passkeys, OpenID Connect (OIDC / Pocket ID), Google OAuth 2.0, per-user recipe ownership, and public/private visibility toggles.
+- **Admin User Management** — Dedicated admin user management interface (`/admin/users`) for administrators to manage users and roles.
 - **User Data Export** — One-click backup of all user data (`/export` or `/api/v1/user/export`), downloading a comprehensive JSON archive containing owned recipes, ingredients, instructions, notes, meal plans, shopping list, and favorites.
 - **Structured Logging & Observability** — Built-in tracing powered by `tracing_subscriber` and `tower_http::TraceLayer`, configurable via `RUST_LOG` (defaults to `recipemanager=info,tower_http=info`).
 - **REST API** — Full CRUD API (`/api/v1`) with token auth for programmatic access. Built-in interactive API guide at `/api` and OpenAPI 3.0 spec at `/api/docs`.
@@ -143,7 +144,7 @@ export SESSION_SECRET='your_random_secret_string'
 cargo run
 ```
 
-Available at `http://localhost:3000` (traditional UI) and `http://localhost:3000/app/` (modern SPA UI).
+Available at `http://localhost:3000` (Modern React SPA default UI) and `http://localhost:3000/app/`.
 
 ---
 

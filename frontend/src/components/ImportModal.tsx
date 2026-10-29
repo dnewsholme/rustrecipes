@@ -133,6 +133,8 @@ export const ImportModal: React.FC<ImportModalProps> = ({ onClose, onImportSucce
                 Paste Recipe Web URL
               </label>
               <input
+                id="url-input"
+                name="url"
                 type="url"
                 required
                 value={url}
@@ -145,6 +147,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({ onClose, onImportSucce
               </p>
             </div>
             <button
+              id="import-btn"
               type="submit"
               disabled={loading}
               className="btn btn-primary"

@@ -216,13 +216,31 @@ async fn spa_fallback(
     Query(_params): Query<std::collections::HashMap<String, String>>,
     uri: axum::http::Uri,
 ) -> Response {
-    let path = uri.path();
+    let mut path = uri.path();
+    if !state.app_base.is_empty() && path.starts_with(state.app_base) {
+        path = &path[state.app_base.len()..];
+    }
     if path.starts_with("/api/")
         || path.starts_with("/static/")
         || path.starts_with("/assets/")
         || path.starts_with("/uploads/")
     {
         return (StatusCode::NOT_FOUND, "Not Found").into_response();
+    }
+
+    let relative_path = path.trim_start_matches('/');
+    if !relative_path.is_empty() {
+        let candidate = std::path::Path::new("frontend/dist").join(relative_path);
+        if candidate.is_file() {
+            let req = axum::http::Request::builder()
+                .uri(uri.clone())
+                .body(axum::body::Body::empty())
+                .unwrap();
+            let res =
+                tower::ServiceExt::oneshot(tower_http::services::ServeFile::new(&candidate), req)
+                    .await;
+            return res.unwrap().into_response();
+        }
     }
 
     default_index(State(state)).await
@@ -1548,13 +1566,47 @@ async fn main() {
         )
         .merge(static_assets);
 
-    let app = Router::new()
-        .merge(public_routes.with_state(state.clone()))
-        .merge(protected_routes.with_state(state.clone()))
+    let mut app = Router::new()
+        .merge(public_routes.clone().with_state(state.clone()))
+        .merge(protected_routes.clone().with_state(state.clone()))
         .nest(
             "/api/v1",
             api::router(state.clone()).with_state(state.clone()),
-        )
+        );
+
+    if !state.app_base.is_empty() {
+        let base = state.app_base.trim_end_matches('/');
+        app = app
+            .nest(
+                &format!("{}/api/v1", base),
+                api::router(state.clone()).with_state(state.clone()),
+            )
+            .nest_service(&format!("{}/static", base), ServeDir::new("static"))
+            .nest_service(&format!("{}/uploads", base), ServeDir::new("data/uploads"))
+            .nest_service(
+                &format!("{}/assets", base),
+                ServeDir::new("frontend/dist/assets"),
+            )
+            .nest_service(
+                &format!("{}/app/assets", base),
+                ServeDir::new("frontend/dist/assets"),
+            )
+            .nest_service(
+                &format!("{}/app", base),
+                ServeDir::new("frontend/dist").fallback(ServeFile::new("frontend/dist/index.html")),
+            )
+            .route(base, get(default_index))
+            .route(&format!("{}/", base), get(default_index))
+            .route(&format!("{}/new", base), get(default_index))
+            .route(&format!("{}/meal-plan", base), get(default_index))
+            .route(&format!("{}/meal-plan/", base), get(default_index))
+            .route(&format!("{}/shopping-list", base), get(default_index))
+            .route(&format!("{}/shopping-list/", base), get(default_index))
+            .route(&format!("{}/recipe/{{id}}", base), get(default_index))
+            .route(&format!("{}/recipe/{{id}}/edit", base), get(default_index));
+    }
+
+    let app = app
         .fallback(spa_fallback)
         .with_state(state)
         .layer(axum::middleware::from_fn(add_security_headers))
@@ -1787,14 +1839,25 @@ mod oauth_tests {
             .route("/spa/", get(redirect_to_app))
             .merge(static_assets);
 
-        Router::new()
-            .merge(public_routes)
-            .nest(
-                "/api/v1",
-                api::router(state.clone()).with_state(state.clone()),
-            )
-            .fallback(spa_fallback)
-            .with_state(state)
+        let mut app = Router::new().merge(public_routes).nest(
+            "/api/v1",
+            api::router(state.clone()).with_state(state.clone()),
+        );
+
+        if !state.app_base.is_empty() {
+            let base = state.app_base.trim_end_matches('/');
+            app = app
+                .nest(
+                    &format!("{}/api/v1", base),
+                    api::router(state.clone()).with_state(state.clone()),
+                )
+                .route(&format!("{}", base), get(default_index))
+                .route(&format!("{}/", base), get(default_index))
+                .route(&format!("{}/meal-plan", base), get(default_index))
+                .route(&format!("{}/meal-plan/", base), get(default_index));
+        }
+
+        app.fallback(spa_fallback).with_state(state)
     }
 
     #[tokio::test]

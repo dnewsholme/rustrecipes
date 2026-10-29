@@ -54,21 +54,13 @@ export async function createRecipeFromFixture(page: Page, fixturePath: string) {
   
   if (image) await page.fill('#existing_image', image);
   
-  // Handle EasyMDE
+  // Handle Markdown
   const markdownEl = page.locator('#markdown');
   await markdownEl.waitFor({ state: 'attached' });
   
-  await page.evaluate(({val}) => {
-    // @ts-ignore
-    const mde = (window as any).easymde;
-    const el = document.getElementById('markdown') as HTMLTextAreaElement;
-    if (mde) {
-        mde.value(val);
-        mde.codemirror.save(); // Force sync to textarea
-    } else if (el) {
-        el.value = val;
-    }
-  }, {val: markdown});
+  if (markdown) {
+    await markdownEl.fill(markdown);
+  }
 
   if (prep) await page.fill('#prep_time', prep);
   if (cook) await page.fill('#cook_time', cook);

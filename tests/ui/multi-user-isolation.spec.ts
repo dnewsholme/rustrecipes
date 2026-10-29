@@ -89,8 +89,8 @@ test.describe('Multi-User Isolation', () => {
     await expect(mealListB).toContainText('No meals planned yet');
 
     // Verify User B does NOT see User A's recipe by default (since public recipes from others are filtered out)
-    const recipeCardB = pageB.locator(`.recipe-card:has-text("User A Recipe")`);
-    await expect(recipeCardB).not.toBeVisible();
+    const recipeCardB = pageB.locator(`.recipe-card:has-text("User A Recipe")`).first();
+    await expect(pageB.locator(`.recipe-card:has-text("User A Recipe")`)).toHaveCount(0);
 
     // Verify User B CAN see User A's recipe once they toggle the "Show Public" filter!
     const toggleFiltersBtn = pageB.locator('#toggle-filters-btn');

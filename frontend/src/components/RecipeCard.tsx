@@ -1,7 +1,7 @@
 import React from 'react';
 import { Star, Clock, Calendar, Check, Utensils } from 'lucide-react';
 import type { Recipe } from '../types';
-import { resolveMediaUrl } from '../api';
+import { resolveMediaUrl, getAppBase } from '../api';
 
 interface RecipeCardProps {
   recipe: Recipe;
@@ -10,6 +10,8 @@ interface RecipeCardProps {
   onToggleMealPlan?: (id: string) => void;
   isPlanned?: boolean;
   canFavorite?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: (id: string) => void;
 }
 
 export const RecipeCard: React.FC<RecipeCardProps> = ({
@@ -19,21 +21,54 @@ export const RecipeCard: React.FC<RecipeCardProps> = ({
   onToggleMealPlan,
   isPlanned = false,
   canFavorite = false,
+  isSelected = false,
+  onToggleSelect,
 }) => {
   const [showAllTags, setShowAllTags] = React.useState(false);
+  const cardTags = (recipe.tags || []).map((t) => t.toLowerCase());
+  if (recipe.has_video || recipe.video_url) cardTags.push('has-video');
+  if (recipe.has_combustion || recipe.combustion_csv) cardTags.push('has-combustion');
+  if (recipe.favorite) cardTags.push('is-favorite');
+  const tagsString = cardTags.join(',');
 
   return (
     <div
-      className="card card-hover"
+      className="card card-hover recipe-card"
+      data-tags={tagsString}
       style={{
         display: 'flex',
         flexDirection: 'column',
         cursor: 'pointer',
         height: '100%',
         position: 'relative',
+        border: isSelected ? '2px solid var(--accent)' : undefined,
       }}
       onClick={() => onSelect(recipe)}
     >
+      {/* Recipe multi-select checkbox */}
+      <input
+        type="checkbox"
+        className="recipe-select-checkbox"
+        value={recipe.id}
+        checked={isSelected}
+        onChange={(e) => {
+          e.stopPropagation();
+          onToggleSelect?.(recipe.id);
+        }}
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          position: 'absolute',
+          top: 10,
+          left: 10,
+          width: 22,
+          height: 22,
+          zIndex: 10,
+          cursor: 'pointer',
+          accentColor: 'var(--accent)',
+          borderRadius: '4px',
+        }}
+      />
+
       {/* Image container */}
       <div style={{ position: 'relative', width: '100%', height: 180, background: 'var(--bg-secondary)', overflow: 'hidden' }}>
         {recipe.image ? (
@@ -71,6 +106,7 @@ export const RecipeCard: React.FC<RecipeCardProps> = ({
               alignItems: 'center',
               justifyContent: 'center',
               transition: 'var(--transition)',
+              zIndex: 5,
             }}
             title={recipe.favorite ? 'Remove from favorites' : 'Add to favorites'}
           >
@@ -102,6 +138,7 @@ export const RecipeCard: React.FC<RecipeCardProps> = ({
               alignItems: 'center',
               gap: '0.3rem',
               transition: 'var(--transition)',
+              zIndex: 5,
             }}
             title={isPlanned ? 'In meal plan' : 'Add to meal plan'}
           >
@@ -113,9 +150,28 @@ export const RecipeCard: React.FC<RecipeCardProps> = ({
 
       {/* Card Content */}
       <div style={{ padding: '1.25rem', flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '0.4rem', color: 'var(--text-primary)', lineHeight: 1.3 }}>
-          {recipe.title}
-        </h3>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.5rem', marginBottom: '0.4rem' }}>
+          <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.3, margin: 0 }}>
+            {recipe.title}
+          </h3>
+          <a
+            href={`${getAppBase()}/recipe/${recipe.id}`}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onSelect(recipe);
+            }}
+            style={{
+              fontSize: '0.8rem',
+              color: 'var(--accent)',
+              textDecoration: 'none',
+              fontWeight: 600,
+              flexShrink: 0,
+            }}
+          >
+            View Recipe
+          </a>
+        </div>
 
         {recipe.description && (
           <p style={{

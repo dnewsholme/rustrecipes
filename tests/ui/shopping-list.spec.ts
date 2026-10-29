@@ -244,7 +244,7 @@ test.describe('Shopping List', () => {
     await page.goto('/');
 
     // 2. Go to recipe detail page and verify section headers display correctly
-    await page.locator('.recipe-card', { hasText: 'Headers Recipe' }).locator('a', { hasText: 'View Recipe' }).click();
+    await page.locator('.recipe-card', { hasText: 'Headers Recipe' }).locator('a', { hasText: 'View Recipe' }).first().click();
     await page.waitForURL(/\/recipe\/test-headers-recipe/);
 
     // Verify section headers are rendered with styled headers class
@@ -285,7 +285,7 @@ test.describe('Shopping List', () => {
     await page.goto('/');
 
     // Check Headers Recipe checkbox
-    const recipeCard = page.locator('.recipe-card', { hasText: 'Headers Recipe' });
+    const recipeCard = page.locator('.recipe-card', { hasText: 'Headers Recipe' }).first();
     const checkbox = recipeCard.locator('.recipe-select-checkbox');
     await checkbox.check();
 

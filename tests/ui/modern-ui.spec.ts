@@ -66,4 +66,45 @@ test.describe('Modern SPA UI End-to-End Suite', () => {
     // Cleanup virtual authenticator
     await cdpSession.send('WebAuthn.disable');
   });
+
+  test('should have rustrecipes site title, wakelock button, and PWA manifest', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('load');
+
+    // Title should be rustrecipes
+    await expect(page).toHaveTitle('rustrecipes');
+
+    // Wakelock button should exist in header
+    const wakeLockBtn = page.locator('#wakelock-btn');
+    await expect(wakeLockBtn).toBeVisible();
+
+    // PWA manifest link should exist
+    const manifestLink = page.locator('link[rel="manifest"]');
+    await expect(manifestLink).toHaveAttribute('href', 'manifest.json');
+  });
+
+  test('browser back button navigates back to previous views properly', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('load');
+
+    // Navigate to Shopping List via header
+    await page.click('button[title="Shopping List"]');
+    await expect(page.locator('#shopping-list-ul')).toBeVisible();
+    expect(page.url()).toContain('/shopping-list');
+
+    // Click browser back button
+    await page.goBack();
+    await page.waitForLoadState('load');
+
+    // Should return to recipes catalog view
+    await expect(page.locator('#shopping-list-ul')).not.toBeVisible();
+    await expect(page.locator('.recipes-grid, .recipe-content, .logo')).toBeVisible();
+
+    // Click browser forward button
+    await page.goForward();
+    await page.waitForLoadState('load');
+
+    // Should be back on Shopping List view
+    await expect(page.locator('#shopping-list-ul')).toBeVisible();
+  });
 });

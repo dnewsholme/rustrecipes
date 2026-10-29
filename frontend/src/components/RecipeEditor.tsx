@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Upload, Save, ArrowLeft, Wand2 } from 'lucide-react';
+import { Upload, Save, ArrowLeft, Wand2, Bold, Italic, Heading, Link, ListOrdered } from 'lucide-react';
 import type { Recipe, RecipeInput } from '../types';
 import { api } from '../api';
 
@@ -66,6 +66,23 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
     }
   };
 
+  const handleInsertMarkdown = (prefix: string, suffix: string, defaultText: string) => {
+    const ta = document.getElementById('markdown') as HTMLTextAreaElement | null;
+    if (!ta) return;
+    const start = ta.selectionStart ?? 0;
+    const end = ta.selectionEnd ?? 0;
+    const val = ta.value;
+    const selected = val.substring(start, end) || defaultText;
+    const replacement = prefix + selected + suffix;
+    const newVal = val.substring(0, start) + replacement + val.substring(end);
+    setMarkdown(newVal);
+    ta.value = newVal;
+    setTimeout(() => {
+      ta.focus();
+      ta.setSelectionRange(start + prefix.length, start + prefix.length + selected.length);
+    }, 0);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) {
@@ -86,7 +103,9 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
     const finalIngredientsText = ingredientsEl ? ingredientsEl.value : ingredientsText;
 
     const markdownEl = document.getElementById('markdown') as HTMLTextAreaElement | null;
-    const finalMarkdown = markdownEl ? markdownEl.value.trim() : markdown.trim();
+    let finalMarkdown = markdownEl ? markdownEl.value.trim() : markdown.trim();
+    // Normalize step line breaks: ensure blank lines between numbered steps for CommonMark & parsers
+    finalMarkdown = finalMarkdown.replace(/([^\n])\r?\n(\s*(?:Step\s+)?\d+[\.:\)])/g, '$1\n\n$2');
 
     const parsedTags = finalTags
       .split(',')
@@ -172,6 +191,7 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
           )}
 
           <button
+            id="save-recipe-btn"
             onClick={handleSubmit}
             disabled={saving}
             className="btn btn-primary"
@@ -289,7 +309,7 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
           </div>
 
           {/* Media & Links */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          <div className="form-grid-2">
             <div>
               <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.4rem', fontSize: '0.85rem' }}>
                 Photo (URL or File Upload)
@@ -334,7 +354,7 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
           </div>
 
           {/* Source and Video URLs */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          <div className="form-grid-2">
             <div>
               <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.4rem', fontSize: '0.85rem' }}>
                 Source URL
@@ -383,15 +403,70 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
 
           {/* Instructions Input */}
           <div>
-            <label style={{ display: 'block', fontWeight: 600, marginBottom: '0.4rem', fontSize: '0.9rem' }}>
-              Instructions / Directions (Markdown or numbered steps)
-            </label>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <label style={{ display: 'block', fontWeight: 600, fontSize: '0.9rem', margin: 0 }}>
+                Instructions / Directions (Markdown or numbered steps)
+              </label>
+              {/* Markdown Formatting Toolbar */}
+              <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => handleInsertMarkdown('**', '**', 'bold text')}
+                  className="btn btn-secondary btn-sm"
+                  style={{ padding: '0.2rem 0.5rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                  title="Bold (**text**)"
+                >
+                  <Bold size={13} />
+                  <span>Bold</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleInsertMarkdown('_', '_', 'italic text')}
+                  className="btn btn-secondary btn-sm"
+                  style={{ padding: '0.2rem 0.5rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                  title="Italic (_text_)"
+                >
+                  <Italic size={13} />
+                  <span>Italic</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleInsertMarkdown('### ', '\n', 'Heading')}
+                  className="btn btn-secondary btn-sm"
+                  style={{ padding: '0.2rem 0.5rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                  title="Heading (### Heading)"
+                >
+                  <Heading size={13} />
+                  <span>Heading</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleInsertMarkdown('[', '](https://example.com)', 'link text')}
+                  className="btn btn-secondary btn-sm"
+                  style={{ padding: '0.2rem 0.5rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                  title="Link ([title](url))"
+                >
+                  <Link size={13} />
+                  <span>Link</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleInsertMarkdown('1. ', '\n\n2. ', 'First step')}
+                  className="btn btn-secondary btn-sm"
+                  style={{ padding: '0.2rem 0.5rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                  title="Numbered Steps (1. Step)"
+                >
+                  <ListOrdered size={13} />
+                  <span>Steps</span>
+                </button>
+              </div>
+            </div>
             <textarea
               id="markdown"
               rows={8}
               value={markdown}
               onChange={(e) => setMarkdown(e.target.value)}
-              placeholder="1. Mix ingredients and rest for 30 minutes.&#10;2. Perform stretch and fold every 30 minutes.&#10;3. Bake at 450°F for 30 minutes."
+              placeholder="1. Mix ingredients and rest for 30 minutes.&#10;&#10;2. Perform stretch and fold every 30 minutes.&#10;&#10;3. Bake at 450°F for 30 minutes."
               className="textarea"
               style={{ lineHeight: 1.6 }}
             />
@@ -401,6 +476,7 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', paddingTop: '0.5rem' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.95rem' }}>
               <input
+                id="is_public"
                 type="checkbox"
                 checked={isPublic}
                 onChange={(e) => setIsPublic(e.target.checked)}
