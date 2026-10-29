@@ -229,9 +229,26 @@ export const CookModeModal: React.FC<CookModeModalProps> = ({ recipe, onClose, o
                   style={{ cursor: 'pointer' }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem' }}>
-                    <span style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--accent)' }}>
-                      Step {idx + 1} of {steps.length}
-                    </span>
+                    <div>
+                      {st.section && (
+                        <div
+                          className="cook-step-stage"
+                          style={{
+                            fontSize: '0.85rem',
+                            fontWeight: 700,
+                            color: 'var(--text-secondary)',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.05em',
+                            marginBottom: '0.2rem',
+                          }}
+                        >
+                          {st.section} — Stage Step {st.step_number}
+                        </div>
+                      )}
+                      <span style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--accent)' }}>
+                        Step {idx + 1} of {steps.length}
+                      </span>
+                    </div>
                     <button
                       type="button"
                       onClick={(e) => {

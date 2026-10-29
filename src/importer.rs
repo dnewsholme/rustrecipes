@@ -330,8 +330,9 @@ fn process_instructions(markdown: &mut String, value: &Value, step_counter: &mut
 
             if type_str == "HowToSection" {
                 if let Some(name) = obj.get("name").and_then(|v| v.as_str()) {
-                    markdown.push_str(&format!("\n### {}\n\n", decode_html(name)));
+                    markdown.push_str(&format!("\n## {}\n\n", decode_html(name)));
                 }
+                *step_counter = 1;
                 if let Some(items) = obj.get("itemListElement").and_then(|v| v.as_array()) {
                     for item in items {
                         process_instructions(markdown, item, step_counter);

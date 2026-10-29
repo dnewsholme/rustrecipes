@@ -110,10 +110,12 @@ pub fn db_init(
             recipe_id TEXT NOT NULL,
             step_number INTEGER NOT NULL,
             instruction TEXT NOT NULL,
+            section TEXT,
             FOREIGN KEY(recipe_id) REFERENCES recipes(id) ON DELETE CASCADE
         )",
         [],
     )?;
+    let _ = conn.execute("ALTER TABLE recipe_steps ADD COLUMN section TEXT", []);
 
     // Create normalized recipe_tags table
     conn.execute(
@@ -504,9 +506,14 @@ pub fn db_init(
                 let steps = crate::conversions::parse_recipe_steps(&md_str);
                 for step in steps {
                     let _ = conn.execute(
-                        "INSERT INTO recipe_steps (recipe_id, step_number, instruction)
-                         VALUES (?1, ?2, ?3)",
-                        rusqlite::params![recipe_id, step.step_number, step.instruction],
+                        "INSERT INTO recipe_steps (recipe_id, step_number, instruction, section)
+                         VALUES (?1, ?2, ?3, ?4)",
+                        rusqlite::params![
+                            recipe_id,
+                            step.step_number,
+                            step.instruction,
+                            step.section
+                        ],
                     );
                 }
             }
@@ -758,14 +765,15 @@ pub fn read_recipe_for_user(id: &str, user_id: Option<&str>) -> Option<Recipe> {
 
         // Load normalized steps
         if let Ok(mut step_stmt) = conn.prepare(
-            "SELECT id, step_number, instruction 
-             FROM recipe_steps WHERE recipe_id = ?1 ORDER BY step_number ASC",
+            "SELECT id, step_number, instruction, section 
+             FROM recipe_steps WHERE recipe_id = ?1 ORDER BY id ASC",
         ) && let Ok(step_rows) = step_stmt.query_map([&recipe.id], |row| {
             Ok(crate::models::RecipeStep {
                 id: row.get(0)?,
                 recipe_id: Some(recipe.id.clone()),
                 step_number: row.get(1)?,
                 instruction: row.get(2)?,
+                section: row.get(3).ok().flatten(),
             })
         }) {
             let steps: Vec<crate::models::RecipeStep> = step_rows.flatten().collect();
@@ -881,18 +889,28 @@ fn save_recipe_db(conn: &rusqlite::Connection, recipe: &Recipe) -> Result<(), st
     if !recipe.steps.is_empty() {
         for step in &recipe.steps {
             let _ = conn.execute(
-                "INSERT INTO recipe_steps (recipe_id, step_number, instruction)
-                 VALUES (?1, ?2, ?3)",
-                rusqlite::params![&recipe.id, step.step_number, &step.instruction],
+                "INSERT INTO recipe_steps (recipe_id, step_number, instruction, section)
+                 VALUES (?1, ?2, ?3, ?4)",
+                rusqlite::params![
+                    &recipe.id,
+                    step.step_number,
+                    &step.instruction,
+                    &step.section
+                ],
             );
         }
     } else {
         let steps = crate::conversions::parse_recipe_steps(&recipe.markdown);
         for step in steps {
             let _ = conn.execute(
-                "INSERT INTO recipe_steps (recipe_id, step_number, instruction)
-                 VALUES (?1, ?2, ?3)",
-                rusqlite::params![&recipe.id, step.step_number, &step.instruction],
+                "INSERT INTO recipe_steps (recipe_id, step_number, instruction, section)
+                 VALUES (?1, ?2, ?3, ?4)",
+                rusqlite::params![
+                    &recipe.id,
+                    step.step_number,
+                    &step.instruction,
+                    &step.section
+                ],
             );
         }
     }

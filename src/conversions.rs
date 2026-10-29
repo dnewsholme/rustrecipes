@@ -465,7 +465,10 @@ pub fn convert_recipe(
 
     let youtube_id = recipe.youtube_id();
 
-    let steps = if !recipe.steps.is_empty() {
+    let parsed_md_steps = parse_recipe_steps(&recipe.markdown);
+    let steps = if !parsed_md_steps.is_empty() {
+        parsed_md_steps
+    } else {
         recipe
             .steps
             .into_iter()
@@ -474,8 +477,6 @@ pub fn convert_recipe(
                 s
             })
             .collect()
-    } else {
-        parse_recipe_steps(&recipe.markdown)
     };
 
     ConvertedRecipe {
@@ -587,12 +588,19 @@ pub fn parse_ingredient_line(raw: &str, sort_order: i32) -> crate::models::Recip
 pub fn parse_recipe_steps(markdown: &str) -> Vec<crate::models::RecipeStep> {
     let mut steps = Vec::new();
     let mut step_num = 1;
-    let step_num_re = regex::Regex::new(r"^\d+\.\s*").ok();
+    let mut current_section: Option<String> = None;
+    let step_num_re = regex::Regex::new(r"^(?:(?i:step)\s+)?\d+[\.:\)]\s*").ok();
 
-    // Ensure steps with numbers (e.g. "1. Mix\n2. Rest") have paragraph breaks so they parse properly
+    // Ensure markdown heading lines (e.g. "## Marinade", "### Dough") are separated into their own blocks
+    // even when written without blank lines before or after them.
+    let re_heading_line = regex::Regex::new(r"(?m)^[ \t]*(#{1,6}[ \t]+[^\r\n]+)\r?$").unwrap();
+    let with_headings_isolated = re_heading_line.replace_all(markdown, "\n\n$1\n\n");
+
+    // Ensure steps with numbers (e.g. "1. Mix\n2. Rest") or bullets have paragraph breaks so they parse properly
     // even without double line breaks.
-    let re_single_break = regex::Regex::new(r"([^\n])\r?\n(\s*(?:Step\s+)?\d+[\.:\)])").unwrap();
-    let normalized = re_single_break.replace_all(markdown, "$1\n\n$2");
+    let re_single_break =
+        regex::Regex::new(r"([^\n])\r?\n(\s*(?:(?:(?i:step)\s+)?\d+[\.:\)]|[-\*]\s+))").unwrap();
+    let normalized = re_single_break.replace_all(&with_headings_isolated, "$1\n\n$2");
 
     for block in normalized.split("\n\n") {
         let block = block.trim();
@@ -600,16 +608,34 @@ pub fn parse_recipe_steps(markdown: &str) -> Vec<crate::models::RecipeStep> {
             continue;
         }
 
-        // Skip heading-only blocks like "### Instructions" or "## Directions"
-        if block.starts_with('#') {
-            let lower = block.to_lowercase();
-            if lower.contains("instruction")
-                || lower.contains("direction")
-                || lower.contains("method")
-                || lower.contains("step")
+        // Handle heading blocks: skip generic top-level "Instructions"/"Directions" headers,
+        // and treat stage headings (e.g. "## Marinade", "## Dough") as stage separators that reset step numbering.
+        if block.starts_with('#') && !block.contains('\n') {
+            let heading_text = block
+                .trim_start_matches('#')
+                .trim()
+                .trim_end_matches(':')
+                .trim();
+            let lower = heading_text.to_lowercase();
+            if matches!(
+                lower.as_str(),
+                "instructions"
+                    | "instruction"
+                    | "directions"
+                    | "direction"
+                    | "method"
+                    | "steps"
+                    | "preparation"
+            ) && current_section.is_none()
+                && steps.is_empty()
             {
                 continue;
             }
+            if !heading_text.is_empty() {
+                current_section = Some(heading_text.to_string());
+                step_num = 1;
+            }
+            continue;
         }
 
         let lines: Vec<&str> = block
@@ -635,6 +661,7 @@ pub fn parse_recipe_steps(markdown: &str) -> Vec<crate::models::RecipeStep> {
                         recipe_id: None,
                         step_number: step_num,
                         instruction: text.to_string(),
+                        section: current_section.clone(),
                     });
                     step_num += 1;
                 }
@@ -654,6 +681,7 @@ pub fn parse_recipe_steps(markdown: &str) -> Vec<crate::models::RecipeStep> {
                 recipe_id: None,
                 step_number: step_num,
                 instruction: text.trim().to_string(),
+                section: current_section.clone(),
             });
             step_num += 1;
         }
@@ -672,6 +700,7 @@ mod tests {
         let steps = parse_recipe_steps(md);
         assert_eq!(steps.len(), 3);
         assert_eq!(steps[0].instruction, "Mix flour, water, and salt.");
+        assert_eq!(steps[0].section, None);
         assert_eq!(steps[1].instruction, "Rest for 30 minutes.");
         assert_eq!(steps[2].instruction, "Bake at 450°F.");
 
@@ -679,7 +708,24 @@ mod tests {
         let steps2 = parse_recipe_steps(md_with_heading);
         assert_eq!(steps2.len(), 2);
         assert_eq!(steps2[0].instruction, "Mix flour");
+        assert_eq!(steps2[0].section, None);
         assert_eq!(steps2[1].instruction, "Bake");
+
+        let md_stages = "## Marinade\n1. Whisk soy sauce and garlic.\n2. Coat chicken for 30 minutes.\n## Dough\n1. Combine flour and water.\n2. Knead for 10 minutes.";
+        let stage_steps = parse_recipe_steps(md_stages);
+        assert_eq!(stage_steps.len(), 4);
+        assert_eq!(stage_steps[0].section.as_deref(), Some("Marinade"));
+        assert_eq!(stage_steps[0].step_number, 1);
+        assert_eq!(stage_steps[0].instruction, "Whisk soy sauce and garlic.");
+        assert_eq!(stage_steps[1].section.as_deref(), Some("Marinade"));
+        assert_eq!(stage_steps[1].step_number, 2);
+        assert_eq!(stage_steps[1].instruction, "Coat chicken for 30 minutes.");
+        assert_eq!(stage_steps[2].section.as_deref(), Some("Dough"));
+        assert_eq!(stage_steps[2].step_number, 1);
+        assert_eq!(stage_steps[2].instruction, "Combine flour and water.");
+        assert_eq!(stage_steps[3].section.as_deref(), Some("Dough"));
+        assert_eq!(stage_steps[3].step_number, 2);
+        assert_eq!(stage_steps[3].instruction, "Knead for 10 minutes.");
     }
 
     #[test]

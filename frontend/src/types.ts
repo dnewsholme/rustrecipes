@@ -14,6 +14,7 @@ export interface RecipeStep {
   recipe_id?: string | null;
   step_number: number;
   instruction: string;
+  section?: string | null;
 }
 
 export interface Recipe {

@@ -52,7 +52,8 @@ pub async fn openapi_json() -> impl IntoResponse {
                         "id": { "type": "integer", "nullable": true },
                         "recipe_id": { "type": "string", "nullable": true },
                         "step_number": { "type": "integer" },
-                        "instruction": { "type": "string" }
+                        "instruction": { "type": "string" },
+                        "section": { "type": "string", "nullable": true }
                     },
                     "required": ["step_number", "instruction"]
                 },

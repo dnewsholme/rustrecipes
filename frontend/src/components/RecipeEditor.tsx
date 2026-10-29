@@ -121,7 +121,9 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
 
     const markdownEl = document.getElementById('markdown') as HTMLTextAreaElement | null;
     let finalMarkdown = markdownEl ? markdownEl.value.trim() : markdown.trim();
-    // Normalize step line breaks: ensure blank lines between numbered steps for CommonMark & parsers
+    // Normalize stage headings and step line breaks so CommonMark & parsers handle stages and numbered steps cleanly
+    finalMarkdown = finalMarkdown.replace(/([^\n])\r?\n([ \t]*#{1,6}[ \t]+)/g, '$1\n\n$2');
+    finalMarkdown = finalMarkdown.replace(/(^|\n)([ \t]*#{1,6}[ \t]+[^\r\n]+)\r?\n(?!\r?\n)/g, '$1$2\n\n');
     finalMarkdown = finalMarkdown.replace(/([^\n])\r?\n(\s*(?:Step\s+)?\d+[\.:\)])/g, '$1\n\n$2');
 
     const parsedTags = finalTags
@@ -432,7 +434,7 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem', flexWrap: 'wrap', gap: '0.5rem' }}>
               <label style={{ display: 'block', fontWeight: 600, fontSize: '0.9rem', margin: 0 }}>
-                Instructions / Directions (Markdown or numbered steps)
+                Instructions / Directions (Use ## Stage for stages with separate numbered steps)
               </label>
               {/* Markdown Formatting Toolbar */}
               <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
@@ -458,13 +460,13 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleInsertMarkdown('### ', '\n', 'Heading')}
+                  onClick={() => handleInsertMarkdown('## ', '\n1. ', 'Stage Name')}
                   className="btn btn-secondary btn-sm"
                   style={{ padding: '0.2rem 0.5rem', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
-                  title="Heading (### Heading)"
+                  title="Stage Heading (## Stage Name)"
                 >
                   <Heading size={13} />
-                  <span>Heading</span>
+                  <span>Stage / Heading</span>
                 </button>
                 <button
                   type="button"

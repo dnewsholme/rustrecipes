@@ -27,6 +27,8 @@ pub struct RecipeStep {
     pub recipe_id: Option<String>,
     pub step_number: i32,
     pub instruction: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub section: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]

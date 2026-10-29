@@ -56,4 +56,28 @@ test.describe('Cook Mode', () => {
     // Verify overlay is closed
     await expect(overlay).not.toBeVisible();
   });
+
+  test('should support recipe stages separated by headings with separate numbered steps underneath each stage', async ({ page }) => {
+    await page.goto('/new');
+    await page.fill('#title', `Staged Recipe ${Date.now()}`);
+    await page.fill('#ingredients', '## Marinade\n2 tbsp soy sauce\n## Dough\n500g flour\n350g water');
+    await page.fill(
+      '#markdown',
+      '## Marinade\n1. Whisk soy sauce and spices.\n2. Coat protein for 30 minutes.\n## Dough\n1. Mix flour and water.\n2. Knead for 10 minutes.'
+    );
+    await page.click('#save-recipe-btn');
+    await page.waitForURL(/\/recipe\//, { timeout: 10000 });
+
+    const sectionHeaders = page.locator('#recipe-instructions .direction-section-header');
+    await expect(sectionHeaders).toHaveCount(2);
+    await expect(sectionHeaders.nth(0)).toHaveText('Marinade');
+    await expect(sectionHeaders.nth(1)).toHaveText('Dough');
+
+    const stepNumbers = page.locator('#recipe-instructions .direction-step-number');
+    await expect(stepNumbers).toHaveCount(4);
+    await expect(stepNumbers.nth(0)).toHaveText('1');
+    await expect(stepNumbers.nth(1)).toHaveText('2');
+    await expect(stepNumbers.nth(2)).toHaveText('1');
+    await expect(stepNumbers.nth(3)).toHaveText('2');
+  });
 });

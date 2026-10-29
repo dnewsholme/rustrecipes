@@ -841,28 +841,53 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({
               </h2>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                 {recipe.steps && recipe.steps.length > 0 ? (
-                  recipe.steps.map((step) => (
-                    <div key={step.step_number} style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
-                      <div style={{
-                        width: 28,
-                        height: 28,
-                        borderRadius: '999px',
-                        background: 'var(--bg-card-hover)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontWeight: 700,
-                        fontSize: '0.85rem',
-                        color: 'var(--accent)',
-                        flexShrink: 0,
-                      }}>
-                        {step.step_number}
-                      </div>
-                      <p style={{ fontSize: '1.05rem', lineHeight: 1.6, color: 'var(--text-primary)' }}>
-                        {formatTextWithSpans(step.instruction)}
-                      </p>
-                    </div>
-                  ))
+                  recipe.steps.map((step, idx) => {
+                    const prevSection = idx > 0 ? recipe.steps[idx - 1].section : undefined;
+                    const showSectionHeader = Boolean(step.section && step.section !== prevSection);
+                    return (
+                      <React.Fragment key={`${step.section || 'default'}-${step.step_number}-${idx}`}>
+                        {showSectionHeader && (
+                          <h3
+                            className="direction-section-header"
+                            style={{
+                              fontSize: '1.1rem',
+                              fontWeight: 700,
+                              color: 'var(--accent)',
+                              marginTop: idx === 0 ? 0 : '0.75rem',
+                              marginBottom: '-0.25rem',
+                              borderBottom: '1px solid var(--border)',
+                              paddingBottom: '0.35rem',
+                            }}
+                          >
+                            {step.section}
+                          </h3>
+                        )}
+                        <div className="direction-step-item" style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+                          <div
+                            className="direction-step-number"
+                            style={{
+                              width: 28,
+                              height: 28,
+                              borderRadius: '999px',
+                              background: 'var(--bg-card-hover)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontWeight: 700,
+                              fontSize: '0.85rem',
+                              color: 'var(--accent)',
+                              flexShrink: 0,
+                            }}
+                          >
+                            {step.step_number}
+                          </div>
+                          <p style={{ fontSize: '1.05rem', lineHeight: 1.6, color: 'var(--text-primary)' }}>
+                            {formatTextWithSpans(step.instruction)}
+                          </p>
+                        </div>
+                      </React.Fragment>
+                    );
+                  })
                 ) : (
                   <div style={{ lineHeight: 1.7, fontSize: '1.05rem' }}>
                     {formatTextWithSpans(recipe.markdown)}
