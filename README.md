@@ -69,6 +69,8 @@ A fast, self-hosted recipe manager built with Rust, Axum, and React. Designed fo
 | `/meal-plan` | `POST` | Schedule recipe or custom meal entry. |
 | `/meal-plan/{id}` | `DELETE` | Remove meal plan item. |
 | `/meal-plan/toggle` | `POST` | Quick toggle recipe on meal planner. |
+| `/auth/tokens` | `GET`, `POST` | List or generate personal API tokens scoped to the current user. |
+| `/auth/tokens/{id}` | `DELETE` | Revoke a personal API token. |
 | `/temps` | `GET` | Internal meat doneness temperature reference. |
 | `/spices` | `GET` | Common kitchen pantry spices list. |
 | `/log7` | `GET` | USDA Log 7 poultry pasteurization hold-time calculator. |
@@ -101,7 +103,6 @@ Copy the output (e.g., `$2y$12$...`) and use it as `ADMIN_PASSWORD_HASH`.
 | :--- | :--- | :--- |
 | `ADMIN_EMAIL` | **Yes*** | Email address of the default admin account (*optional when OIDC is configured). |
 | `ADMIN_PASSWORD_HASH` | **Yes*** | Bcrypt hash for admin login (*optional when OIDC is configured; defaults to password `"admin"` if `ADMIN_EMAIL` is set without a hash). |
-| `API_TOKEN` | Yes | Token for API write access. |
 | `SESSION_SECRET` | Recommended | Signs session cookies. Sessions reset on restart if omitted. |
 | `GEMINI_API_KEY` | No | Enables AI photo/video/URL import via [Google AI Studio](https://aistudio.google.com/app/apikey). |
 | `OIDC_ISSUER_URL` | No | OIDC base issuer URL (e.g., `https://id.example.com`). Fetches `/.well-known/openid-configuration` auto-discovery. |

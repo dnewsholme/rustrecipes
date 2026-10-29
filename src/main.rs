@@ -1840,9 +1840,6 @@ async fn main() {
         .ok()
         .map(|t| t.trim().to_string())
         .filter(|t| !t.is_empty());
-    if api_token.is_none() {
-        warn!("API_TOKEN is not set. Bearer-token API access is disabled.");
-    }
 
     let state = AppState {
         key,

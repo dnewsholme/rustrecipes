@@ -7,6 +7,7 @@ import {
   LogIn,
   LogOut,
   Key,
+  KeyRound,
   Moon,
   Sun,
   BookOpen,
@@ -34,6 +35,7 @@ interface HeaderProps {
   mealPlanCount: number;
   onOpenLogin: () => void;
   onOpenPasskeys: () => void;
+  onOpenApiTokens?: () => void;
   onLogout: () => void;
   onOpenNewRecipe: () => void;
   onOpenImport?: () => void;
@@ -54,6 +56,7 @@ export const Header: React.FC<HeaderProps> = ({
   mealPlanCount,
   onOpenLogin,
   onOpenPasskeys,
+  onOpenApiTokens,
   onLogout,
   onOpenNewRecipe,
   onOpenImport,
@@ -743,6 +746,19 @@ export const Header: React.FC<HeaderProps> = ({
                       >
                         <Key size={16} />
                         <span>Manage Passkeys</span>
+                      </button>
+
+                      <button
+                        id="manage-api-tokens-btn"
+                        onClick={() => {
+                          setProfileDropdownOpen(false);
+                          onOpenApiTokens?.();
+                        }}
+                        className="dropdown-item"
+                        style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0.75rem' }}
+                      >
+                        <KeyRound size={16} />
+                        <span>API Tokens</span>
                       </button>
 
                       <a

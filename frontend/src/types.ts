@@ -121,3 +121,20 @@ export interface ActiveTimer {
   remainingSeconds: number;
   isRunning: boolean;
 }
+
+export interface UserApiToken {
+  id: string;
+  user_id: string;
+  name: string;
+  token_prefix: string;
+  created_at: string;
+  last_used_at?: string | null;
+}
+
+export interface CreatedApiToken {
+  id: string;
+  name: string;
+  token: string;
+  token_prefix: string;
+  created_at: string;
+}

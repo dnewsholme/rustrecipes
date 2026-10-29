@@ -84,6 +84,11 @@ pub fn router(_state: AppState) -> Router<AppState> {
             "/auth/oidc/backchannel-logout",
             post(crate::logout_oidc_backchannel),
         )
+        .route(
+            "/auth/tokens",
+            get(list_user_api_tokens).post(create_user_api_token),
+        )
+        .route("/auth/tokens/{id}", delete(delete_user_api_token))
         .route("/user/export", get(export_user_data_api))
         .route("/admin/users", get(admin_list_users))
         .route("/admin/users/{id}", delete(admin_delete_user))
@@ -239,21 +244,33 @@ impl FromRequestParts<AppState> for MaybeUser {
                 .filter(|s| !s.is_empty())
                 .ok_or(ApiError::Unauthorized)?;
 
-            let Some(expected) = state.api_token.as_deref() else {
-                warn!("Bearer token supplied but API_TOKEN is not configured.");
-                return Err(ApiError::Unauthorized);
-            };
-            if !token_matches(presented, expected) {
-                return Err(ApiError::Unauthorized);
+            // 1a. Check user-generated API tokens scoped to that user's permissions.
+            let tok_lookup = presented.to_string();
+            if let Some(user) =
+                blocking(move || storage::find_user_by_api_token(&tok_lookup)).await?
+            {
+                let admin_id = blocking(admin_user_id).await?;
+                let is_admin = user.is_admin || admin_id.as_deref() == Some(user.id.as_str());
+                return Ok(MaybeUser(Some(CurrentUser {
+                    id: user.id,
+                    is_admin,
+                })));
             }
 
-            let admin_id = blocking(admin_user_id)
-                .await?
-                .ok_or_else(|| ApiError::Internal("admin user not found".into()))?;
-            return Ok(MaybeUser(Some(CurrentUser {
-                id: admin_id,
-                is_admin: true,
-            })));
+            // 1b. Optional legacy/test static token fallback if configured.
+            if let Some(expected) = state.api_token.as_deref()
+                && token_matches(presented, expected)
+            {
+                let admin_id = blocking(admin_user_id)
+                    .await?
+                    .ok_or_else(|| ApiError::Internal("admin user not found".into()))?;
+                return Ok(MaybeUser(Some(CurrentUser {
+                    id: admin_id,
+                    is_admin: true,
+                })));
+            }
+
+            return Err(ApiError::Unauthorized);
         }
 
         // 2. Session cookie.
@@ -1530,6 +1547,68 @@ pub async fn export_user_data_api(user: CurrentUser) -> ApiResult<Response> {
         .map_err(|e| ApiError::Internal(format!("failed to build response: {e}")))
 }
 
+#[derive(Deserialize)]
+pub struct CreateApiTokenPayload {
+    pub name: String,
+}
+
+#[derive(Serialize)]
+pub struct CreatedApiTokenResponse {
+    pub id: String,
+    pub name: String,
+    pub token: String,
+    pub token_prefix: String,
+    pub created_at: String,
+}
+
+pub async fn list_user_api_tokens(
+    user: CurrentUser,
+) -> ApiResult<Json<Vec<crate::models::UserApiToken>>> {
+    let uid = user.id;
+    let tokens = blocking(move || storage::list_user_api_tokens(&uid)).await?;
+    Ok(Json(tokens))
+}
+
+pub async fn create_user_api_token(
+    user: CurrentUser,
+    Json(payload): Json<CreateApiTokenPayload>,
+) -> ApiResult<(StatusCode, Json<CreatedApiTokenResponse>)> {
+    let name = payload.name.trim().to_string();
+    if name.is_empty() {
+        return Err(bad_request("Token name cannot be empty"));
+    }
+    check_len("name", &name, MAX_TITLE_LEN)?;
+    let uid = user.id;
+    let (record, raw_token) = blocking(move || storage::create_user_api_token(&uid, &name))
+        .await?
+        .map_err(|e| ApiError::Internal(format!("failed to create API token: {e}")))?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(CreatedApiTokenResponse {
+            id: record.id,
+            name: record.name,
+            token: raw_token,
+            token_prefix: record.token_prefix,
+            created_at: record.created_at,
+        }),
+    ))
+}
+
+pub async fn delete_user_api_token(
+    user: CurrentUser,
+    Path(id): Path<String>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let uid = user.id;
+    let deleted = blocking(move || storage::delete_user_api_token(&id, &uid))
+        .await?
+        .map_err(|e| ApiError::Internal(format!("failed to delete API token: {e}")))?;
+    if deleted == 0 {
+        return Err(ApiError::NotFound);
+    }
+    Ok(Json(serde_json::json!({ "success": true })))
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct AdminUserDto {
     pub id: String,
@@ -2488,5 +2567,88 @@ mod tests {
             .unwrap();
         let res = app.clone().oneshot(req).await.unwrap();
         assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn test_user_scoped_api_tokens() {
+        let mut state = test_state();
+        state.api_token = None;
+        let app = router(state.clone()).with_state(state.clone());
+
+        save_test_user("token-alice", "alice-tok@example.com");
+        save_test_user("token-bob", "bob-tok@example.com");
+
+        storage::save_recipe(&sample_recipe("alice-priv-tok", "token-alice", false)).unwrap();
+        storage::save_recipe(&sample_recipe("bob-priv-tok", "token-bob", false)).unwrap();
+
+        let alice_cookie = session_cookie(&state, "token-alice");
+
+        // 1. Alice generates an API token via her browser session
+        let req_create = Request::builder()
+            .method("POST")
+            .uri("/auth/tokens")
+            .header("Cookie", &alice_cookie)
+            .header("Content-Type", "application/json")
+            .body(Body::from(r#"{"name": "Alice CLI Token"}"#))
+            .unwrap();
+        let res_create = app.clone().oneshot(req_create).await.unwrap();
+        assert_eq!(res_create.status(), StatusCode::CREATED);
+        let created_json = json_body(res_create).await;
+        let alice_token = created_json["token"].as_str().unwrap().to_string();
+        let token_id = created_json["id"].as_str().unwrap().to_string();
+        assert!(alice_token.starts_with("rm_"));
+
+        // 2. Alice's token can read her own private recipe
+        let req_own = Request::builder()
+            .method("GET")
+            .uri("/recipes/alice-priv-tok")
+            .header("Authorization", format!("Bearer {alice_token}"))
+            .body(Body::empty())
+            .unwrap();
+        let res_own = app.clone().oneshot(req_own).await.unwrap();
+        assert_eq!(res_own.status(), StatusCode::OK);
+
+        // 3. Alice's token is FORBIDDEN from reading Bob's private recipe
+        let req_other = Request::builder()
+            .method("GET")
+            .uri("/recipes/bob-priv-tok")
+            .header("Authorization", format!("Bearer {alice_token}"))
+            .body(Body::empty())
+            .unwrap();
+        let res_other = app.clone().oneshot(req_other).await.unwrap();
+        assert_eq!(res_other.status(), StatusCode::FORBIDDEN);
+
+        // 4. Alice's token is FORBIDDEN from admin endpoints
+        let req_admin = Request::builder()
+            .method("GET")
+            .uri("/admin/users")
+            .header("Authorization", format!("Bearer {alice_token}"))
+            .body(Body::empty())
+            .unwrap();
+        let res_admin = app.clone().oneshot(req_admin).await.unwrap();
+        assert_eq!(res_admin.status(), StatusCode::FORBIDDEN);
+
+        // 5. Alice revokes her token
+        let req_del = Request::builder()
+            .method("DELETE")
+            .uri(format!("/auth/tokens/{token_id}"))
+            .header("Cookie", &alice_cookie)
+            .body(Body::empty())
+            .unwrap();
+        let res_del = app.clone().oneshot(req_del).await.unwrap();
+        assert_eq!(res_del.status(), StatusCode::OK);
+
+        // 6. Revoked token is now rejected with 401 Unauthorized
+        let req_revoked = Request::builder()
+            .method("GET")
+            .uri("/recipes/alice-priv-tok")
+            .header("Authorization", format!("Bearer {alice_token}"))
+            .body(Body::empty())
+            .unwrap();
+        let res_revoked = app.oneshot(req_revoked).await.unwrap();
+        assert_eq!(res_revoked.status(), StatusCode::UNAUTHORIZED);
+
+        let _ = storage::delete_recipe("alice-priv-tok");
+        let _ = storage::delete_recipe("bob-priv-tok");
     }
 }

@@ -356,6 +356,22 @@ export const api = {
     });
   },
 
+  // User API Tokens
+  async getApiTokens(): Promise<Array<{ id: string; user_id: string; name: string; token_prefix: string; created_at: string; last_used_at?: string | null }>> {
+    return request('/auth/tokens');
+  },
+
+  async createApiToken(name: string): Promise<{ id: string; name: string; token: string; token_prefix: string; created_at: string }> {
+    return request('/auth/tokens', {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    });
+  },
+
+  async deleteApiToken(id: string): Promise<void> {
+    await request(`/auth/tokens/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  },
+
   // Import
   async importRecipeUrl(url: string): Promise<Recipe> {
     const recipe = await request<Recipe>('/import', {

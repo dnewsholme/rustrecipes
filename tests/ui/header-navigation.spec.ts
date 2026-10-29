@@ -44,16 +44,37 @@ test.describe('Header Navigation, Settings & Account Menus (Desktop)', () => {
     await expect(page.locator('#api-guide-link')).toBeVisible();
     await expect(page.locator('#profile-dropdown')).not.toContainText('Cooking Temperatures');
 
-    // Log in and verify Passkeys, Export Data, and User Management are under Account Management
+    // Log in and verify Passkeys, API Tokens, Export Data, and User Management are under Account Management
     await login(page);
     await expect(page.locator('#modern-manage-passkeys-btn')).toHaveCount(0);
     await page.click('#profile-dropdown-btn');
     await expect(page.locator('#manage-passkeys-btn')).toBeVisible();
+    await expect(page.locator('#manage-api-tokens-btn')).toBeVisible();
     await expect(page.locator('#modern-export-data-btn')).toBeVisible();
     await expect(page.locator('#manage-users-menu-btn')).toBeVisible();
     await expect(page.locator('#api-guide-link')).toBeVisible();
 
+    // Open API Tokens modal, generate a token, verify Bearer access, and revoke it
+    await page.click('#manage-api-tokens-btn');
+    await expect(page.locator('#api-tokens-modal')).toBeVisible();
+    await expect(page.locator('#api-token-permission-scope')).toContainText('Admin Scope');
+    await page.fill('#new-api-token-name-input', 'Playwright Test Token');
+    await page.click('#generate-api-token-btn');
+
+    const tokenValueEl = page.locator('#generated-api-token-value');
+    await expect(tokenValueEl).toBeVisible();
+    const rawToken = (await tokenValueEl.innerText()).trim();
+    expect(rawToken.startsWith('rm_')).toBe(true);
+    await expect(page.locator('#api-tokens-list')).toContainText('Playwright Test Token');
+
+    // Revoke the generated token and close modal
+    await page.locator('#api-tokens-list .delete-api-token-btn').first().click();
+    await expect(page.locator('#api-tokens-list')).not.toContainText('Playwright Test Token');
+    await page.click('#close-api-tokens-btn');
+    await expect(page.locator('#api-tokens-modal')).not.toBeVisible();
+
     // Verify User Management page opens for admin
+    await page.click('#profile-dropdown-btn');
     await page.click('#manage-users-menu-btn');
     await expect(page).toHaveURL(/\/admin\/users/);
     await expect(page.locator('h1:has-text("User Management")')).toBeVisible();

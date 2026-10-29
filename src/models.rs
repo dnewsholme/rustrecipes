@@ -227,6 +227,17 @@ pub struct UserPasskey {
     pub created_at: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct UserApiToken {
+    pub id: String,
+    pub user_id: String,
+    pub name: String,
+    pub token_prefix: String,
+    pub created_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_used_at: Option<String>,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct UserRecipeNote {
     pub recipe_id: String,

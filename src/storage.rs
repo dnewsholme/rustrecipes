@@ -82,6 +82,21 @@ pub fn db_init(
         [],
     )?;
 
+    // Create user_api_tokens table for user-scoped Bearer tokens
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS user_api_tokens (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            token_hash TEXT UNIQUE NOT NULL,
+            token_prefix TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            last_used_at DATETIME,
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+        )",
+        [],
+    )?;
+
     // Create recipes table
     conn.execute(
         "CREATE TABLE IF NOT EXISTS recipes (
@@ -1361,6 +1376,9 @@ pub fn delete_user(id: &str) -> Result<(), std::io::Error> {
     // Delete user's OIDC sessions
     let _ = tx.execute("DELETE FROM oidc_sessions WHERE user_id = ?1", [id]);
 
+    // Delete user's API tokens
+    let _ = tx.execute("DELETE FROM user_api_tokens WHERE user_id = ?1", [id]);
+
     // Delete the user
     tx.execute("DELETE FROM users WHERE id = ?1", [id])
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
@@ -1424,6 +1442,122 @@ pub fn delete_passkey_by_id(id: &str, user_id: &str) -> Result<(), std::io::Erro
     )
     .map(|_| ())
     .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+}
+
+fn hash_api_token(raw_token: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let digest = Sha256::digest(raw_token.trim().as_bytes());
+    let mut hex = String::with_capacity(digest.len() * 2);
+    for b in digest {
+        use std::fmt::Write;
+        let _ = write!(&mut hex, "{:02x}", b);
+    }
+    hex
+}
+
+pub fn create_user_api_token(
+    user_id: &str,
+    name: &str,
+) -> Result<(crate::models::UserApiToken, String), std::io::Error> {
+    let conn = rusqlite::Connection::open(get_db_path())
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    let _ = conn.busy_timeout(std::time::Duration::from_secs(5));
+    let id = uuid::Uuid::new_v4().to_string();
+    let raw_token = format!(
+        "rm_{}{}",
+        uuid::Uuid::new_v4().as_simple(),
+        uuid::Uuid::new_v4().as_simple()
+    );
+    let token_hash = hash_api_token(&raw_token);
+    let token_prefix: String = raw_token.chars().take(11).collect();
+
+    conn.execute(
+        "INSERT INTO user_api_tokens (id, user_id, name, token_hash, token_prefix, created_at) \
+         VALUES (?1, ?2, ?3, ?4, ?5, datetime('now', 'localtime'))",
+        rusqlite::params![&id, user_id, name.trim(), &token_hash, &token_prefix],
+    )
+    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+    let created_at: String = conn
+        .query_row(
+            "SELECT created_at FROM user_api_tokens WHERE id = ?1",
+            [&id],
+            |row| row.get(0),
+        )
+        .unwrap_or_default();
+
+    Ok((
+        crate::models::UserApiToken {
+            id,
+            user_id: user_id.to_string(),
+            name: name.trim().to_string(),
+            token_prefix,
+            created_at,
+            last_used_at: None,
+        },
+        raw_token,
+    ))
+}
+
+pub fn list_user_api_tokens(user_id: &str) -> Vec<crate::models::UserApiToken> {
+    let conn = match rusqlite::Connection::open(get_db_path()) {
+        Ok(c) => c,
+        Err(_) => return Vec::new(),
+    };
+    let mut stmt = match conn.prepare(
+        "SELECT id, user_id, name, token_prefix, created_at, last_used_at \
+         FROM user_api_tokens WHERE user_id = ?1 ORDER BY created_at DESC",
+    ) {
+        Ok(s) => s,
+        Err(_) => return Vec::new(),
+    };
+    let rows = stmt.query_map([user_id], |row| {
+        Ok(crate::models::UserApiToken {
+            id: row.get(0)?,
+            user_id: row.get(1)?,
+            name: row.get(2)?,
+            token_prefix: row.get(3)?,
+            created_at: row.get(4)?,
+            last_used_at: row.get(5)?,
+        })
+    });
+    match rows {
+        Ok(iter) => iter.flatten().collect(),
+        Err(_) => Vec::new(),
+    }
+}
+
+pub fn delete_user_api_token(id: &str, user_id: &str) -> Result<usize, std::io::Error> {
+    let conn = rusqlite::Connection::open(get_db_path())
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    let _ = conn.busy_timeout(std::time::Duration::from_secs(5));
+    conn.execute(
+        "DELETE FROM user_api_tokens WHERE id = ?1 AND user_id = ?2",
+        [id, user_id],
+    )
+    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+}
+
+pub fn find_user_by_api_token(raw_token: &str) -> Option<crate::models::User> {
+    let trimmed = raw_token.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let token_hash = hash_api_token(trimmed);
+    let conn = rusqlite::Connection::open(get_db_path()).ok()?;
+    let _ = conn.busy_timeout(std::time::Duration::from_secs(5));
+    let (token_id, user_id): (String, String) = conn
+        .query_row(
+            "SELECT id, user_id FROM user_api_tokens WHERE token_hash = ?1",
+            [&token_hash],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .ok()?;
+    let _ = conn.execute(
+        "UPDATE user_api_tokens SET last_used_at = datetime('now', 'localtime') WHERE id = ?1",
+        [&token_id],
+    );
+    find_user_by_id(&user_id)
 }
 
 pub fn get_recipe_notes(user_id: &str, recipe_id: &str) -> Option<String> {

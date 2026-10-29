@@ -8,6 +8,7 @@ import { MealPlanView } from './components/MealPlanView';
 import { CookingTempsView } from './components/CookingTempsView';
 import { LoginModal } from './components/LoginModal';
 import { PasskeysModal } from './components/PasskeysModal';
+import { ApiTokensModal } from './components/ApiTokensModal';
 import { ImportModal } from './components/ImportModal';
 import { UserManagementView } from './components/UserManagementView';
 import { TimerOverlay } from './components/TimerOverlay';
@@ -59,6 +60,7 @@ export const App: React.FC = () => {
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [loginModalTab, setLoginModalTab] = useState<'login' | 'register'>('login');
   const [passkeysModalOpen, setPasskeysModalOpen] = useState(false);
+  const [apiTokensModalOpen, setApiTokensModalOpen] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
 
   // Counts
@@ -496,6 +498,7 @@ export const App: React.FC = () => {
         mealPlanCount={mealPlanCount}
         onOpenLogin={() => setLoginModalOpen(true)}
         onOpenPasskeys={() => setPasskeysModalOpen(true)}
+        onOpenApiTokens={() => setApiTokensModalOpen(true)}
         onOpenImport={() => setImportModalOpen(true)}
         onLogout={async () => {
           await api.logout();
@@ -1146,6 +1149,13 @@ export const App: React.FC = () => {
 
       {passkeysModalOpen && (
         <PasskeysModal onClose={() => setPasskeysModalOpen(false)} />
+      )}
+
+      {apiTokensModalOpen && (
+        <ApiTokensModal
+          currentUser={auth.user}
+          onClose={() => setApiTokensModalOpen(false)}
+        />
       )}
 
       {importModalOpen && (
