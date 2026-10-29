@@ -186,6 +186,7 @@ export const App: React.FC = () => {
       setSelectedRecipeId(id);
       targetPath = `${base}/recipe/${id}`;
     } else if (view === 'recipe-edit') {
+      if (!id) setSelectedRecipeId(null);
       targetPath = id ? `${base}/recipe/${id}/edit` : `${base}/new`;
     } else if (view === 'shopping-list') {
       setSelectedRecipeId(null);

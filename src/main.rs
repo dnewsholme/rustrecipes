@@ -1578,38 +1578,14 @@ async fn main() {
 
     if !state.app_base.is_empty() {
         let base = state.app_base.trim_end_matches('/');
-        app = app
+        let sub_app = Router::new()
+            .merge(public_routes.with_state(state.clone()))
+            .merge(protected_routes.with_state(state.clone()))
             .nest(
-                &format!("{}/api/v1", base),
+                "/api/v1",
                 api::router(state.clone()).with_state(state.clone()),
-            )
-            .nest_service(&format!("{}/static", base), ServeDir::new("static"))
-            .nest_service(&format!("{}/uploads", base), ServeDir::new("data/uploads"))
-            .nest_service(
-                &format!("{}/data/uploads", base),
-                ServeDir::new("data/uploads"),
-            )
-            .nest_service(
-                &format!("{}/assets", base),
-                ServeDir::new("frontend/dist/assets"),
-            )
-            .nest_service(
-                &format!("{}/app/assets", base),
-                ServeDir::new("frontend/dist/assets"),
-            )
-            .nest_service(
-                &format!("{}/app", base),
-                ServeDir::new("frontend/dist").fallback(ServeFile::new("frontend/dist/index.html")),
-            )
-            .route(base, get(default_index))
-            .route(&format!("{}/", base), get(default_index))
-            .route(&format!("{}/new", base), get(default_index))
-            .route(&format!("{}/meal-plan", base), get(default_index))
-            .route(&format!("{}/meal-plan/", base), get(default_index))
-            .route(&format!("{}/shopping-list", base), get(default_index))
-            .route(&format!("{}/shopping-list/", base), get(default_index))
-            .route(&format!("{}/recipe/{{id}}", base), get(default_index))
-            .route(&format!("{}/recipe/{{id}}/edit", base), get(default_index));
+            );
+        app = app.nest(base, sub_app);
     }
 
     let app = app

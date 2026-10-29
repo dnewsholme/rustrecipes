@@ -36,7 +36,14 @@ pub fn router(_state: AppState) -> Router<AppState> {
     // `CurrentUser` (required) and `MaybeUser` (optional) extractors, rather
     // than by matching request paths in a middleware.
     Router::new()
-        .route("/recipes", get(list_recipes).post(create_recipe))
+        .route(
+            "/recipes",
+            get(list_recipes).post(create_recipe).put(create_recipe),
+        )
+        .route(
+            "/recipes/",
+            get(list_recipes).post(create_recipe).put(create_recipe),
+        )
         .route(
             "/recipes/{id}",
             get(get_recipe).put(update_recipe).delete(delete_recipe),
@@ -1679,6 +1686,21 @@ mod tests {
             .unwrap();
         let response = app.clone().oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+        // 6. PUT /recipes/ (empty ID from imported draft on cached client) creates recipe
+        let req = Request::builder()
+            .method("PUT")
+            .uri("/recipes/")
+            .header("Content-Type", "application/json")
+            .header("Authorization", format!("Bearer {TEST_TOKEN}"))
+            .body(Body::from(payload.to_string()))
+            .unwrap();
+        let response = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let created_via_put = json_body(response).await;
+        let put_id = created_via_put["id"].as_str().unwrap().to_string();
+        assert!(!put_id.is_empty());
+        let _ = storage::delete_recipe(&put_id);
     }
 
     #[tokio::test]

@@ -171,9 +171,19 @@ export const RecipeEditor: React.FC<RecipeEditorProps> = ({
     };
 
     try {
-      if (isEditing && initialRecipe?.id) {
-        const updated = await api.updateRecipe(initialRecipe.id, input);
-        onSave(updated);
+      const editId = initialRecipe?.id?.trim();
+      if (isEditing && editId) {
+        try {
+          const updated = await api.updateRecipe(editId, input);
+          onSave(updated);
+        } catch (updateErr: any) {
+          if (updateErr?.message?.toLowerCase().includes('not found')) {
+            const created = await api.createRecipe(input);
+            onSave(created);
+          } else {
+            throw updateErr;
+          }
+        }
       } else {
         const created = await api.createRecipe(input);
         onSave(created);

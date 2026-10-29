@@ -1,6 +1,6 @@
 # Rust Recipe Manager
 
-A fast, self-hosted recipe manager built with Rust, Axum, and Askama. Designed for home cooks and BBQ enthusiasts.
+A fast, self-hosted recipe manager built with Rust, Axum, and React. Designed for home cooks, sourdough bakers, and BBQ enthusiasts.
 
 ![Kamado Theme](https://img.shields.io/badge/Theme-Kamado_BBQ-orange?style=flat-square)
 ![Built with Rust](https://img.shields.io/badge/Built_with-Rust-black?style=flat-square&logo=rust)
@@ -10,22 +10,12 @@ A fast, self-hosted recipe manager built with Rust, Axum, and Askama. Designed f
 <table style="width: 100%; border-collapse: collapse;">
   <tr>
     <td style="width: 50%; vertical-align: top;">
-      <strong>Desktop Home</strong><br/>
-      <img src="docs/img/home_desktop.png" alt="Desktop Home" style="width: 100%; border-radius: 8px;"/>
+      <strong>Recipe Cards List</strong><br/>
+      <img src="docs/img/home_desktop.png" alt="Recipe Cards List" style="width: 100%; border-radius: 8px;"/>
     </td>
     <td style="width: 50%; vertical-align: top;">
-      <strong>Integrated Timer</strong><br/>
-      <img src="docs/img/timer_panel.png" alt="Timer Panel" style="width: 100%; border-radius: 8px;"/>
-    </td>
-  </tr>
-  <tr>
-    <td style="width: 50%; vertical-align: top;">
-      <strong>Mobile Experience</strong><br/>
-      <img src="docs/img/home_mobile.png" alt="Mobile Home" style="width: 100%; border-radius: 8px;"/>
-    </td>
-    <td style="width: 50%; vertical-align: top;">
-      <strong>Smart Filtering (Mobile)</strong><br/>
-      <img src="docs/img/filter_mobile.png" alt="Filter Mobile" style="width: 100%; border-radius: 8px;"/>
+      <strong>Recipe Overview</strong><br/>
+      <img src="docs/img/recipe_desktop.png" alt="Recipe Overview" style="width: 100%; border-radius: 8px;"/>
     </td>
   </tr>
 </table>

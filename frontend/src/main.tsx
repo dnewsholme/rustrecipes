@@ -8,8 +8,9 @@ if ('serviceWorker' in navigator && window.location.protocol.startsWith('http'))
   window.addEventListener('load', () => {
     const swUrl = './sw.js';
     navigator.serviceWorker
-      .register(swUrl)
+      .register(swUrl, { updateViaCache: 'none' })
       .then((reg) => {
+        reg.update().catch(() => {});
         console.debug('PWA ServiceWorker registered with scope:', reg.scope);
       })
       .catch((err) => {

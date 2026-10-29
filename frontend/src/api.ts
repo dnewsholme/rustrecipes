@@ -191,7 +191,10 @@ export const api = {
   },
 
   async updateRecipe(id: string, input: RecipeInput): Promise<Recipe> {
-    return request<Recipe>(`/recipes/${encodeURIComponent(id)}`, {
+    if (!id || !id.trim()) {
+      return this.createRecipe(input);
+    }
+    return request<Recipe>(`/recipes/${encodeURIComponent(id.trim())}`, {
       method: 'PUT',
       body: JSON.stringify(input),
     });
