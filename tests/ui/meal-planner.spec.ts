@@ -11,6 +11,7 @@ test.describe('Meal Planner', () => {
     await page.goto('/');
     
     // Expand meal planner if collapsed so we can clear it cleanly for isolation
+    await page.locator('#meal-planner-section').waitFor();
     const content = page.locator('#meal-planner-content');
     const toggleBtn = page.locator('#toggle-meal-planner-collapse');
     if (await toggleBtn.isVisible() && await content.isHidden()) {
@@ -179,6 +180,7 @@ test.describe('Meal Planner', () => {
 
     // 6. Reload page to verify persistence
     await page.reload();
+    await page.locator('#meal-planner-section').waitFor();
     if (await content.isHidden()) {
       await toggleBtn.click();
     }
@@ -266,6 +268,40 @@ test.describe('Meal Planner', () => {
 
     const linkedCard = mealPlanCards.filter({ hasText: recipeTitle });
     const manualCard = mealPlanCards.filter({ hasText: 'Burger Night' });
+    await expect(linkedCard.locator('button:has-text("View Recipe")')).toBeVisible();
+    await expect(manualCard.locator('button:has-text("View Recipe")')).toHaveCount(0);
+  });
+
+  test('should allow adding meals with autocomplete and custom entries on the /meal-plan screen', async ({ page }) => {
+    const recipeCard = page.locator('.recipe-card').first();
+    const recipeTitle = await recipeCard.locator('h3').innerText();
+    const truncatedTitle = recipeTitle.substring(0, Math.min(recipeTitle.length, 5));
+
+    await page.goto('/meal-plan');
+
+    // 1. Type partial recipe title and select from autocomplete suggestions
+    const manualInput = page.locator('#manual-meal-input');
+    await expect(manualInput).toBeVisible();
+    await manualInput.fill(truncatedTitle);
+
+    const suggestionsDiv = page.locator('#manual-meal-suggestions');
+    await expect(suggestionsDiv).toBeVisible();
+    const suggestionItem = suggestionsDiv.locator('div', { hasText: recipeTitle });
+    await expect(suggestionItem).toBeVisible();
+    await suggestionItem.click();
+    await expect(suggestionsDiv).not.toBeVisible();
+
+    await page.locator('form button[type="submit"]:has-text("Add")').click();
+
+    // 2. Also add a custom free-form meal directly on /meal-plan
+    await manualInput.fill('Taco Tuesday');
+    await manualInput.press('Enter');
+
+    const mealPlanCards = page.locator('main .card');
+    await expect(mealPlanCards).toHaveCount(2);
+
+    const linkedCard = mealPlanCards.filter({ hasText: recipeTitle });
+    const manualCard = mealPlanCards.filter({ hasText: 'Taco Tuesday' });
     await expect(linkedCard.locator('button:has-text("View Recipe")')).toBeVisible();
     await expect(manualCard.locator('button:has-text("View Recipe")')).toHaveCount(0);
   });

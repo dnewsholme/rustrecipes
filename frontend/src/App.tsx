@@ -998,8 +998,10 @@ export const App: React.FC = () => {
         {/* MEAL PLAN VIEW */}
         {activeView === 'meal-plan' && (
           <MealPlanView
+            recipes={recipes}
             onSelectRecipe={(id) => navigateTo('recipe-detail', id)}
             onCountChange={setMealPlanCount}
+            onMealsChange={loadPlannedMeals}
             onNavigateToShopping={() => navigateTo('shopping-list')}
           />
         )}
