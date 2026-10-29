@@ -41,6 +41,7 @@ export const App: React.FC = () => {
 
   // Multi-select recipe cards
   const [selectedRecipeIds, setSelectedRecipeIds] = useState<Set<string>>(new Set());
+  const [addedToMealsSuccess, setAddedToMealsSuccess] = useState(false);
   const [shoppingPortions, setShoppingPortions] = useState<number>(1);
   const [shoppingUnit, setShoppingUnit] = useState<string>('metric');
 
@@ -312,6 +313,8 @@ export const App: React.FC = () => {
     try {
       await api.addToMealPlan(Array.from(selectedRecipeIds));
       await loadPlannedMeals();
+      setAddedToMealsSuccess(true);
+      setTimeout(() => setAddedToMealsSuccess(false), 2000);
     } catch (err) {
       console.error('Failed to add selected recipes to meal plan', err);
     }
@@ -590,8 +593,8 @@ export const App: React.FC = () => {
                           top: 'calc(100% + 4px)',
                           left: 0,
                           right: 0,
-                          background: 'var(--surface-color)',
-                          border: '1px solid var(--border-color)',
+                          background: 'var(--bg-secondary)',
+                          border: '1px solid var(--border)',
                           borderRadius: 'var(--radius-md)',
                           boxShadow: 'var(--shadow-lg)',
                           zIndex: 1000,
@@ -768,8 +771,8 @@ export const App: React.FC = () => {
                     flexDirection: 'column',
                     gap: '0.75rem',
                     padding: '0.85rem 1rem',
-                    background: 'var(--surface-color)',
-                    border: '1px solid var(--border-color)',
+                    background: 'var(--bg-secondary)',
+                    border: '1px solid var(--border)',
                     borderRadius: 'var(--radius-md)',
                     boxShadow: 'var(--shadow-sm)',
                   }}
@@ -924,8 +927,6 @@ export const App: React.FC = () => {
                     recipe={recipe}
                     onSelect={(r) => navigateTo('recipe-detail', r.id)}
                     onToggleFavorite={auth.user?.is_admin ? handleToggleFavorite : undefined}
-                    onToggleMealPlan={handleToggleMealPlan}
-                    isPlanned={mealPlanIds.has(recipe.id)}
                     canFavorite={!!auth.user?.is_admin}
                     isSelected={selectedRecipeIds.has(recipe.id)}
                     onToggleSelect={handleToggleRecipeSelection}
@@ -1030,9 +1031,9 @@ export const App: React.FC = () => {
             zIndex: 1000,
             padding: '0.75rem 1.5rem',
             borderRadius: 'var(--radius-lg)',
-            boxShadow: 'var(--shadow-lg)',
-            background: 'var(--surface-color)',
-            border: '1px solid var(--border-color)',
+            boxShadow: '0 12px 30px -4px rgba(0, 0, 0, 0.5), 0 4px 12px -2px rgba(0, 0, 0, 0.3)',
+            background: 'var(--bg-secondary)',
+            border: '1px solid var(--border)',
             alignItems: 'center',
             gap: '0.75rem',
             flexWrap: 'wrap',
@@ -1050,7 +1051,7 @@ export const App: React.FC = () => {
               gap: '0.35rem',
             }}
           >
-            Add to Planned Meals
+            {addedToMealsSuccess ? '✓ Added to Planned Meals' : 'Add to Planned Meals'}
           </button>
 
           <button

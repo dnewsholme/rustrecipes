@@ -312,8 +312,8 @@ export const Header: React.FC<HeaderProps> = ({
                   minWidth: '160px',
                   padding: '0.4rem',
                   borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--border-color)',
-                  background: 'var(--surface-color)',
+                  border: '1px solid var(--border)',
+                  background: 'var(--bg-secondary)',
                   boxShadow: 'var(--shadow-lg)',
                   zIndex: 1000,
                 }}
@@ -402,8 +402,8 @@ export const Header: React.FC<HeaderProps> = ({
                   borderRadius: 'var(--radius-md)',
                   boxShadow: 'var(--shadow-lg)',
                   zIndex: 1000,
-                  background: 'var(--surface-color)',
-                  border: '1px solid var(--border-color)',
+                  background: 'var(--bg-secondary)',
+                  border: '1px solid var(--border)',
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
@@ -775,8 +775,8 @@ export const Header: React.FC<HeaderProps> = ({
             padding: '1.25rem',
             boxShadow: 'var(--shadow-xl)',
             zIndex: 1000,
-            background: 'var(--surface-color)',
-            border: '1px solid var(--border-color)',
+            background: 'var(--bg-secondary)',
+            border: '1px solid var(--border)',
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem' }}>

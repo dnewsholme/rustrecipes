@@ -174,38 +174,149 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({
   };
 
   // Helper to highlight temperatures and amounts
-  const formatTextWithSpans = (text: string) => {
-    if (!text) return null;
+  const highlightTokens = (rawText: string, keyPrefix: string): React.ReactNode[] => {
+    if (!rawText) return [];
 
     const tokenRegex = /(\b\d+(?:\s*[-–—]\s*\d+)?\s*°\s*[CcFf]\b|\b\d+\s*(?:degrees?\s*)?(?:[Cc]elsius|[Ff]ahrenheit)\b)|(\b\d+(?:\.\d+)?%|\b\d+(?:\.\d+)?\s*(?:g|ml|kg|l|cups?|tbsp|tsp|oz|lb|pound|pounds|pinch|pinches|dash|dashes|clove|cloves|slice|slices)\b|\b\d+\s*[\/⁄]\s*\d+\s*(?:cups?|tbsp|tsp|oz|g|ml)?|\b\d*\s*[½⅓⅔¼¾⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞]\s*(?:cups?|tbsp|tsp|oz|g|ml)?)/gi;
 
     const elements: React.ReactNode[] = [];
     let lastIndex = 0;
-    for (const match of text.matchAll(tokenRegex)) {
+    let matchIdx = 0;
+    for (const match of rawText.matchAll(tokenRegex)) {
       const matchIndex = match.index ?? 0;
       const matchStr = match[0];
       if (matchIndex > lastIndex) {
-        elements.push(text.slice(lastIndex, matchIndex));
+        elements.push(rawText.slice(lastIndex, matchIndex));
       }
       if (match[1]) {
         elements.push(
-          <span key={matchIndex} className="instruction-temp" style={{ fontWeight: 700, color: 'var(--accent)' }}>
+          <span key={`${keyPrefix}-t-${matchIdx}`} className="instruction-temp" style={{ fontWeight: 700, color: 'var(--accent)' }}>
             {matchStr}
           </span>
         );
       } else {
         elements.push(
-          <span key={matchIndex} className="instruction-amount" style={{ fontWeight: 700, color: 'var(--accent)' }}>
+          <span key={`${keyPrefix}-a-${matchIdx}`} className="instruction-amount" style={{ fontWeight: 700, color: 'var(--accent)' }}>
             {matchStr}
           </span>
         );
       }
+      matchIdx++;
       lastIndex = matchIndex + matchStr.length;
     }
-    if (lastIndex < text.length) {
-      elements.push(text.slice(lastIndex));
+    if (lastIndex < rawText.length) {
+      elements.push(rawText.slice(lastIndex));
     }
     return elements;
+  };
+
+  // Inline markdown parser (bold, italics, links)
+  const parseInlineMarkdown = (text: string, prefix = 'md'): React.ReactNode[] => {
+    if (!text) return [];
+
+    const inlineRegex = /(\[([^\]]+)\]\((https?:\/\/[^\s\)]+|[^\s\)]+)\))|(\*\*([^*]+)\*\*|__([^_]+)__)|(?:\*([^*]+)\*|_([^_]+)_)/g;
+
+    const nodes: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let idx = 0;
+
+    for (const match of text.matchAll(inlineRegex)) {
+      const matchIndex = match.index ?? 0;
+      const matchStr = match[0];
+
+      if (matchIndex > lastIndex) {
+        const plain = text.slice(lastIndex, matchIndex);
+        nodes.push(...highlightTokens(plain, `${prefix}-${idx}-p`));
+      }
+
+      if (match[1]) {
+        // Link: [label](url)
+        const label = match[2];
+        const href = match[3];
+        nodes.push(
+          <a
+            key={`${prefix}-link-${idx}`}
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: 'var(--accent)', textDecoration: 'underline' }}
+          >
+            {label}
+          </a>
+        );
+      } else if (match[4]) {
+        // Bold: **bold** or __bold__
+        const boldText = match[5] || match[6];
+        nodes.push(
+          <strong key={`${prefix}-bold-${idx}`} style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+            {highlightTokens(boldText, `${prefix}-b-${idx}`)}
+          </strong>
+        );
+      } else if (match[7] || match[8]) {
+        // Italic: *italic* or _italic_
+        const italicText = match[7] || match[8];
+        nodes.push(
+          <em key={`${prefix}-em-${idx}`}>
+            {highlightTokens(italicText, `${prefix}-i-${idx}`)}
+          </em>
+        );
+      }
+
+      idx++;
+      lastIndex = matchIndex + matchStr.length;
+    }
+
+    if (lastIndex < text.length) {
+      nodes.push(...highlightTokens(text.slice(lastIndex), `${prefix}-${idx}-end`));
+    }
+
+    return nodes;
+  };
+
+  const formatTextWithSpans = (text: string) => {
+    if (!text) return null;
+
+    if (text.includes('\n')) {
+      const lines = text.split('\n');
+      return (
+        <>
+          {lines.map((line, lIdx) => {
+            const trimmed = line.trim();
+            if (trimmed.startsWith('### ')) {
+              return (
+                <h3 key={`h3-${lIdx}`} style={{ fontSize: '1.2rem', fontWeight: 700, margin: '1rem 0 0.5rem', color: 'var(--text-primary)' }}>
+                  {parseInlineMarkdown(trimmed.slice(4), `line-${lIdx}`)}
+                </h3>
+              );
+            }
+            if (trimmed.startsWith('## ')) {
+              return (
+                <h2 key={`h2-${lIdx}`} style={{ fontSize: '1.35rem', fontWeight: 700, margin: '1.25rem 0 0.5rem', color: 'var(--text-primary)' }}>
+                  {parseInlineMarkdown(trimmed.slice(3), `line-${lIdx}`)}
+                </h2>
+              );
+            }
+            if (trimmed.startsWith('# ')) {
+              return (
+                <h1 key={`h1-${lIdx}`} style={{ fontSize: '1.5rem', fontWeight: 800, margin: '1.5rem 0 0.75rem', color: 'var(--text-primary)' }}>
+                  {parseInlineMarkdown(trimmed.slice(2), `line-${lIdx}`)}
+                </h1>
+              );
+            }
+            if (!trimmed) {
+              return <div key={`br-${lIdx}`} style={{ height: '0.5rem' }} />;
+            }
+            return (
+              <p key={`p-${lIdx}`} style={{ margin: '0 0 0.5rem 0' }}>
+                {parseInlineMarkdown(line, `line-${lIdx}`)}
+              </p>
+            );
+          })}
+        </>
+      );
+    }
+
+    return parseInlineMarkdown(text, 'txt');
   };
 
   const isIngredientHeader = (line: string) => {

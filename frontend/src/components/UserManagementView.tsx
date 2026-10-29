@@ -251,14 +251,14 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                         width: '40px',
                         height: '40px',
                         borderRadius: '50%',
-                        background: u.is_admin ? 'var(--accent)' : 'var(--surface-color)',
+                        background: u.is_admin ? 'var(--accent)' : 'var(--bg-secondary)',
                         color: u.is_admin ? '#fff' : 'var(--text-primary)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         fontWeight: 700,
                         fontSize: '1.1rem',
-                        border: '1px solid var(--border-color)',
+                        border: '1px solid var(--border)',
                         flexShrink: 0,
                       }}
                     >

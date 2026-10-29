@@ -1,5 +1,5 @@
 import React from 'react';
-import { Star, Clock, Calendar, Check, Utensils } from 'lucide-react';
+import { Star, Clock, Utensils } from 'lucide-react';
 import type { Recipe } from '../types';
 import { resolveMediaUrl, getAppBase } from '../api';
 
@@ -7,8 +7,6 @@ interface RecipeCardProps {
   recipe: Recipe;
   onSelect: (recipe: Recipe) => void;
   onToggleFavorite?: (id: string) => void;
-  onToggleMealPlan?: (id: string) => void;
-  isPlanned?: boolean;
   canFavorite?: boolean;
   isSelected?: boolean;
   onToggleSelect?: (id: string) => void;
@@ -18,13 +16,12 @@ export const RecipeCard: React.FC<RecipeCardProps> = ({
   recipe,
   onSelect,
   onToggleFavorite,
-  onToggleMealPlan,
-  isPlanned = false,
   canFavorite = false,
   isSelected = false,
   onToggleSelect,
 }) => {
   const [showAllTags, setShowAllTags] = React.useState(false);
+  const [imgError, setImgError] = React.useState(false);
   const cardTags = (recipe.tags || []).map((t) => t.toLowerCase());
   if (recipe.has_video || recipe.video_url) cardTags.push('has-video');
   if (recipe.has_combustion || recipe.combustion_csv) cardTags.push('has-combustion');
@@ -71,12 +68,13 @@ export const RecipeCard: React.FC<RecipeCardProps> = ({
 
       {/* Image container */}
       <div style={{ position: 'relative', width: '100%', height: 180, background: 'var(--bg-secondary)', overflow: 'hidden' }}>
-        {recipe.image ? (
+        {recipe.image && !imgError ? (
           <img
             src={resolveMediaUrl(recipe.image)}
             alt={recipe.title}
             style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'transform 0.3s ease' }}
             loading="lazy"
+            onError={() => setImgError(true)}
           />
         ) : (
           <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
@@ -111,39 +109,6 @@ export const RecipeCard: React.FC<RecipeCardProps> = ({
             title={recipe.favorite ? 'Remove from favorites' : 'Add to favorites'}
           >
             <Star size={18} fill={recipe.favorite ? '#f59e0b' : 'transparent'} />
-          </button>
-        )}
-
-        {/* Quick Meal Plan toggle badge button */}
-        {onToggleMealPlan && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleMealPlan(recipe.id);
-            }}
-            style={{
-              position: 'absolute',
-              bottom: 10,
-              right: 10,
-              background: isPlanned ? 'var(--accent)' : 'rgba(15, 23, 42, 0.75)',
-              backdropFilter: 'blur(4px)',
-              border: 'none',
-              borderRadius: '999px',
-              padding: '0.35rem 0.65rem',
-              color: '#ffffff',
-              fontSize: '0.75rem',
-              fontWeight: 600,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.3rem',
-              transition: 'var(--transition)',
-              zIndex: 5,
-            }}
-            title={isPlanned ? 'In meal plan' : 'Add to meal plan'}
-          >
-            {isPlanned ? <Check size={14} /> : <Calendar size={14} />}
-            <span>{isPlanned ? 'Planned' : 'Plan'}</span>
           </button>
         )}
       </div>

@@ -224,6 +224,7 @@ async fn spa_fallback(
         || path.starts_with("/static/")
         || path.starts_with("/assets/")
         || path.starts_with("/uploads/")
+        || path.starts_with("/data/uploads/")
     {
         return (StatusCode::NOT_FOUND, "Not Found").into_response();
     }
@@ -1523,6 +1524,7 @@ async fn main() {
     let static_assets = Router::new()
         .nest_service("/static", ServeDir::new("static"))
         .nest_service("/uploads", ServeDir::new("data/uploads"))
+        .nest_service("/data/uploads", ServeDir::new("data/uploads"))
         .nest_service("/assets", ServeDir::new("frontend/dist/assets"))
         .nest_service("/app/assets", ServeDir::new("frontend/dist/assets"))
         .nest_service(
@@ -1583,6 +1585,10 @@ async fn main() {
             )
             .nest_service(&format!("{}/static", base), ServeDir::new("static"))
             .nest_service(&format!("{}/uploads", base), ServeDir::new("data/uploads"))
+            .nest_service(
+                &format!("{}/data/uploads", base),
+                ServeDir::new("data/uploads"),
+            )
             .nest_service(
                 &format!("{}/assets", base),
                 ServeDir::new("frontend/dist/assets"),
@@ -1816,6 +1822,7 @@ mod oauth_tests {
         let static_assets = Router::new()
             .nest_service("/static", ServeDir::new("static"))
             .nest_service("/uploads", ServeDir::new("data/uploads"))
+            .nest_service("/data/uploads", ServeDir::new("data/uploads"))
             .nest_service("/assets", ServeDir::new("frontend/dist/assets"))
             .nest_service("/app/assets", ServeDir::new("frontend/dist/assets"))
             .nest_service(

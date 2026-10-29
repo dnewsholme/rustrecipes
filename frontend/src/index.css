@@ -8,6 +8,9 @@
   --bg-card-hover: rgba(51, 65, 85, 0.8);
   --bg-input: #1e293b;
   --bg-glass: rgba(15, 23, 42, 0.75);
+  --surface-color: #0f172a;
+  --surface-hover: #1e293b;
+  --border-color: rgba(148, 163, 184, 0.2);
   
   --text-primary: #f8fafc;
   --text-secondary: #94a3b8;
@@ -46,6 +49,9 @@
   --bg-card-hover: #f1f5f9;
   --bg-input: #f1f5f9;
   --bg-glass: rgba(255, 255, 255, 0.85);
+  --surface-color: #ffffff;
+  --surface-hover: #f1f5f9;
+  --border-color: rgba(148, 163, 184, 0.25);
   
   --text-primary: #0f172a;
   --text-secondary: #475569;
@@ -53,6 +59,26 @@
   
   --border: rgba(148, 163, 184, 0.25);
   --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+}
+
+/* Glassmorphism utility */
+.glass {
+  background: var(--bg-glass);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+}
+
+/* Modals, panels, dropdowns and action bars: solid, high-contrast readable backgrounds */
+.dropdown-content,
+.dropdown-menu,
+#timer-panel,
+#temps-panel,
+#shopping-list-bar,
+.shopping-list-bar {
+  background: var(--bg-secondary) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: 0 12px 30px -4px rgba(0, 0, 0, 0.5), 0 4px 12px -2px rgba(0, 0, 0, 0.3) !important;
 }
 
 * {
@@ -71,13 +97,6 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Glassmorphism utility */
-.glass {
-  background: var(--bg-glass);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--border);
-}
 
 /* Common Layout */
 .app-container {

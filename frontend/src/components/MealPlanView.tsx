@@ -17,6 +17,7 @@ export const MealPlanView: React.FC<MealPlanViewProps> = ({
   const [meals, setMeals] = useState<MealPlanItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
 
   const loadMeals = async () => {
     try {
@@ -154,10 +155,11 @@ export const MealPlanView: React.FC<MealPlanViewProps> = ({
                 )}
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  {meal.image ? (
+                  {meal.image && !failedImages[meal.recipe_id] ? (
                     <img
                       src={resolveMediaUrl(meal.image)}
                       alt=""
+                      onError={() => setFailedImages((prev) => ({ ...prev, [meal.recipe_id]: true }))}
                       style={{ width: 44, height: 44, borderRadius: 'var(--radius-sm)', objectFit: 'cover' }}
                     />
                   ) : (

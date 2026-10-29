@@ -29,15 +29,55 @@ export const getApiBase = (): string => `${getAppBase()}/api/v1`;
 
 export function resolveMediaUrl(url: string | null | undefined): string {
   if (!url) return '';
-  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
-    return url;
+  const trimmed = url.trim();
+  if (!trimmed) return '';
+
+  // Data URLs (e.g. data:image/png;base64,...)
+  if (trimmed.startsWith('data:')) {
+    return trimmed;
   }
+
   const appBase = getAppBase();
-  const cleanPath = url.startsWith('/') ? url : `/${url}`;
-  if (appBase && !cleanPath.startsWith(appBase)) {
-    return `${appBase}${cleanPath}`;
+
+  // If URL contains localhost or domain pointing to uploads, extract relative upload path
+  // so it loads correctly across protocols, ports, and domains
+  let path = trimmed;
+  const domainUploadMatch = path.match(/^(?:https?:\/\/[^\/]+)?(?:\/recipes)?(?:\/data)?\/(uploads\/[^\s\?#]+)/i);
+  if (domainUploadMatch) {
+    path = '/' + domainUploadMatch[1];
+  } else if (path.startsWith('http://') || path.startsWith('https://')) {
+    // External images (e.g., Unsplash, King Arthur, Serious Eats, YouTube thumbnails)
+    return path;
   }
-  return cleanPath;
+
+  // Ensure leading slash
+  if (!path.startsWith('/')) {
+    path = '/' + path;
+  }
+
+  // Strip leading /recipes if already present in path to prevent duplicate prefixing
+  if (path.startsWith('/recipes/')) {
+    path = path.slice('/recipes'.length);
+  }
+
+  // Normalize /data/uploads/ -> /uploads/
+  if (path.startsWith('/data/uploads/')) {
+    path = path.replace('/data/uploads/', '/uploads/');
+  }
+
+  // If path is a bare filename (with image/csv extension or uuid), route to /uploads/
+  if (!path.startsWith('/uploads/') && !path.startsWith('/static/') && !path.startsWith('/assets/')) {
+    if (path.match(/\.(webp|jpg|jpeg|png|gif|svg|csv)$/i) || path.match(/^\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i)) {
+      path = '/uploads' + path;
+    }
+  }
+
+  // Prepend current app base if applicable
+  if (appBase && !path.startsWith(appBase)) {
+    return `${appBase}${path}`;
+  }
+
+  return path;
 }
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
