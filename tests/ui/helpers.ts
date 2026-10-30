@@ -36,6 +36,7 @@ export async function createRecipeFromFixture(page: Page, fixturePath: string) {
   const prep = (frontmatter.match(/prep_time:\s*(.*)/)?.[1] || '').trim();
   const cook = (frontmatter.match(/cook_time:\s*(.*)/)?.[1] || '').trim();
   const image = (frontmatter.match(/image:\s*(.*)/)?.[1] || '').trim();
+  const video = (frontmatter.match(/video_url:\s*(.*)/)?.[1] || '').trim();
   
   // Extract ingredients and instructions
   const body = content.replace(/^\s*---[\s\S]*?---\s*/, '').trim();
@@ -64,6 +65,7 @@ export async function createRecipeFromFixture(page: Page, fixturePath: string) {
 
   if (prep) await page.fill('#prep_time', prep);
   if (cook) await page.fill('#cook_time', cook);
+  if (video) await page.fill('#video_url', video);
 
   await page.getByRole('button', { name: 'Save Recipe' }).click();
   await page.waitForURL(/\/recipe\//, { timeout: 10000 });

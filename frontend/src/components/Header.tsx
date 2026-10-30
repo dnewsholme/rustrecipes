@@ -283,17 +283,12 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="header-search-container" style={{ flex: 1, maxWidth: '420px', position: 'relative' }}>
             <Search size={16} style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
             <input
+              id="header-search-input"
               type="search"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search recipes, tags, ingredients... (Ctrl+K)"
-              className="form-control"
-              style={{
-                paddingLeft: '2.5rem',
-                fontSize: '0.875rem',
-                borderRadius: '9999px',
-                height: '38px',
-              }}
+              className="header-search-input"
             />
           </div>
 

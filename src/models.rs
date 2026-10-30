@@ -127,20 +127,36 @@ impl Recipe {
     }
 
     pub fn youtube_id(&self) -> Option<String> {
-        let re = regex::Regex::new(r"(?i)(?:v=|\/|embed\/|youtu\.be\/)([0-9A-Za-z_-]{11})").ok()?;
+        let extract = |url: &str| -> Option<String> {
+            let trimmed = url.trim();
+            if trimmed.len() == 11
+                && trimmed
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+            {
+                return Some(trimmed.to_string());
+            }
+            let re = regex::Regex::new(
+                r"(?i)(?:[?&]v=|youtu\.be\/|embed\/|shorts\/|\/v\/|v=|\/)([0-9A-Za-z_-]{11})",
+            )
+            .ok()?;
+            re.captures(trimmed)
+                .and_then(|caps| caps.get(1))
+                .map(|m| m.as_str().to_string())
+        };
 
         if let Some(url) = &self.video_url
-            && let Some(caps) = re.captures(url)
+            && let Some(id) = extract(url)
         {
-            return caps.get(1).map(|m| m.as_str().to_string());
+            return Some(id);
         }
 
         if let Some(url) = &self.source_url
             && (url.to_lowercase().contains("youtube.com")
                 || url.to_lowercase().contains("youtu.be"))
-            && let Some(caps) = re.captures(url)
+            && let Some(id) = extract(url)
         {
-            return caps.get(1).map(|m| m.as_str().to_string());
+            return Some(id);
         }
 
         None
@@ -255,4 +271,53 @@ pub struct UserDataExport {
     pub shopping_list: Vec<ShoppingItem>,
     pub meal_plan: Vec<PlannedMeal>,
     pub recipe_notes: Vec<UserRecipeNote>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_youtube_id_extraction() {
+        let mut recipe = Recipe::default();
+        assert_eq!(recipe.youtube_id(), None);
+        assert!(!recipe.has_video());
+
+        // Watch URL
+        recipe.video_url = Some("https://www.youtube.com/watch?v=41Kt91N4K34".to_string());
+        assert_eq!(recipe.youtube_id(), Some("41Kt91N4K34".to_string()));
+        assert!(recipe.has_video());
+
+        // With extra query parameters
+        recipe.video_url =
+            Some("https://www.youtube.com/watch?v=41Kt91N4K34&t=120s&feature=share".to_string());
+        assert_eq!(recipe.youtube_id(), Some("41Kt91N4K34".to_string()));
+
+        // Short youtu.be URL
+        recipe.video_url = Some("https://youtu.be/41Kt91N4K34".to_string());
+        assert_eq!(recipe.youtube_id(), Some("41Kt91N4K34".to_string()));
+
+        // Embed URL
+        recipe.video_url = Some("https://www.youtube.com/embed/41Kt91N4K34".to_string());
+        assert_eq!(recipe.youtube_id(), Some("41Kt91N4K34".to_string()));
+
+        // Shorts URL
+        recipe.video_url = Some("https://www.youtube.com/shorts/41Kt91N4K34".to_string());
+        assert_eq!(recipe.youtube_id(), Some("41Kt91N4K34".to_string()));
+
+        // Raw 11-char ID
+        recipe.video_url = Some("41Kt91N4K34".to_string());
+        assert_eq!(recipe.youtube_id(), Some("41Kt91N4K34".to_string()));
+
+        // Fallback to source_url if video_url is None
+        recipe.video_url = None;
+        recipe.source_url = Some("https://www.youtube.com/watch?v=41Kt91N4K34".to_string());
+        assert_eq!(recipe.youtube_id(), Some("41Kt91N4K34".to_string()));
+        assert!(recipe.has_video());
+
+        // Non-youtube source_url does not trigger youtube_id
+        recipe.source_url = Some("https://example.com/recipe/delicious-pie".to_string());
+        assert_eq!(recipe.youtube_id(), None);
+        assert!(!recipe.has_video());
+    }
 }

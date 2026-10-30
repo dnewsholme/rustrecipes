@@ -378,6 +378,8 @@ struct RecipeListResponse {
 struct RecipeSummary {
     id: String,
     title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source_url: Option<String>,
     image: Option<String>,
     tags: Vec<String>,
     prep_time: Option<String>,
@@ -431,8 +433,12 @@ async fn list_recipes(
     let filtered: Vec<Recipe> = recipes
         .into_iter()
         .filter(|r| {
-            q.as_ref()
-                .is_none_or(|q| r.title.to_lowercase().contains(q))
+            q.as_ref().is_none_or(|q| {
+                r.title.to_lowercase().contains(q)
+                    || r.source_url
+                        .as_ref()
+                        .is_some_and(|s| s.to_lowercase().contains(q))
+            })
         })
         .filter(|r| {
             tag.as_ref()
@@ -460,6 +466,7 @@ async fn list_recipes(
             RecipeSummary {
                 id: r.id,
                 title: r.title,
+                source_url: r.source_url,
                 image: r.image,
                 tags: r.tags,
                 prep_time: r.prep_time,
@@ -1853,18 +1860,63 @@ mod tests {
         let state = test_state();
         let app = router(state.clone()).with_state(state);
 
+        // Create a recipe with a distinctive source URL
+        let payload = serde_json::json!({
+            "title": "Secret Broth",
+            "source_url": "https://cooking.nytimes.com/recipes/secret-broth",
+            "tags": ["soup"],
+            "ingredients": ["1L water"],
+            "markdown": "Simmer water",
+        });
+        let create_req = Request::builder()
+            .method("POST")
+            .uri("/recipes")
+            .header("Content-Type", "application/json")
+            .header("Authorization", format!("Bearer {TEST_TOKEN}"))
+            .body(Body::from(payload.to_string()))
+            .unwrap();
+        let create_res = app.clone().oneshot(create_req).await.unwrap();
+        assert_eq!(create_res.status(), StatusCode::CREATED);
+
         let req = Request::builder()
             .method("GET")
             .uri("/recipes")
             .body(Body::empty())
             .unwrap();
 
-        let response = app.oneshot(req).await.unwrap();
+        let response = app.clone().oneshot(req).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
         let list = json_body(response).await;
         assert!(list.get("recipes").is_some());
         assert!(list.get("total").is_some());
+
+        // Search by source URL term ("nytimes")
+        let search_req = Request::builder()
+            .method("GET")
+            .uri("/recipes?q=nytimes")
+            .body(Body::empty())
+            .unwrap();
+        let search_res = app.clone().oneshot(search_req).await.unwrap();
+        assert_eq!(search_res.status(), StatusCode::OK);
+        let search_body = json_body(search_res).await;
+        let matches = search_body["recipes"].as_array().unwrap();
+        assert!(
+            matches
+                .iter()
+                .any(|r| r["title"].as_str().unwrap() == "Secret Broth"),
+            "Search query should match recipe source_url"
+        );
+
+        // Search by non-matching query
+        let nomatch_req = Request::builder()
+            .method("GET")
+            .uri("/recipes?q=nonexistentdomainxyz")
+            .body(Body::empty())
+            .unwrap();
+        let nomatch_res = app.oneshot(nomatch_req).await.unwrap();
+        let nomatch_body = json_body(nomatch_res).await;
+        assert_eq!(nomatch_body["total"], 0);
     }
 
     #[tokio::test]

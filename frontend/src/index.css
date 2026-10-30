@@ -239,7 +239,7 @@ body {
 }
 
 /* Form inputs */
-.input, .textarea, .select {
+.input, .textarea, .select, .form-control {
   width: 100%;
   padding: 0.7rem 1rem;
   background: var(--bg-input);
@@ -252,9 +252,40 @@ body {
   outline: none;
 }
 
-.input:focus, .textarea:focus, .select:focus {
+.input:focus, .textarea:focus, .select:focus, .form-control:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+/* Header Search Input */
+.header-search-input {
+  width: 100%;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  border-radius: 9999px;
+  height: 38px;
+  padding: 0.5rem 1rem 0.5rem 2.5rem;
+  font-size: 0.875rem;
+  font-family: inherit;
+  outline: none;
+  transition: var(--transition);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+.header-search-input:hover {
+  background: var(--bg-card-hover);
+  border-color: rgba(148, 163, 184, 0.35);
+}
+
+.header-search-input:focus {
+  background: var(--bg-secondary);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.header-search-input::placeholder {
+  color: var(--text-muted);
 }
 
 /* Modal overlays */

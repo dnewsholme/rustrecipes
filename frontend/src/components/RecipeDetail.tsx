@@ -13,11 +13,22 @@ import {
   Save,
   ChevronLeft,
   Image as ImageIcon,
+  Video,
 } from 'lucide-react';
 import type { Recipe, AuthState } from '../types';
 import { api, resolveMediaUrl } from '../api';
 import { CombustionChart } from './CombustionChart';
 import { CookModeModal } from './CookModeModal';
+
+export function extractYouTubeId(urlOrId?: string | null): string | null {
+  if (!urlOrId || !urlOrId.trim()) return null;
+  const str = urlOrId.trim();
+  if (/^[0-9A-Za-z_-]{11}$/.test(str)) {
+    return str;
+  }
+  const match = str.match(/(?:[?&]v=|youtu\.be\/|embed\/|shorts\/|\/v\/|v=|\/)([0-9A-Za-z_-]{11})/i);
+  return match ? match[1] : null;
+}
 
 interface RecipeDetailProps {
   recipeId: string;
@@ -57,8 +68,8 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({
   // Mobile image toggle
   const [showPhoto, setShowPhoto] = useState(false);
 
-  // Mobile tabs ('ingredients', 'directions', 'graph', 'fermentation', 'notes')
-  const [mobileTab, setMobileTab] = useState<'ingredients' | 'directions' | 'graph' | 'fermentation' | 'notes'>('ingredients');
+  // Mobile tabs ('ingredients', 'directions', 'video', 'graph', 'fermentation', 'notes')
+  const [mobileTab, setMobileTab] = useState<'ingredients' | 'directions' | 'video' | 'graph' | 'fermentation' | 'notes'>('ingredients');
 
   // Personal notes
   const [notes, setNotes] = useState<string>('');
@@ -383,6 +394,7 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({
   }
 
   const canModify = auth.user && (auth.user.is_admin || auth.user.id === recipe.owner_id);
+  const youtubeId = recipe.youtube_id || extractYouTubeId(recipe.video_url) || extractYouTubeId(recipe.source_url);
 
   return (
     <div className="recipe-content" style={{ display: 'flex', flexDirection: 'column', gap: '2rem', animation: 'fadeIn 0.2s ease-out' }}>
@@ -561,6 +573,30 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({
                 <ExternalLink size={14} />
               </a>
             )}
+            {youtubeId && (
+              <button
+                id="recipe-video-badge"
+                onClick={() => {
+                  setMobileTab('video');
+                  const el = document.getElementById('video-tab');
+                  if (el) el.scrollIntoView({ behavior: 'smooth' });
+                }}
+                className="badge"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  color: '#ef4444',
+                  borderColor: 'rgba(239, 68, 68, 0.3)',
+                  cursor: 'pointer',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                }}
+              >
+                <Video size={14} />
+                <span>Video</span>
+              </button>
+            )}
           </div>
 
           {/* Tags */}
@@ -700,6 +736,15 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({
             Graph
           </button>
         )}
+        {youtubeId && (
+          <button
+            id="video-tab-btn"
+            onClick={() => setMobileTab('video')}
+            className={`tab-btn btn btn-sm ${mobileTab === 'video' ? 'btn-primary' : 'btn-ghost'}`}
+          >
+            Video
+          </button>
+        )}
         {recipe.leaven_type && (
           <button
             id="fermentation-tab-btn"
@@ -787,6 +832,73 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({
       {recipe.combustion_csv && (
         <div id="graph-tab" className={`card tab-content ${mobileTab === 'graph' ? 'active' : ''}`} style={{ padding: '1.5rem' }}>
           <CombustionChart csvUrl={recipe.combustion_csv} tempUnit={temp === 'f' ? 'f' : 'c'} />
+        </div>
+      )}
+
+      {/* Recipe Video Container */}
+      {youtubeId && (
+        <div
+          id="video-tab"
+          className={`card tab-content ${mobileTab === 'video' ? 'active' : ''}`}
+          style={{ padding: '1.5rem' }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+              <div
+                style={{
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  color: '#ef4444',
+                  padding: '0.4rem',
+                  borderRadius: 'var(--radius-md)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Video size={20} />
+              </div>
+              <h2 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Recipe Video</h2>
+            </div>
+            {(recipe.video_url || (recipe.source_url && (recipe.source_url.includes('youtube') || recipe.source_url.includes('youtu.be')))) && (
+              <a
+                href={recipe.video_url || recipe.source_url || `https://www.youtube.com/watch?v=${youtubeId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn btn-secondary btn-sm"
+                style={{ fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+              >
+                <ExternalLink size={14} />
+                <span>Open in YouTube</span>
+              </a>
+            )}
+          </div>
+          <div
+            style={{
+              position: 'relative',
+              paddingBottom: '56.25%',
+              height: 0,
+              overflow: 'hidden',
+              borderRadius: 'var(--radius-lg)',
+              background: '#000',
+              boxShadow: 'var(--shadow-md)',
+            }}
+          >
+            <iframe
+              id="recipe-video-iframe"
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                border: 0,
+              }}
+              src={`https://www.youtube-nocookie.com/embed/${youtubeId}`}
+              title={recipe.title ? `${recipe.title} Video` : 'YouTube video player'}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+            />
+          </div>
         </div>
       )}
 
