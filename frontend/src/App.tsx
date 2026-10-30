@@ -416,12 +416,9 @@ export const App: React.FC = () => {
 
   const handleAddToShoppingList = async (recipe: Recipe) => {
     try {
-      const generated = await api.generateShoppingList([recipe.id]);
-      const current = await api.getShoppingList();
-      const combined = [...current, ...generated];
-      await api.updateShoppingList(combined);
-      setShoppingListCount(combined.filter((i) => !i.checked).length);
-      alert(`Added ${generated.length} ingredients to shopping list!`);
+      const updated = await api.generateShoppingList([recipe.id], recipe.servings || 1, 'metric', true);
+      setShoppingListCount(updated.filter((i) => !i.checked).length);
+      alert(`Added ingredients from ${recipe.title} to shopping list!`);
     } catch (err) {
       console.error('Failed to add ingredients to shopping list', err);
     }

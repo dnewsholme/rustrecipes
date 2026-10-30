@@ -3,6 +3,107 @@ import { Plus, Trash2, CheckCircle2, Circle, Sparkles, ChevronLeft } from 'lucid
 import type { ShoppingListItem } from '../types';
 import { api } from '../api';
 
+export function formatShoppingItemForDisplay(rawText: string, unitSystem: 'metric' | 'imperial'): string {
+  const trimmed = rawText.trim();
+  if (!trimmed) return rawText;
+
+  const regex = /^(\d+\s*[-–—]\s*\d+|\d+\s*[\/⁄]\s*\d+|\d+[\s\-]*[½⅓⅔¼¾⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞]|[½⅓⅔¼¾⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞]|\d*\.\d+|\d+)\s*([a-zA-Z]+)?\b\s*(.*)$/;
+  const match = trimmed.match(regex);
+  if (!match) return rawText;
+
+  const numPart = match[1];
+  const unitPart = (match[2] || '').toLowerCase();
+  const remainder = match[3] || '';
+
+  const parseNum = (str: string): number => {
+    const unicodeMap: Record<string, number> = {
+      '½': 0.5, '⅓': 0.333, '⅔': 0.666, '¼': 0.25, '¾': 0.75,
+      '⅕': 0.2, '⅖': 0.4, '⅗': 0.6, '⅘': 0.8, '⅙': 0.166,
+      '⅚': 0.833, '⅛': 0.125, '⅜': 0.375, '⅝': 0.625, '⅞': 0.875,
+    };
+    for (const [char, val] of Object.entries(unicodeMap)) {
+      if (str.includes(char)) {
+        const rest = str.replace(char, '').trim();
+        return (parseFloat(rest) || 0) + val;
+      }
+    }
+    if (str.includes('/')) {
+      const parts = str.split(/[\s\-]/).filter(Boolean);
+      if (parts.length === 2) {
+        const [num, den] = parts[1].split('/');
+        return (parseFloat(parts[0]) || 0) + (parseFloat(num) / (parseFloat(den) || 1));
+      }
+      const [num, den] = str.split('/');
+      return parseFloat(num) / (parseFloat(den) || 1);
+    }
+    return parseFloat(str) || 0;
+  };
+
+  const amount = parseNum(numPart);
+  if (amount <= 0) return rawText;
+
+  const formatNum = (n: number): string => {
+    if (Math.abs(n - Math.round(n)) < 0.05) return Math.round(n).toString();
+    const s = n.toFixed(1);
+    return s.endsWith('.0') ? s.slice(0, -2) : s;
+  };
+
+  if (unitSystem === 'imperial') {
+    if (unitPart === 'ml' || unitPart === 'milliliter' || unitPart === 'milliliters') {
+      const cups = amount / 240.0;
+      if (cups >= 0.2) {
+        const roundedCups = formatNum(cups);
+        const unitLabel = roundedCups === '1' ? 'cup' : 'cups';
+        return `${roundedCups} ${unitLabel} ${remainder}`.trim();
+      } else if (amount >= 14.0) {
+        const tbsp = formatNum(amount / 15.0);
+        return `${tbsp} tbsp ${remainder}`.trim();
+      } else {
+        const tsp = formatNum(amount / 5.0);
+        return `${tsp} tsp ${remainder}`.trim();
+      }
+    } else if (unitPart === 'l' || unitPart === 'liter' || unitPart === 'liters') {
+      const cups = formatNum((amount * 1000.0) / 240.0);
+      return `${cups} cups ${remainder}`.trim();
+    } else if (unitPart === 'g' || unitPart === 'gram' || unitPart === 'grams') {
+      if (amount >= 453.6) {
+        const lbs = formatNum(amount / 453.6);
+        const unitLabel = lbs === '1' ? 'lb' : 'lbs';
+        return `${lbs} ${unitLabel} ${remainder}`.trim();
+      } else {
+        const oz = formatNum(amount / 28.35);
+        return `${oz} oz ${remainder}`.trim();
+      }
+    } else if (unitPart === 'kg' || unitPart === 'kilogram' || unitPart === 'kilograms') {
+      const lbs = formatNum(amount * 2.20462);
+      const unitLabel = lbs === '1' ? 'lb' : 'lbs';
+      return `${lbs} ${unitLabel} ${remainder}`.trim();
+    }
+  } else {
+    if (unitPart === 'cup' || unitPart === 'cups' || unitPart === 'c') {
+      const ml = formatNum(amount * 240.0);
+      return `${ml} ml ${remainder}`.trim();
+    } else if (unitPart === 'tbsp' || unitPart === 'tablespoon' || unitPart === 'tablespoons') {
+      const ml = formatNum(amount * 15.0);
+      return `${ml} ml ${remainder}`.trim();
+    } else if (unitPart === 'tsp' || unitPart === 'teaspoon' || unitPart === 'teaspoons') {
+      const ml = formatNum(amount * 5.0);
+      return `${ml} ml ${remainder}`.trim();
+    } else if (unitPart === 'lb' || unitPart === 'lbs' || unitPart === 'pound' || unitPart === 'pounds') {
+      const g = formatNum(amount * 453.6);
+      return `${g} g ${remainder}`.trim();
+    } else if (unitPart === 'oz' || unitPart === 'ounce' || unitPart === 'ounces') {
+      const g = formatNum(amount * 28.35);
+      return `${g} g ${remainder}`.trim();
+    } else if (unitPart === 'stick' || unitPart === 'sticks') {
+      const g = formatNum(amount * 113.0);
+      return `${g} g ${remainder}`.trim();
+    }
+  }
+
+  return rawText;
+}
+
 interface ShoppingListViewProps {
   onItemCountChange?: (count: number) => void;
   onBack?: () => void;
@@ -14,6 +115,15 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({ onItemCountC
   const [spices, setSpices] = useState<Set<string>>(new Set());
   const [excludeSpices, setExcludeSpices] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [unitSystem, setUnitSystem] = useState<'metric' | 'imperial'>(() => {
+    return (localStorage.getItem('shopping_unit_system') as 'metric' | 'imperial') || 'metric';
+  });
+
+  const handleToggleUnitSystem = () => {
+    const next = unitSystem === 'metric' ? 'imperial' : 'metric';
+    setUnitSystem(next);
+    localStorage.setItem('shopping_unit_system', next);
+  };
 
   const loadList = async () => {
     try {
@@ -144,6 +254,52 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({ onItemCountC
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          {/* Imperial / Metric Unit Toggle */}
+          <button
+            id="unit-toggle-btn"
+            type="button"
+            onClick={handleToggleUnitSystem}
+            className="btn btn-secondary btn-sm"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontWeight: 600 }}
+            title="Toggle between Metric and Imperial units"
+          >
+            <span>{unitSystem === 'metric' ? 'Show Imperial' : 'Show Metric'}</span>
+          </button>
+          <div
+            id="unit-system-selector"
+            style={{
+              display: 'inline-flex',
+              borderRadius: 'var(--radius-md)',
+              overflow: 'hidden',
+              border: '1px solid var(--border)',
+            }}
+          >
+            <button
+              id="unit-metric-btn"
+              type="button"
+              onClick={() => {
+                setUnitSystem('metric');
+                localStorage.setItem('shopping_unit_system', 'metric');
+              }}
+              className={`btn btn-sm ${unitSystem === 'metric' ? 'btn-primary' : 'btn-ghost'}`}
+              style={{ borderRadius: 0, padding: '0.2rem 0.6rem', fontSize: '0.8rem' }}
+            >
+              Metric
+            </button>
+            <button
+              id="unit-imperial-btn"
+              type="button"
+              onClick={() => {
+                setUnitSystem('imperial');
+                localStorage.setItem('shopping_unit_system', 'imperial');
+              }}
+              className={`btn btn-sm ${unitSystem === 'imperial' ? 'btn-primary' : 'btn-ghost'}`}
+              style={{ borderRadius: 0, padding: '0.2rem 0.6rem', fontSize: '0.8rem' }}
+            >
+              Imperial
+            </button>
+          </div>
+
           <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem', cursor: 'pointer', userSelect: 'none' }}>
             <input
               type="checkbox"
@@ -243,7 +399,7 @@ export const ShoppingListView: React.FC<ShoppingListViewProps> = ({ onItemCountC
                         textDecoration: item.checked ? 'line-through' : 'none',
                       }}
                     >
-                      {item.name}
+                      {formatShoppingItemForDisplay(item.name, unitSystem)}
                     </span>
                     {spiceMatch && !item.checked && (
                       <span className="badge" title="Pantry spice detected" style={{ fontSize: '0.7rem' }}>

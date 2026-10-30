@@ -181,10 +181,7 @@ export const MealPlanView: React.FC<MealPlanViewProps> = ({
     setSyncing(true);
     try {
       const recipeIds = meals.map((m) => m.recipe_id);
-      const generated = await api.generateShoppingList(recipeIds, undefined, 'metric');
-      const existing = await api.getShoppingList();
-      const combined = [...existing, ...generated];
-      await api.updateShoppingList(combined);
+      await api.generateShoppingList(recipeIds, undefined, 'metric', true);
       onNavigateToShopping();
     } catch (err) {
       console.error('Failed to sync to shopping list', err);

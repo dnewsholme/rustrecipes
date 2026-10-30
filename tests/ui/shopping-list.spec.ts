@@ -305,4 +305,122 @@ test.describe('Shopping List', () => {
     await expect(listUl).not.toContainText('Marinade');
     await expect(listUl).not.toContainText('For the Main');
   });
+
+  test('should add items to shopping list without duplicates when clicking Add to Shopping List once', async ({ page }) => {
+    // 1. Clear shopping list first to start with clean state
+    await page.goto('/shopping-list');
+    await page.waitForLoadState('networkidle');
+    const clearBtn = page.locator('.btn-danger:has-text("Clear List")');
+    if (await clearBtn.isVisible()) {
+      page.once('dialog', async dialog => {
+        await dialog.accept();
+      });
+      await clearBtn.click();
+      await expect(page.locator('#shopping-list-ul')).toContainText('No ingredients found');
+    }
+
+    // 2. Go to TEST-Test Recipe detail page
+    await page.goto('/');
+    const recipeCard = page.locator('.recipe-card').filter({ has: page.locator('h3', { hasText: 'TEST-Test Recipe' }) }).first();
+    await recipeCard.locator('h3').click();
+    await page.waitForURL(/\/recipe\//);
+
+    // 3. Click "Add to Shopping List" once
+    const addBtn = page.locator('button:has-text("Add to Shopping List")');
+    await expect(addBtn).toBeVisible();
+    const [dialog1] = await Promise.all([
+      page.waitForEvent('dialog'),
+      addBtn.click(),
+    ]);
+    await dialog1.accept();
+
+    // 4. Navigate to shopping list
+    await page.goto('/shopping-list');
+    await page.waitForLoadState('networkidle');
+
+    // 5. Verify each ingredient is added once and not duplicated
+    const items = page.locator('#shopping-list-ul li.shopping-item');
+    const itemTexts = await items.allInnerTexts();
+    const flourItems = itemTexts.filter(t => t.toLowerCase().includes('flour'));
+    const eggItems = itemTexts.filter(t => t.toLowerCase().includes('egg'));
+    expect(flourItems.length).toBe(1);
+    expect(eggItems.length).toBe(1);
+  });
+
+  test('should combine quantities of same item from recipes and toggle between metric and imperial', async ({ page }) => {
+    // 1. Clear shopping list
+    await page.goto('/shopping-list');
+    await page.waitForLoadState('networkidle');
+    const clearBtn = page.locator('.btn-danger:has-text("Clear List")');
+    if (await clearBtn.isVisible()) {
+      page.once('dialog', async dialog => {
+        await dialog.accept();
+      });
+      await clearBtn.click();
+      await expect(page.locator('#shopping-list-ul')).toContainText('No ingredients found');
+    }
+
+    // 2. Add TEST-Test Recipe (500g flour, 2 eggs)
+    await page.goto('/');
+    const recipeCard = page.locator('.recipe-card').filter({ has: page.locator('h3', { hasText: 'TEST-Test Recipe' }) }).first();
+    await recipeCard.locator('h3').click();
+    await page.waitForURL(/\/recipe\//);
+    const [dialog2] = await Promise.all([
+      page.waitForEvent('dialog'),
+      page.locator('button:has-text("Add to Shopping List")').click(),
+    ]);
+    await dialog2.accept();
+
+    // 3. Add TEST-Test Recipe a second time to verify quantities sum together
+    const [dialog3] = await Promise.all([
+      page.waitForEvent('dialog'),
+      page.locator('button:has-text("Add to Shopping List")').click(),
+    ]);
+    await dialog3.accept();
+
+    // 4. View shopping list
+    await page.goto('/shopping-list');
+    await page.waitForLoadState('networkidle');
+
+    // 5. Verify unit toggle buttons are present
+    const toggleBtn = page.locator('#unit-toggle-btn');
+    const metricBtn = page.locator('#unit-metric-btn');
+    const imperialBtn = page.locator('#unit-imperial-btn');
+    await expect(toggleBtn).toBeVisible();
+    await expect(metricBtn).toBeVisible();
+    await expect(imperialBtn).toBeVisible();
+
+    // In default Metric mode:
+    // 500g flour + 500g flour = 1000g flour (or 1000 g flour)
+    // 2 eggs + 2 eggs = 4 eggs
+    const listItems = page.locator('#shopping-list-ul li.shopping-item');
+    const textsMetric = await listItems.allInnerTexts();
+    const flourMetricItems = textsMetric.filter(t => t.toLowerCase().includes('flour'));
+    const eggMetricItems = textsMetric.filter(t => t.toLowerCase().includes('egg'));
+    expect(flourMetricItems.length).toBe(1);
+    expect(eggMetricItems.length).toBe(1);
+    expect(flourMetricItems[0]).toMatch(/1000\s*g/i);
+    expect(eggMetricItems[0]).toMatch(/4\s*egg/i);
+
+    // Switch to Imperial
+    await imperialBtn.click();
+    const textsImperial = await listItems.allInnerTexts();
+    const flourImperial = textsImperial.find(t => t.toLowerCase().includes('flour'));
+    expect(flourImperial).toBeDefined();
+    // 1000g in imperial should be ~2.2 lbs
+    expect(flourImperial).toMatch(/lbs?|oz/i);
+
+    // Switch back to Metric
+    await metricBtn.click();
+    const textsMetricAgain = await listItems.allInnerTexts();
+    const flourMetricAgain = textsMetricAgain.find(t => t.toLowerCase().includes('flour'));
+    expect(flourMetricAgain).toBeDefined();
+    expect(flourMetricAgain).toMatch(/1000\s*g/i);
+
+    // Toggle using #unit-toggle-btn
+    await toggleBtn.click();
+    const textsToggled = await listItems.allInnerTexts();
+    const flourToggled = textsToggled.find(t => t.toLowerCase().includes('flour'));
+    expect(flourToggled).toMatch(/lbs?|oz/i);
+  });
 });

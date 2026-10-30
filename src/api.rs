@@ -813,13 +813,23 @@ async fn import_recipe(
 #[derive(Deserialize)]
 struct ShoppingListRequest {
     recipe_ids: Vec<String>,
-    portions: u32,
+    #[serde(default)]
+    portions: Option<u32>,
+    #[serde(default = "default_unit_system")]
     unit_system: String,
+    #[serde(default)]
+    append: bool,
+}
+
+fn default_unit_system() -> String {
+    "metric".to_string()
 }
 
 #[derive(Serialize)]
 struct ShoppingListResponse {
     ingredients: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    items: Vec<crate::models::ShoppingItem>,
 }
 
 async fn generate_shopping_list(
@@ -828,13 +838,15 @@ async fn generate_shopping_list(
 ) -> ApiResult<Json<ShoppingListResponse>> {
     check_ids("recipe_ids", &payload.recipe_ids)?;
     info!(
-        "API generate_shopping_list: recipes={:?}, portions={}",
-        payload.recipe_ids, payload.portions
+        "API generate_shopping_list: recipes={:?}, portions={:?}, append={}",
+        payload.recipe_ids, payload.portions, payload.append
     );
-    if payload.portions == 0 || payload.portions > MAX_PORTIONS {
-        return Err(bad_request(format!(
-            "'portions' must be between 1 and {MAX_PORTIONS}"
-        )));
+    if let Some(p) = payload.portions {
+        if p == 0 || p > MAX_PORTIONS {
+            return Err(bad_request(format!(
+                "'portions' must be between 1 and {MAX_PORTIONS}"
+            )));
+        }
     }
     if !matches!(payload.unit_system.as_str(), "metric" | "imperial") {
         return Err(bad_request("'unit_system' must be 'metric' or 'imperial'"));
@@ -855,29 +867,43 @@ async fn generate_shopping_list(
         return Err(bad_request("No valid recipes found"));
     }
 
-    let ingredients = crate::conversions::generate_combined_shopping_list(
-        recipes,
-        payload.portions,
-        &payload.unit_system,
-    );
+    let uid_opt = user.as_ref().map(|u| u.id.clone());
+    let append = payload.append;
+    let portions = payload.portions;
+    let unit_system = payload.unit_system.clone();
+
+    let final_items = blocking(move || {
+        let existing = if append && let Some(ref uid) = uid_opt {
+            storage::read_shopping_list(uid).unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+
+        crate::conversions::combine_shopping_items_with_recipes(
+            existing,
+            recipes,
+            portions,
+            &unit_system,
+        )
+    })
+    .await?;
+
+    let ingredients: Vec<String> = final_items.iter().map(|ing| ing.name.clone()).collect();
 
     // Save generated list automatically if user is logged in
     if let Some(user) = user {
-        let items: Vec<crate::models::ShoppingItem> = ingredients
-            .iter()
-            .map(|ing| crate::models::ShoppingItem {
-                name: ing.clone(),
-                checked: false,
-            })
-            .collect();
+        let items_to_save = final_items.clone();
         let uid = user.id;
-        if let Err(e) = blocking(move || storage::save_shopping_list(&uid, &items)).await? {
+        if let Err(e) = blocking(move || storage::save_shopping_list(&uid, &items_to_save)).await? {
             // The generated list is still returned; only persistence failed.
             warn!("Failed to persist generated shopping list: {}", e);
         }
     }
 
-    Ok(Json(ShoppingListResponse { ingredients }))
+    Ok(Json(ShoppingListResponse {
+        ingredients,
+        items: final_items,
+    }))
 }
 
 async fn get_shopping_list(user: CurrentUser) -> ApiResult<impl IntoResponse> {
@@ -2337,6 +2363,89 @@ mod tests {
         assert!(cleared.is_empty());
 
         // Clean up
+        let _ = storage::delete_user(user_id);
+    }
+
+    #[tokio::test]
+    async fn test_shopping_list_append_combines_quantities() {
+        let state = test_state();
+        let app = router(state.clone()).with_state(state.clone());
+
+        let user_id = "shopping-append-user";
+        save_test_user(user_id, "append@example.com");
+        let cookie = session_cookie(&state, user_id);
+
+        let mut r1 = sample_recipe("append-r1", user_id, true);
+        r1.servings = Some(1);
+        r1.ingredients = vec!["500 g flour".into(), "2 eggs".into()];
+        storage::save_recipe(&r1).unwrap();
+
+        let mut r2 = sample_recipe("append-r2", user_id, true);
+        r2.servings = Some(1);
+        r2.ingredients = vec!["1 kg flour".into(), "3 eggs".into()];
+        storage::save_recipe(&r2).unwrap();
+
+        // 1. Add r1 with append: true
+        let req = Request::builder()
+            .method("POST")
+            .uri("/shopping-list")
+            .header("Cookie", &cookie)
+            .header("Content-Type", "application/json")
+            .body(Body::from(
+                serde_json::json!({
+                    "recipe_ids": ["append-r1"],
+                    "append": true,
+                    "unit_system": "metric"
+                })
+                .to_string(),
+            ))
+            .unwrap();
+        let response = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // 2. Add r2 with append: true
+        let req = Request::builder()
+            .method("POST")
+            .uri("/shopping-list")
+            .header("Cookie", &cookie)
+            .header("Content-Type", "application/json")
+            .body(Body::from(
+                serde_json::json!({
+                    "recipe_ids": ["append-r2"],
+                    "append": true,
+                    "unit_system": "metric"
+                })
+                .to_string(),
+            ))
+            .unwrap();
+        let response = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // 3. GET /shopping-list: should have 2 combined items, not 4!
+        // 500g flour + 1kg flour (1000g) = 1500 g flour
+        // 2 eggs + 3 eggs = 5 eggs
+        let req = Request::builder()
+            .method("GET")
+            .uri("/shopping-list")
+            .header("Cookie", &cookie)
+            .body(Body::empty())
+            .unwrap();
+        let response = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let items: Vec<crate::models::ShoppingItem> =
+            serde_json::from_value(json_body(response).await).unwrap();
+        assert_eq!(
+            items.len(),
+            2,
+            "Items should be combined without duplicates"
+        );
+        let names: Vec<String> = items.iter().map(|i| i.name.clone()).collect();
+        assert!(names.contains(&"1500 g flour".to_string()));
+        assert!(names.contains(&"5 eggs".to_string()));
+
+        let _ = storage::delete_recipe("append-r1");
+        let _ = storage::delete_recipe("append-r2");
+        let _ = storage::delete_shopping_list(user_id);
         let _ = storage::delete_user(user_id);
     }
 

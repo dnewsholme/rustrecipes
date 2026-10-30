@@ -531,12 +531,16 @@ pub fn convert_recipe(
 }
 
 pub fn parse_ingredient_line(raw: &str, sort_order: i32) -> crate::models::RecipeIngredient {
-    let trimmed = raw.trim();
+    let mut trimmed = raw.trim();
+    while trimmed.starts_with("- ") || trimmed.starts_with("* ") || trimmed.starts_with("+ ") {
+        trimmed = trimmed[2..].trim();
+    }
+
     if is_ingredient_header(trimmed) {
         return crate::models::RecipeIngredient {
             id: None,
             recipe_id: None,
-            raw_text: trimmed.to_string(),
+            raw_text: raw.trim().to_string(),
             amount: None,
             unit: None,
             name: format_ingredient_header(trimmed),
@@ -560,7 +564,7 @@ pub fn parse_ingredient_line(raw: &str, sort_order: i32) -> crate::models::Recip
         crate::models::RecipeIngredient {
             id: None,
             recipe_id: None,
-            raw_text: trimmed.to_string(),
+            raw_text: raw.trim().to_string(),
             amount,
             unit: unit_str,
             name: if name.is_empty() {
@@ -575,7 +579,7 @@ pub fn parse_ingredient_line(raw: &str, sort_order: i32) -> crate::models::Recip
         crate::models::RecipeIngredient {
             id: None,
             recipe_id: None,
-            raw_text: trimmed.to_string(),
+            raw_text: raw.trim().to_string(),
             amount: None,
             unit: None,
             name: trimmed.to_string(),
@@ -877,56 +881,268 @@ mod tests {
         assert!(res.contains(&"300 g sugar".to_string()));
         assert!(res.contains(&"1 apple".to_string()));
     }
+
+    #[test]
+    fn test_combine_shopping_items_with_different_units_and_bullets() {
+        let existing = vec![
+            crate::models::ShoppingItem {
+                name: "500 g flour".to_string(),
+                checked: false,
+            },
+            crate::models::ShoppingItem {
+                name: "2 eggs".to_string(),
+                checked: false,
+            },
+        ];
+
+        let r = Recipe {
+            id: "1".into(),
+            title: "Test Recipe".into(),
+            servings: Some(1),
+            ingredients: vec![
+                "- 1 kg flour".into(),
+                "- 3 eggs".into(),
+                "Bread Flour 500g".into(),
+            ],
+            ..Default::default()
+        };
+
+        let combined = combine_shopping_items_with_recipes(existing, vec![r], None, "metric");
+        // 500g + 1kg (1000g) = 1500 g flour
+        // 2 eggs + 3 eggs = 5 eggs
+        // Bread Flour 500g = 500 g Bread Flour
+        let names: Vec<String> = combined.iter().map(|it| it.name.clone()).collect();
+        assert!(names.contains(&"1500 g flour".to_string()));
+        assert!(names.contains(&"5 eggs".to_string()));
+        assert!(
+            names
+                .iter()
+                .any(|n| n.contains("500 g") && n.to_lowercase().contains("bread flour"))
+        );
+    }
 }
 
-pub fn generate_combined_shopping_list(
-    recipes: Vec<Recipe>,
-    portions: u32,
-    unit_system: &str,
-) -> Vec<String> {
-    let mut combined: HashMap<(String, String), f64> = HashMap::new();
-    let mut uncombined: Vec<String> = Vec::new();
+pub fn normalize_ingredient_name(name: &str) -> String {
+    let mut cleaned = name.trim().to_lowercase();
+    while cleaned.starts_with("- ") || cleaned.starts_with("* ") || cleaned.starts_with("+ ") {
+        cleaned = cleaned[2..].trim().to_string();
+    }
+    let trimmed = cleaned
+        .trim_matches(['-', '*', '+', ',', ':', ';', '.', ' '])
+        .trim();
+    let words: Vec<&str> = trimmed.split_whitespace().collect();
+    if words.is_empty() {
+        return String::new();
+    }
+    let mut result_words = Vec::new();
+    for (i, w) in words.iter().enumerate() {
+        if i == words.len() - 1
+            && w.len() > 3
+            && w.ends_with('s')
+            && !w.ends_with("ss")
+            && !w.ends_with("us")
+            && !w.ends_with("is")
+        {
+            if let Some(stem) = w.strip_suffix("ies") {
+                result_words.push(format!("{}y", stem));
+            } else if (w.ends_with("ches") || w.ends_with("shes") || w.ends_with("xes"))
+                && let Some(stem) = w.strip_suffix("es")
+            {
+                result_words.push(stem.to_string());
+            } else if !w.ends_with("es")
+                && let Some(stem) = w.strip_suffix('s')
+            {
+                result_words.push(stem.to_string());
+            } else {
+                result_words.push(w.to_string());
+            }
+        } else {
+            result_words.push(w.to_string());
+        }
+    }
+    result_words.join(" ")
+}
 
+pub fn parse_shopping_item_raw(raw: &str) -> Option<(f64, String, String)> {
+    let mut s = raw.trim();
+    while s.starts_with("- ") || s.starts_with("* ") || s.starts_with("+ ") {
+        s = s[2..].trim();
+    }
+    if is_ingredient_header(s) || s.is_empty() {
+        return None;
+    }
+
+    if let Some(cap) = START_AMOUNT_REGEX.captures(s) {
+        let num_str = cap.get(1).map_or("", |m| m.as_str());
+        let unit_str = cap.get(2).map_or("", |m| m.as_str());
+        let amount = parse_num_str(num_str);
+        let m = cap.get(0).unwrap();
+        let remainder = s[m.end()..].trim();
+        let name = remainder.trim_start_matches(['-', ',', ' ', ':']).trim();
+        if !name.is_empty() {
+            return Some((amount, unit_str.to_string(), name.to_string()));
+        }
+    }
+
+    // Check reversed ingredient: e.g. "Bread Flour 500g" or "Water 300ml"
+    if let Some(cap) = UNIT_REGEX.captures(s) {
+        let m = cap.get(0).unwrap();
+        let leading = cap.get(1).map_or("", |m| m.as_str());
+        let num_str = cap.get(2).map_or("", |m| m.as_str());
+        let unit_str = cap.get(3).map_or("", |m| m.as_str());
+        let amount = parse_num_str(num_str);
+        let match_start = m.start() + leading.len();
+        let prefix = s[..match_start].trim();
+        let suffix = s[m.end()..].trim();
+        let name = format!("{} {}", prefix, suffix)
+            .trim()
+            .trim_start_matches(['-', ',', ' ', ':'])
+            .trim()
+            .to_string();
+        if !name.is_empty() {
+            return Some((amount, unit_str.to_string(), name));
+        }
+    }
+
+    None
+}
+
+fn normalize_unit_and_amount(amount: f64, unit: &str, unit_system: &str) -> (f64, String) {
+    let u = unit.trim().to_lowercase();
+    if unit_system == "metric" {
+        match u.as_str() {
+            "kg" | "kilogram" | "kilograms" => (amount * 1000.0, "g".to_string()),
+            "l" | "liter" | "liters" => (amount * 1000.0, "ml".to_string()),
+            "cup" | "cups" | "c" => (amount * 240.0, "ml".to_string()),
+            "oz" | "ounce" | "ounces" => (amount * 28.35, "g".to_string()),
+            "lb" | "lbs" | "pound" | "pounds" => (amount * 453.6, "g".to_string()),
+            "stick" | "sticks" => (amount * 113.0, "g".to_string()),
+            "pt" | "pint" | "pints" => (amount * 473.0, "ml".to_string()),
+            "qt" | "quart" | "quarts" => (amount * 946.0, "ml".to_string()),
+            "gal" | "gallon" | "gallons" => (amount * 3785.0, "ml".to_string()),
+            "tbsp" | "tablespoon" | "tablespoons" => (amount, "tbsp".to_string()),
+            "tsp" | "teaspoon" | "teaspoons" => (amount, "tsp".to_string()),
+            "g" | "gram" | "grams" => (amount, "g".to_string()),
+            "ml" | "milliliter" | "milliliters" => (amount, "ml".to_string()),
+            other => (amount, other.to_string()),
+        }
+    } else {
+        match u.as_str() {
+            "cup" | "cups" | "c" => (amount, "cup".to_string()),
+            "tbsp" | "tablespoon" | "tablespoons" => (amount, "tbsp".to_string()),
+            "tsp" | "teaspoon" | "teaspoons" => (amount, "tsp".to_string()),
+            "oz" | "ounce" | "ounces" => (amount, "oz".to_string()),
+            "lb" | "lbs" | "pound" | "pounds" => (amount, "lb".to_string()),
+            other => (amount, other.to_string()),
+        }
+    }
+}
+
+pub fn combine_shopping_items_with_recipes(
+    existing: Vec<crate::models::ShoppingItem>,
+    recipes: Vec<Recipe>,
+    portions: Option<u32>,
+    unit_system: &str,
+) -> Vec<crate::models::ShoppingItem> {
+    let mut combined: HashMap<(String, String), f64> = HashMap::new();
+    let mut display_names: HashMap<String, String> = HashMap::new();
+    let mut uncombined: Vec<String> = Vec::new();
+    let mut checked_items: Vec<crate::models::ShoppingItem> = Vec::new();
+
+    // 1. Process existing unchecked shopping list items
+    for item in existing {
+        if item.checked {
+            checked_items.push(item);
+            continue;
+        }
+        if let Some((amount, unit, name)) = parse_shopping_item_raw(&item.name) {
+            let (norm_amount, norm_unit) = normalize_unit_and_amount(amount, &unit, unit_system);
+            let norm_name = normalize_ingredient_name(&name);
+            display_names.entry(norm_name.clone()).or_insert(name);
+            *combined.entry((norm_name, norm_unit)).or_insert(0.0) += norm_amount;
+        } else if !item.name.trim().is_empty() {
+            uncombined.push(item.name.trim().to_string());
+        }
+    }
+
+    // 2. Process new recipes
     for recipe in recipes {
-        let scale = portions as f64 / recipe.servings.unwrap_or(1) as f64;
+        let scale = match portions {
+            Some(p) if p > 0 => p as f64 / recipe.servings.unwrap_or(1) as f64,
+            _ => 1.0,
+        };
         let converted = convert_recipe(recipe, Some(unit_system), None, Some(scale), false);
 
         for ingredient in converted.ingredients {
             if is_ingredient_header(&ingredient) {
                 continue;
             }
-            if let Some(cap) = START_AMOUNT_REGEX.captures(&ingredient) {
-                let num_str = cap.get(1).map_or("", |m| m.as_str());
-                let unit_str = cap.get(2).map_or("", |m| m.as_str());
-                let amount = parse_num_str(num_str);
-
-                let m = cap.get(0).unwrap();
-                let remainder = ingredient[m.end()..].trim();
-                let name_key = remainder.to_lowercase();
-                let unit_key = unit_str.to_lowercase();
-
-                let key = (name_key.clone(), unit_key.clone());
-                *combined.entry(key).or_insert(0.0) += amount;
+            if let Some((amount, unit, name)) = parse_shopping_item_raw(&ingredient) {
+                let (norm_amount, norm_unit) =
+                    normalize_unit_and_amount(amount, &unit, unit_system);
+                let norm_name = normalize_ingredient_name(&name);
+                display_names.entry(norm_name.clone()).or_insert(name);
+                *combined.entry((norm_name, norm_unit)).or_insert(0.0) += norm_amount;
             } else {
-                uncombined.push(ingredient);
+                let mut clean = ingredient.trim();
+                while clean.starts_with("- ") || clean.starts_with("* ") || clean.starts_with("+ ")
+                {
+                    clean = clean[2..].trim();
+                }
+                if !clean.is_empty() {
+                    uncombined.push(clean.to_string());
+                }
             }
         }
     }
 
-    let mut result = Vec::new();
-    for ((name, unit), amount) in combined {
+    let mut result_items = Vec::new();
+    let mut keys: Vec<(String, String)> = combined.keys().cloned().collect();
+    keys.sort();
+
+    for (norm_name, unit) in keys {
+        let amount = combined[&(norm_name.clone(), unit.clone())];
         let formatted_amount = format_number(amount);
-        if unit.is_empty() {
-            result.push(format!("{} {}", formatted_amount, name));
+        let display_name = display_names.get(&norm_name).cloned().unwrap_or(norm_name);
+
+        let item_str = if unit.is_empty() {
+            if amount > 1.0 && !display_name.ends_with('s') {
+                format!("{} {}s", formatted_amount, display_name)
+            } else {
+                format!("{} {}", formatted_amount, display_name)
+            }
         } else {
-            result.push(format!("{} {} {}", formatted_amount, unit, name));
-        }
+            format!("{} {} {}", formatted_amount, unit, display_name)
+        };
+
+        result_items.push(crate::models::ShoppingItem {
+            name: item_str,
+            checked: false,
+        });
     }
 
-    result.sort();
-    result.extend(uncombined);
+    uncombined.dedup();
+    for u in uncombined {
+        result_items.push(crate::models::ShoppingItem {
+            name: u,
+            checked: false,
+        });
+    }
 
-    result
+    result_items.extend(checked_items);
+    result_items
+}
+
+#[allow(dead_code)]
+pub fn generate_combined_shopping_list(
+    recipes: Vec<Recipe>,
+    portions: u32,
+    unit_system: &str,
+) -> Vec<String> {
+    combine_shopping_items_with_recipes(vec![], recipes, Some(portions), unit_system)
+        .into_iter()
+        .map(|it| it.name)
+        .collect()
 }
 
 pub fn is_ingredient_header(line: &str) -> bool {

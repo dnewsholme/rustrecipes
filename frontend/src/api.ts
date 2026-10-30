@@ -255,15 +255,24 @@ export const api = {
     return request<ShoppingListItem[]>('/shopping-list');
   },
 
-  async generateShoppingList(recipeIds: string[], portions: number = 1, unitSystem: string = 'metric'): Promise<ShoppingListItem[]> {
-    const res = await request<{ ingredients: string[] }>('/shopping-list', {
+  async generateShoppingList(
+    recipeIds: string[],
+    portions?: number,
+    unitSystem: string = 'metric',
+    append: boolean = false
+  ): Promise<ShoppingListItem[]> {
+    const res = await request<{ ingredients: string[]; items?: ShoppingListItem[] }>('/shopping-list', {
       method: 'POST',
       body: JSON.stringify({
         recipe_ids: recipeIds,
-        portions: Math.max(1, portions || 1),
+        portions: portions && portions > 0 ? portions : undefined,
         unit_system: unitSystem === 'imperial' ? 'imperial' : 'metric',
+        append,
       }),
     });
+    if (res && Array.isArray(res.items)) {
+      return res.items;
+    }
     if (res && Array.isArray(res.ingredients)) {
       return res.ingredients.map((name) => ({ name, checked: false }));
     }
