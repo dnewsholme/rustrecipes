@@ -301,8 +301,16 @@ export const App: React.FC = () => {
   };
 
   const handleToggleMealPlan = async (id: string) => {
+    if (!auth.user) {
+      setLoginModalOpen(true);
+      return;
+    }
     try {
-      await api.toggleMealPlan(id);
+      if (mealPlanIds.has(id)) {
+        await api.removeFromMealPlan(id);
+      } else {
+        await api.addToMealPlan(id);
+      }
       await loadPlannedMeals();
     } catch (err) {
       console.error('Failed to toggle meal plan', err);

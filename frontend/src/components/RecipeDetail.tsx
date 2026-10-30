@@ -417,6 +417,7 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({
 
           {/* Add to Meal Plan */}
           <button
+            id="recipe-detail-plan-btn"
             onClick={() => onToggleMealPlan(recipe.id)}
             className={`btn btn-sm ${isPlanned ? 'btn-primary' : 'btn-secondary'}`}
             title="Toggle meal plan"

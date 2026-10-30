@@ -351,4 +351,51 @@ test.describe('Meal Planner', () => {
     await expect(unassignedZone.locator('.meal-plan-card', { hasText: 'Pizza Night' })).toBeVisible();
     await expect(fridayZone.locator('.meal-plan-card')).toHaveCount(0);
   });
+
+  test('should add to plan from the recipe detail page and toggle plan state', async ({ page }) => {
+    // 1. Go to home page and get the title of the first recipe
+    await page.goto('/');
+    const recipeCard = page.locator('.recipe-card').first();
+    const recipeTitle = await recipeCard.locator('h3').innerText();
+
+    // 2. Click to open the recipe detail page
+    await recipeCard.locator('h3').click();
+    await page.waitForURL(/\/recipe\//);
+
+    // 3. Locate "Add to Plan" button
+    const planBtn = page.locator('#recipe-detail-plan-btn');
+    await expect(planBtn).toBeVisible();
+    await expect(planBtn).toContainText('Add to Plan');
+    await expect(planBtn).toHaveClass(/btn-secondary/);
+
+    // 4. Click "Add to Plan"
+    await planBtn.click();
+
+    // 5. Button should update to "Planned" with primary style
+    await expect(planBtn).toContainText('Planned');
+    await expect(planBtn).toHaveClass(/btn-primary/);
+
+    // 6. Navigate to /meal-plan and verify the recipe is present
+    await page.goto('/meal-plan');
+    const unassignedZone = page.locator('#meal-day-unassigned');
+    await expect(unassignedZone.locator('.meal-plan-card', { hasText: recipeTitle })).toBeVisible();
+
+    // 7. Go back to the recipe detail page and click "Planned" to remove it
+    await page.goto('/');
+    const sameRecipeCard = page.locator('.recipe-card').first();
+    await sameRecipeCard.locator('h3').click();
+    await page.waitForURL(/\/recipe\//);
+
+    const plannedBtn = page.locator('#recipe-detail-plan-btn');
+    await expect(plannedBtn).toContainText('Planned');
+    await expect(plannedBtn).toHaveClass(/btn-primary/);
+
+    await plannedBtn.click();
+    await expect(plannedBtn).toContainText('Add to Plan');
+    await expect(plannedBtn).toHaveClass(/btn-secondary/);
+
+    // 8. Verify it was removed from /meal-plan
+    await page.goto('/meal-plan');
+    await expect(page.locator('#meal-day-unassigned').locator('.meal-plan-card', { hasText: recipeTitle })).toHaveCount(0);
+  });
 });
