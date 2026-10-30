@@ -835,73 +835,6 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({
         </div>
       )}
 
-      {/* Recipe Video Container */}
-      {youtubeId && (
-        <div
-          id="video-tab"
-          className={`card tab-content ${mobileTab === 'video' ? 'active' : ''}`}
-          style={{ padding: '1.5rem' }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-              <div
-                style={{
-                  background: 'rgba(239, 68, 68, 0.15)',
-                  color: '#ef4444',
-                  padding: '0.4rem',
-                  borderRadius: 'var(--radius-md)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <Video size={20} />
-              </div>
-              <h2 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Recipe Video</h2>
-            </div>
-            {(recipe.video_url || (recipe.source_url && (recipe.source_url.includes('youtube') || recipe.source_url.includes('youtu.be')))) && (
-              <a
-                href={recipe.video_url || recipe.source_url || `https://www.youtube.com/watch?v=${youtubeId}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn btn-secondary btn-sm"
-                style={{ fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
-              >
-                <ExternalLink size={14} />
-                <span>Open in YouTube</span>
-              </a>
-            )}
-          </div>
-          <div
-            style={{
-              position: 'relative',
-              paddingBottom: '56.25%',
-              height: 0,
-              overflow: 'hidden',
-              borderRadius: 'var(--radius-lg)',
-              background: '#000',
-              boxShadow: 'var(--shadow-md)',
-            }}
-          >
-            <iframe
-              id="recipe-video-iframe"
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: '100%',
-                border: 0,
-              }}
-              src={`https://www.youtube-nocookie.com/embed/${youtubeId}`}
-              title={recipe.title ? `${recipe.title} Video` : 'YouTube video player'}
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-              allowFullScreen
-            />
-          </div>
-        </div>
-      )}
-
       {/* Main Recipe Content: Ingredients & Directions Grid */}
       <div className="recipe-grid">
         {/* Ingredients Column */}
@@ -1071,6 +1004,73 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({
             onChange={(e) => setNotes(e.target.value)}
             placeholder="Write your private baking notes, oven temperatures, adjustments..."
           />
+        </div>
+      )}
+
+      {/* Recipe Video Container (at the bottom of the page) */}
+      {youtubeId && (
+        <div
+          id="video-tab"
+          className={`card tab-content ${mobileTab === 'video' ? 'active' : ''}`}
+          style={{ padding: '1.5rem' }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+              <div
+                style={{
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  color: '#ef4444',
+                  padding: '0.4rem',
+                  borderRadius: 'var(--radius-md)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Video size={20} />
+              </div>
+              <h2 style={{ fontSize: '1.25rem', fontWeight: 700 }}>Recipe Video</h2>
+            </div>
+            {(recipe.video_url || (recipe.source_url && (recipe.source_url.includes('youtube') || recipe.source_url.includes('youtu.be')))) && (
+              <a
+                href={recipe.video_url || recipe.source_url || `https://www.youtube.com/watch?v=${youtubeId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn btn-secondary btn-sm"
+                style={{ fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+              >
+                <ExternalLink size={14} />
+                <span>Open in YouTube</span>
+              </a>
+            )}
+          </div>
+          <div
+            style={{
+              position: 'relative',
+              paddingBottom: '56.25%',
+              height: 0,
+              overflow: 'hidden',
+              borderRadius: 'var(--radius-lg)',
+              background: '#000',
+              boxShadow: 'var(--shadow-md)',
+            }}
+          >
+            <iframe
+              id="recipe-video-iframe"
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                border: 0,
+              }}
+              src={`https://www.youtube-nocookie.com/embed/${youtubeId}`}
+              title={recipe.title ? `${recipe.title} Video` : 'YouTube video player'}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+            />
+          </div>
         </div>
       )}
 

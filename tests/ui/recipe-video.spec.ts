@@ -37,10 +37,18 @@ test.describe('Search Box & Recipe Video Suite', () => {
     await expect(videoBadge).toBeVisible();
     await expect(videoBadge).toContainText('Video');
 
-    // 4. Verify Desktop video player tab and iframe
+    // 4. Verify Desktop video player tab and iframe at the bottom (after .recipe-grid)
     const videoTab = page.locator('#video-tab');
     await expect(videoTab).toBeVisible();
     await expect(videoTab.locator('h2')).toContainText('Recipe Video');
+
+    const isAfterGrid = await page.evaluate(() => {
+      const grid = document.querySelector('.recipe-grid');
+      const video = document.querySelector('#video-tab');
+      if (!grid || !video) return false;
+      return !!(grid.compareDocumentPosition(video) & Node.DOCUMENT_POSITION_FOLLOWING);
+    });
+    expect(isAfterGrid).toBe(true);
 
     const iframe = page.locator('#recipe-video-iframe');
     await expect(iframe).toBeVisible();
