@@ -128,3 +128,4 @@ jobs:
           git tag -a "${TAG_NAME}" -m "Release ${TAG_NAME}"
           git push origin "refs/tags/${TAG_NAME}"
           echo "Created and pushed Git tag ${TAG_NAME}"
+

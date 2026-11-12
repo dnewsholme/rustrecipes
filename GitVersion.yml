@@ -29,3 +29,4 @@ branches:
     mode: ContinuousDelivery
     increment: Patch
     label: 'PR-{BranchName}'
+
